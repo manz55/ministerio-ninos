@@ -1,0 +1,61 @@
+@import "tailwindcss";
+
+/* ── Background float animations (GPU-only, no JS) ─────────────────────────── */
+@keyframes float-0 {
+  0%,100% { transform: translate(-4px,-8px) rotate(-3deg); }
+  50%     { transform: translate( 4px, 8px) rotate( 3deg); }
+}
+@keyframes float-1 {
+  0%,100% { transform: translate( 3px,-6px) rotate( 4deg); }
+  50%     { transform: translate(-4px, 7px) rotate(-4deg); }
+}
+@keyframes float-2 {
+  0%,100% { transform: translate(-5px,-5px) rotate(-5deg); }
+  50%     { transform: translate( 5px, 6px) rotate( 5deg); }
+}
+@keyframes float-3 {
+  0%,100% { transform: translate( 4px,-7px) rotate( 3deg); }
+  50%     { transform: translate(-3px, 8px) rotate(-3deg); }
+}
+@keyframes bg-appear {
+  from { opacity: 0; transform: scale(0.4); }
+  to   { opacity: 1; transform: scale(1);   }
+}
+@keyframes shake {
+  0%, 100% { transform: translateX(0);    }
+  20%       { transform: translateX(-9px); }
+  40%       { transform: translateX( 9px); }
+  60%       { transform: translateX(-6px); }
+  80%       { transform: translateX( 6px); }
+}
+
+@layer base {
+  html {
+    /* Prevent font size scaling on orientation change in Safari */
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+    /* Faster tap response on mobile — no 300ms delay */
+    touch-action: manipulation;
+  }
+
+  body {
+    /* Prevent rubber-band scroll that reveals gray background */
+    overscroll-behavior-y: none;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Prevent iOS auto-zoom on input focus (requires font-size >= 16px).
+     Using max() so Tailwind utilities that set a LARGER size still win. */
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+  select,
+  textarea {
+    font-size: max(16px, 1em);
+  }
+
+  /* Smooth scrolling for all scroll containers */
+  * {
+    -webkit-tap-highlight-color: transparent;
+    box-sizing: border-box;
+  }
+}
