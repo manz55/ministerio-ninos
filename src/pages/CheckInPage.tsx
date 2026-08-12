@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback, useMemo, startTransition } fr
 import { motion, AnimatePresence } from 'framer-motion'
 import { format, differenceInYears } from 'date-fns'
 import { es } from 'date-fns/locale'
-import { Search, CheckCircle2, UserPlus, AlertTriangle, ChevronLeft, Bug, Zap, Compass, User, Pencil, LogIn, Trash2, X } from 'lucide-react'
+import { Search, CheckCircle2, UserPlus, AlertTriangle, ChevronLeft, Bug, Zap, Compass, User, Pencil, LogIn, Trash2, X, Users } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { getCategoryFromBirthDate, requiresBadge, requiresPager } from '../lib/categoryUtils'
 import { CATEGORY_LABELS, CATEGORY_COLORS, type Category, type TeamColor } from '../types/domain'
@@ -241,7 +241,13 @@ function ChildCard({
     })
     setSubmitting(false)
     if (err) {
-      setError(err.code === '23505' ? 'Este niño ya fue registrado hoy.' : 'Error al registrar. Intenta de nuevo.')
+      if (err.code === '23505' && err.message.includes('attendance_badge_category_unique')) {
+        setError(`El gafete #${badgeNumber} ya está en uso en ${CATEGORY_LABELS[category]} hoy.`)
+      } else if (err.code === '23505') {
+        setError('Este niño ya fue registrado hoy.')
+      } else {
+        setError('Error al registrar. Intenta de nuevo.')
+      }
       return
     }
     setBadge('')
@@ -417,6 +423,12 @@ export default function CheckInPage() {
   const [globalLoading, setGlobalLoading] = useState(false)
   const debouncedGlobal = useDebounce(globalSearch.trim(), 280)
 
+  // ── Padrón general (niños ya existentes en la base de datos) ──
+  const [totalChildren, setTotalChildren] = useState<number | null>(null)
+  const [allChildren, setAllChildren] = useState<ChildResult[]>([])
+  const [loadingAllChildren, setLoadingAllChildren] = useState(false)
+  const [showAllChildren, setShowAllChildren] = useState(false)
+
   const fetchCounts = useCallback(async () => {
     const { data } = await supabase
       .from('attendance')
@@ -435,6 +447,34 @@ export default function CheckInPage() {
   }, [])
 
   useEffect(() => { fetchCounts() }, [fetchCounts])
+
+  useEffect(() => {
+    supabase.from('children').select('id', { count: 'exact', head: true })
+      .then(({ count }) => setTotalChildren(count))
+  }, [])
+
+  const loadAllChildren = useCallback(async () => {
+    setLoadingAllChildren(true)
+    const [{ data: all }, { data: todayAtt }] = await Promise.all([
+      supabase
+        .from('children')
+        .select('id, full_name, birth_date, allergies, medical_notes, parent_id, parents(full_name, phone)')
+        .order('full_name'),
+      supabase
+        .from('attendance')
+        .select('child_id')
+        .eq('session_date', today),
+    ])
+    const attSet = new Set((todayAtt ?? []).map((a) => a.child_id))
+    setAllChildren(
+      ((all ?? []) as Omit<ChildResult, 'attendance'>[]).map((c) => ({
+        ...c,
+        attendance: attSet.has(c.id) ? [{ session_date: today }] : [],
+      })) as ChildResult[]
+    )
+    setLoadingAllChildren(false)
+    setShowAllChildren(true)
+  }, [])
 
   // Búsqueda global: dos queries pequeñas en paralelo
   useEffect(() => {
@@ -467,8 +507,14 @@ export default function CheckInPage() {
     return () => { cancelled = true }
   }, [debouncedGlobal])
 
+  // Evita que una respuesta "vieja" (de una categoría abandonada) sobrescriba
+  // la lista de la categoría que el usuario seleccionó después
+  const categoryRequestRef = useRef(0)
+
   // Abre grupo: dos queries pequeñas en lugar de un join masivo
   async function openCategory(category: Category) {
+    const requestId = ++categoryRequestRef.current
+
     // startTransition mantiene el home interactivo mientras React prepara la nueva vista
     startTransition(() => {
       setActiveCategory(category)
@@ -489,6 +535,9 @@ export default function CheckInPage() {
         .eq('session_date', today),
     ])
 
+    // Otra categoría fue seleccionada (o se volvió al home) mientras esta consulta estaba en vuelo
+    if (categoryRequestRef.current !== requestId) return
+
     const attSet = new Set((todayAtt ?? []).map((a) => a.child_id))
     const filtered = ((all ?? []) as Omit<ChildResult, 'attendance'>[])
       .filter((c) => getCategoryFromBirthDate(c.birth_date) === category)
@@ -502,6 +551,7 @@ export default function CheckInPage() {
   }
 
   function handleBack() {
+    categoryRequestRef.current++ // invalida cualquier openCategory() pendiente
     setActiveCategory(null)
     setChildren([])
     setSelectedId(null)
@@ -513,9 +563,10 @@ export default function CheckInPage() {
       c.id === childId ? { ...c, attendance: [...c.attendance, { session_date: today }] } : c
     setChildren((prev) => prev.map(mark))
     setGlobalResults((prev) => prev.map(mark))
+    setAllChildren((prev) => prev.map(mark))
     setSelectedId(null)
     // Deriving category from data avoids depending on activeCategory
-    const child = [...children, ...globalResults].find((c) => c.id === childId)
+    const child = [...children, ...globalResults, ...allChildren].find((c) => c.id === childId)
     const cat = child ? getCategoryFromBirthDate(child.birth_date) : activeCategory
     if (cat) {
       setTodayCounts((prev) => ({ ...prev, [cat]: (prev[cat] ?? 0) + 1 }))
@@ -895,6 +946,57 @@ export default function CheckInPage() {
             </motion.button>
           )
         })}
+      </div>
+
+      {/* ── Padrón general: niños ya existentes en la base de datos ── */}
+      <div className="space-y-2 pt-1">
+        <div className="flex items-center justify-between gap-2 px-1">
+          <div className="flex items-center gap-2">
+            <Users size={13} className="text-gray-400" />
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">
+              Niños registrados en el sistema{totalChildren !== null ? ` · ${totalChildren}` : ''}
+            </p>
+          </div>
+          {showAllChildren && (
+            <button
+              onClick={() => setShowAllChildren(false)}
+              className="text-xs text-indigo-600 hover:text-indigo-800 font-medium transition-colors"
+            >
+              Ocultar
+            </button>
+          )}
+        </div>
+
+        {!showAllChildren ? (
+          <button
+            onClick={loadAllChildren}
+            disabled={loadingAllChildren}
+            className="w-full flex items-center justify-center gap-2 py-3 text-sm font-medium text-gray-600 bg-white border-2 border-gray-200 rounded-2xl hover:bg-gray-50 transition-colors"
+          >
+            <Users size={15} />
+            {loadingAllChildren ? 'Cargando…' : `Ver padrón completo${totalChildren !== null ? ` (${totalChildren})` : ''}`}
+          </button>
+        ) : (
+          <div className="space-y-2.5">
+            {allChildren.length === 0 ? (
+              <p className="text-center text-gray-400 py-6 text-sm bg-white rounded-2xl border border-gray-200">
+                No hay niños registrados todavía.
+              </p>
+            ) : (
+              allChildren.map((child) => (
+                <ChildCard
+                  key={child.id}
+                  child={child}
+                  teamColor={teamColor}
+                  isSelected={selectedId === child.id}
+                  onSelect={() => setSelectedId(child.id)}
+                  onDeselect={() => setSelectedId(null)}
+                  onRegistered={handleRegistered}
+                />
+              ))
+            )}
+          </div>
+        )}
       </div>
 
       {/* ── Registros de hoy ── */}
