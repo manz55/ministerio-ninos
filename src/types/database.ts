@@ -58,6 +58,44 @@ export type Database = {
           },
         ]
       }
+      child_contacts: {
+        Row: {
+          child_id: string
+          created_at: string
+          full_name: string
+          id: string
+          phone: string | null
+          photo_url: string | null
+          relationship: string | null
+        }
+        Insert: {
+          child_id: string
+          created_at?: string
+          full_name: string
+          id?: string
+          phone?: string | null
+          photo_url?: string | null
+          relationship?: string | null
+        }
+        Update: {
+          child_id?: string
+          created_at?: string
+          full_name?: string
+          id?: string
+          phone?: string | null
+          photo_url?: string | null
+          relationship?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "child_contacts_child_id_fkey"
+            columns: ["child_id"]
+            isOneToOne: false
+            referencedRelation: "children"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       children: {
         Row: {
           allergies: string | null

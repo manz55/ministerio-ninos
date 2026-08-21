@@ -69,6 +69,16 @@ export interface Parent {
   created_at: string
 }
 
+export interface ChildContact {
+  id: string
+  child_id: string
+  full_name: string
+  phone: string | null
+  relationship: GuardianRelationship | null
+  photo_url: string | null
+  created_at: string
+}
+
 export interface Child {
   id: string
   parent_id: string | null

@@ -9,6 +9,7 @@ import { getCategoryFromBirthDate, getEffectiveCategory, hasCategoryChanged, get
 import { uploadPhoto } from '../lib/photo'
 import { CategoryBadge } from '../components/ui/CategoryBadge'
 import { PhotoCapture, PhotoAvatar } from '../components/ui/PhotoCapture'
+import { ChildContacts } from '../components/ui/ChildContacts'
 import { useDebounce } from '../hooks/useDebounce'
 import { NewFamilyStep } from '../components/checkin/NewFamilyStep'
 import { CATEGORY_LABELS, GUARDIAN_RELATIONSHIP_LABELS, NEXT_CATEGORY, type ParentRow, type Category, type GuardianRelationship } from '../types/domain'
@@ -551,6 +552,8 @@ function FamilyDetailPanel({
                     <span className="font-semibold">Comentarios:</span> {child.comments}
                   </p>
                 )}
+
+                {!isEditing && <ChildContacts childId={child.id} />}
 
                 {isEditing && (
                   <ChildEditForm

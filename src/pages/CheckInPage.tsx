@@ -7,6 +7,7 @@ import { supabase } from '../lib/supabase'
 import { getCategoryFromBirthDate, getEffectiveCategory, hasCategoryChanged, getAgeLabel, requiresBadge, requiresPager } from '../lib/categoryUtils'
 import { CATEGORY_LABELS, CATEGORY_COLORS, NEXT_CATEGORY, type Category, type TeamColor } from '../types/domain'
 import { CategoryBadge } from '../components/ui/CategoryBadge'
+import { ChildContacts } from '../components/ui/ChildContacts'
 import { NewFamilyStep } from '../components/checkin/NewFamilyStep'
 import { useDebounce } from '../hooks/useDebounce'
 import { BalloonBackground } from '../components/ui/BalloonBackground'
@@ -218,6 +219,7 @@ function ChildCard({
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showStamp, setShowStamp] = useState(false)
+  const [showContacts, setShowContacts] = useState(false)
   const badgeRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -336,6 +338,22 @@ function ChildCard({
           )}
         </div>
       </button>
+
+      {/* ── Otros contactos autorizados ── */}
+      <div className="px-5 pb-3 -mt-1">
+        <button
+          type="button"
+          onClick={() => setShowContacts((v) => !v)}
+          className="text-xs font-medium text-gray-400 hover:text-indigo-600 transition-colors"
+        >
+          {showContacts ? 'Ocultar otros contactos' : '+ Otros contactos autorizados'}
+        </button>
+        {showContacts && (
+          <div className="mt-2">
+            <ChildContacts childId={child.id} />
+          </div>
+        )}
+      </div>
 
       {/* ── Inline badge form ── */}
       {isSelected && needsBadge && (
