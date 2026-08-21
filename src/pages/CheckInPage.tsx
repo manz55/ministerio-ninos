@@ -8,7 +8,6 @@ import { getCategoryFromBirthDate, getEffectiveCategory, hasCategoryChanged, get
 import { CATEGORY_LABELS, CATEGORY_COLORS, NEXT_CATEGORY, type Category, type TeamColor } from '../types/domain'
 import { CategoryBadge } from '../components/ui/CategoryBadge'
 import { ChildContacts } from '../components/ui/ChildContacts'
-import { useAuth } from '../lib/auth'
 import { NewFamilyStep } from '../components/checkin/NewFamilyStep'
 import { useDebounce } from '../hooks/useDebounce'
 import { BalloonBackground } from '../components/ui/BalloonBackground'
@@ -447,7 +446,6 @@ function ChildCard({
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function CheckInPage() {
-  const { isAdmin } = useAuth()
   const [activeCategory, setActiveCategory] = useState<Category | null>(null)
   const [todayCounts, setTodayCounts] = useState<Partial<Record<Category, number>>>({})
   const [totalToday, setTotalToday] = useState(0)
@@ -1149,14 +1147,12 @@ export default function CheckInPage() {
                         <span className="text-xs text-gray-400 font-medium">
                           {format(new Date(rec.checked_in_at), 'HH:mm')}
                         </span>
-                        {isAdmin && (
-                          <button
-                            onClick={() => setConfirmDeleteRecordId(rec.id)}
-                            className="p-1 text-gray-300 hover:text-red-400 rounded-lg hover:bg-red-50 transition-colors"
-                          >
-                            <Trash2 size={13} />
-                          </button>
-                        )}
+                        <button
+                          onClick={() => setConfirmDeleteRecordId(rec.id)}
+                          className="p-1 text-gray-300 hover:text-red-400 rounded-lg hover:bg-red-50 transition-colors"
+                        >
+                          <Trash2 size={13} />
+                        </button>
                       </div>
                       {rec.checked_out_at ? (
                         <span className="text-xs font-semibold text-gray-400 bg-gray-100 rounded-full px-2 py-0.5">
