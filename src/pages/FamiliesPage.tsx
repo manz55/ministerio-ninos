@@ -101,6 +101,7 @@ function ChildEditForm({
   const [notes, setNotes]       = useState(child.medical_notes ?? '')
   const [relationship, setRelationship] = useState<GuardianRelationship | ''>(child.guardian_relationship ?? '')
   const [comments, setComments] = useState(child.comments ?? '')
+  const [manualCategory, setManualCategory] = useState<Category | ''>(child.category ?? '')
   const [photoBlob, setPhotoBlob] = useState<Blob | null>(null)
   const [saving, setSaving]     = useState(false)
   const [error, setError]       = useState<string | null>(null)
@@ -119,7 +120,7 @@ function ChildEditForm({
     await onSave({
       full_name: name.trim(),
       birth_date: birthDate || null,
-      category: birthDate ? getCategoryFromBirthDate(birthDate) : child.category,
+      category: birthDate ? getCategoryFromBirthDate(birthDate) : (manualCategory || null),
       allergies: allergies.trim() || null,
       medical_notes: notes.trim() || null,
       guardian_relationship: relationship || null,
@@ -150,9 +151,21 @@ function ChildEditForm({
           </div>
         </div>
         {!birthDate && (
-          <p className="text-xs text-gray-400 mt-1">Sin fecha de nacimiento — la categoría se mantiene fija hasta que se ingrese.</p>
+          <p className="text-xs text-gray-400 mt-1">Sin fecha de nacimiento — elige la clase a mano abajo.</p>
         )}
       </div>
+      {!birthDate && (
+        <div>
+          <label className="block text-xs font-medium text-gray-500 mb-1">Categoría (manual, sin fecha de nacimiento)</label>
+          <select value={manualCategory} onChange={(e) => setManualCategory(e.target.value as Category | '')}
+            className="w-full px-3 py-2.5 border-2 border-gray-200 rounded-lg focus:border-indigo-500 focus:outline-none text-sm bg-white">
+            <option value="">Sin categoría</option>
+            {Object.entries(CATEGORY_LABELS).map(([value, label]) => (
+              <option key={value} value={value}>{label}</option>
+            ))}
+          </select>
+        </div>
+      )}
       <div>
         <label className="block text-xs font-medium text-gray-500 mb-1">Parentesco del responsable</label>
         <select value={relationship} onChange={(e) => setRelationship(e.target.value as GuardianRelationship | '')}
