@@ -1,7 +1,9 @@
+import { useState } from 'react'
 import { Outlet } from 'react-router-dom'
-import { ClipboardList, BarChart3, Users, NotebookPen, UserCog, LogOut } from 'lucide-react'
+import { ClipboardList, BarChart3, Users, NotebookPen, UserCog, LogOut, KeyRound } from 'lucide-react'
 import Dock from '../ui/Dock'
 import { ChurchLogo } from '../ui/ChurchLogo'
+import { ChangePasswordModal } from '../ui/ChangePasswordModal'
 import { signOut } from '../../lib/auth'
 import type { Profile } from '../../types/domain'
 
@@ -19,9 +21,12 @@ const adminNavItems = [
 
 export default function Layout({ isAdmin, profile }: { isAdmin: boolean; profile: Profile }) {
   const navItems = isAdmin ? adminNavItems : maestroNavItems
+  const [showChangePassword, setShowChangePassword] = useState(false)
 
   return (
     <div className="bg-gray-50" style={{ minHeight: '100dvh' }}>
+      {showChangePassword && <ChangePasswordModal onClose={() => setShowChangePassword(false)} />}
+
       <header
         className="sticky top-0 z-[3] bg-white/90 backdrop-blur-md border-b border-gray-200 px-4 py-3"
         style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top))' }}
@@ -32,6 +37,13 @@ export default function Layout({ isAdmin, profile }: { isAdmin: boolean; profile
             <span className="font-semibold text-gray-900 block leading-tight">Maestros de Niños</span>
             <span className="text-xs text-gray-400 leading-tight truncate block">{profile.full_name}</span>
           </div>
+          <button
+            onClick={() => setShowChangePassword(true)}
+            className="p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors shrink-0"
+            title="Cambiar contraseña"
+          >
+            <KeyRound size={18} />
+          </button>
           <button
             onClick={() => signOut()}
             className="p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors shrink-0"

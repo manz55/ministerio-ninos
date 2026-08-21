@@ -11,6 +11,10 @@ export async function signOut() {
   return supabase.auth.signOut()
 }
 
+export async function updateOwnPassword(newPassword: string) {
+  return supabase.auth.updateUser({ password: newPassword })
+}
+
 /** Session + profile (role) for the currently logged-in user, kept in sync with auth state changes. */
 export function useAuth() {
   const [session, setSession] = useState<Session | null>(null)
