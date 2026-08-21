@@ -15,6 +15,9 @@ dist-ssr
 # Claude Code
 .claude/
 
+# Real family/child data — already imported into Supabase, shouldn't live in git history
+Base de datos ninos.xlsx
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

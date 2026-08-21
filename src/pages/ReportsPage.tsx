@@ -3,13 +3,14 @@ import { format, subWeeks, startOfWeek, endOfWeek } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  Users, RefreshCw, Download, AlertTriangle,
-  Bug, Zap, Compass, TrendingUp, ChevronDown, ChevronUp, User, Trash2, X,
+  Users, RefreshCw, Download, AlertTriangle, FileText,
+  Bug, Zap, Compass, TrendingUp, ChevronDown, ChevronUp, User, Trash2, X, CalendarRange,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { CATEGORY_LABELS, CATEGORY_COLORS, ACTIVE_CATEGORIES, type Category } from '../types/domain'
 import { DatePicker } from '../components/ui/DatePicker'
 import { AnimatedBlobBackground } from '../components/ui/AnimatedBlobBackground'
+import { fetchAttendanceRange, exportRangeCSV, exportRangePDF, MAX_RANGE_ROWS } from '../lib/exportUtils'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -184,6 +185,25 @@ export default function ReportsPage() {
   const [catFilter, setCatFilter]       = useState<Category | 'all'>('all')
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
   const [deleting, setDeleting]         = useState(false)
+
+  const [rangeFrom, setRangeFrom] = useState(format(subWeeks(new Date(), 1), 'yyyy-MM-dd'))
+  const [rangeTo, setRangeTo]     = useState(todayStr)
+  const [rangeBusy, setRangeBusy] = useState<'csv' | 'pdf' | null>(null)
+  const [rangeError, setRangeError] = useState<string | null>(null)
+
+  async function handleRangeExport(kind: 'csv' | 'pdf') {
+    if (!rangeFrom || !rangeTo || rangeFrom > rangeTo) { setRangeError('Selecciona un rango de fechas válido.'); return }
+    setRangeError(null)
+    setRangeBusy(kind)
+    const { rows, total } = await fetchAttendanceRange(rangeFrom, rangeTo)
+    setRangeBusy(null)
+    if (rows.length === 0) { setRangeError('No hay registros en ese rango.'); return }
+    if (total > MAX_RANGE_ROWS) {
+      setRangeError(`El rango tiene ${total} registros — se exportaron los primeros ${MAX_RANGE_ROWS}. Prueba un rango más corto para un reporte completo.`)
+    }
+    if (kind === 'csv') exportRangeCSV(rows, rangeFrom, rangeTo)
+    else exportRangePDF(rows, rangeFrom, rangeTo)
+  }
 
   const selectedStr    = format(selectedDate, 'yyyy-MM-dd')
   const isToday        = selectedStr === todayStr
@@ -439,6 +459,40 @@ export default function ReportsPage() {
           })}
         </div>
       )}
+
+      {/* ── Reporte por rango de fechas ── */}
+      <section className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 space-y-3">
+        <div className="flex items-center gap-2">
+          <CalendarRange size={16} className="text-indigo-500" />
+          <h3 className="font-semibold text-gray-800">Reporte por rango de fechas</h3>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <input type="date" value={rangeFrom} max={rangeTo} onChange={(e) => setRangeFrom(e.target.value)}
+            className="px-3 py-2 border-2 border-gray-200 rounded-lg text-sm focus:border-indigo-500 focus:outline-none" />
+          <span className="text-sm text-gray-400">a</span>
+          <input type="date" value={rangeTo} min={rangeFrom} max={todayStr} onChange={(e) => setRangeTo(e.target.value)}
+            className="px-3 py-2 border-2 border-gray-200 rounded-lg text-sm focus:border-indigo-500 focus:outline-none" />
+        </div>
+        {rangeError && (
+          <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">{rangeError}</p>
+        )}
+        <div className="flex gap-2">
+          <button
+            onClick={() => handleRangeExport('csv')}
+            disabled={rangeBusy !== null}
+            className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-sm font-semibold text-gray-700 bg-gray-100 rounded-xl hover:bg-gray-200 disabled:opacity-50 transition-colors"
+          >
+            <Download size={14} /> {rangeBusy === 'csv' ? 'Generando…' : 'CSV'}
+          </button>
+          <button
+            onClick={() => handleRangeExport('pdf')}
+            disabled={rangeBusy !== null}
+            className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-sm font-semibold text-white bg-indigo-600 rounded-xl hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+          >
+            <FileText size={14} /> {rangeBusy === 'pdf' ? 'Generando…' : 'PDF'}
+          </button>
+        </div>
+      </section>
 
       {/* ── Historial semanal ── */}
       <section className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">

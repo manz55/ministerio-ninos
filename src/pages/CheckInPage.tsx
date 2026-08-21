@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef, useCallback, useMemo, startTransition } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { format, differenceInYears } from 'date-fns'
+import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { Search, CheckCircle2, UserPlus, AlertTriangle, ChevronLeft, Bug, Zap, Compass, User, Pencil, LogIn, Trash2, X, Users } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { getCategoryFromBirthDate, requiresBadge, requiresPager } from '../lib/categoryUtils'
-import { CATEGORY_LABELS, CATEGORY_COLORS, type Category, type TeamColor } from '../types/domain'
+import { getCategoryFromBirthDate, getEffectiveCategory, hasCategoryChanged, getAgeLabel, requiresBadge, requiresPager } from '../lib/categoryUtils'
+import { CATEGORY_LABELS, CATEGORY_COLORS, NEXT_CATEGORY, type Category, type TeamColor } from '../types/domain'
+import { CategoryBadge } from '../components/ui/CategoryBadge'
 import { NewFamilyStep } from '../components/checkin/NewFamilyStep'
 import { useDebounce } from '../hooks/useDebounce'
 import { BalloonBackground } from '../components/ui/BalloonBackground'
@@ -27,11 +28,12 @@ type TodayRecord = {
 type ChildResult = {
   id: string
   full_name: string
-  birth_date: string
+  birth_date: string | null
+  category: Category | null
   allergies: string | null
   medical_notes: string | null
-  parent_id: string
-  parents: { full_name: string; phone: string }
+  parent_id: string | null
+  parents: { full_name: string; phone: string } | null
   attendance: { session_date: string }[]
 }
 
@@ -77,7 +79,7 @@ const TILES = [
   {
     category: 'hormiguitas' as Category,
     icon: Bug,
-    ages: '3–4 años',
+    ages: '4–6 años',
     cardBg: 'bg-emerald-100',
     iconBg: 'bg-emerald-500/20',
     iconColor: 'text-emerald-700',
@@ -88,7 +90,7 @@ const TILES = [
   {
     category: 'saltamontes' as Category,
     icon: Zap,
-    ages: '5–7 años',
+    ages: '7–9 años',
     cardBg: 'bg-amber-100',
     iconBg: 'bg-amber-500/20',
     iconColor: 'text-amber-700',
@@ -99,7 +101,7 @@ const TILES = [
   {
     category: 'exploradores' as Category,
     icon: Compass,
-    ages: '8–11 años',
+    ages: '10+ años',
     cardBg: 'bg-sky-100',
     iconBg: 'bg-sky-500/20',
     iconColor: 'text-sky-700',
@@ -202,8 +204,10 @@ function ChildCard({
   onDeselect: () => void
   onRegistered: (childId: string) => void
 }) {
-  const category = getCategoryFromBirthDate(child.birth_date)
-  const age = differenceInYears(new Date(), new Date(child.birth_date))
+  const computedCategory = getCategoryFromBirthDate(child.birth_date)
+  const category = getEffectiveCategory(child)
+  const categoryChanged = hasCategoryChanged(child)
+  const age = getAgeLabel(child.birth_date)
   const alreadyIn = child.attendance.some((a) => a.session_date === today)
   const hasAlert = !!(child.allergies || child.medical_notes)
   const needsBadge = requiresBadge(category)
@@ -222,13 +226,8 @@ function ChildCard({
     }
   }, [isSelected, needsBadge])
 
-  useEffect(() => {
-    if (isSelected && !needsBadge && !alreadyIn) {
-      doCheckIn(null, null)
-    }
-  }, [isSelected]) // eslint-disable-line react-hooks/exhaustive-deps
-
   async function doCheckIn(badgeNumber: number | null, pagerNumber: number | null) {
+    if (!category) { setError('Este niño no tiene categoría asignada. Complétala en Familias.'); return }
     setSubmitting(true)
     setError(null)
     const { error: err } = await supabase.from('attendance').insert({
@@ -239,8 +238,8 @@ function ChildCard({
       badge_number: badgeNumber,
       pager_number: pagerNumber,
     })
-    setSubmitting(false)
     if (err) {
+      setSubmitting(false)
       if (err.code === '23505' && err.message.includes('attendance_badge_category_unique')) {
         setError(`El gafete #${badgeNumber} ya está en uso en ${CATEGORY_LABELS[category]} hoy.`)
       } else if (err.code === '23505') {
@@ -250,6 +249,12 @@ function ChildCard({
       }
       return
     }
+    // Keep the stored category in sync with age now that we know it — future
+    // imports/no-birth-date children simply keep whatever was last set.
+    if (computedCategory && computedCategory !== child.category) {
+      await supabase.from('children').update({ category: computedCategory }).eq('id', child.id)
+    }
+    setSubmitting(false)
     setBadge('')
     setPager('')
     setShowStamp(true)
@@ -258,6 +263,22 @@ function ChildCard({
       onRegistered(child.id)
     }, 1600)
   }
+
+  // Auto-check-in for no-badge categories (corderitos) reads fresh values via
+  // this ref instead of depending on `doCheckIn`/`needsBadge`/`alreadyIn`
+  // directly — those change identity every render, so including them as
+  // effect deps would either miss updates (stale closure) or re-fire the
+  // check-in on every unrelated re-render while still selected.
+  const latest = useRef({ needsBadge, alreadyIn, category, doCheckIn })
+  latest.current = { needsBadge, alreadyIn, category, doCheckIn }
+
+  useEffect(() => {
+    if (!isSelected) return
+    const { needsBadge, alreadyIn, category, doCheckIn } = latest.current
+    if (!needsBadge && !alreadyIn && category) {
+      doCheckIn(null, null)
+    }
+  }, [isSelected])
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -280,8 +301,8 @@ function ChildCard({
       {/* ── Card header ── */}
       <button
         className="w-full text-left px-5 py-4 disabled:cursor-not-allowed"
-        onClick={alreadyIn ? undefined : isSelected ? onDeselect : onSelect}
-        disabled={alreadyIn || submitting}
+        onClick={alreadyIn || !category ? undefined : isSelected ? onDeselect : onSelect}
+        disabled={alreadyIn || submitting || !category}
       >
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0 space-y-1.5">
@@ -290,11 +311,14 @@ function ChildCard({
               {hasAlert && <AlertTriangle size={15} className="text-red-500 shrink-0" />}
             </div>
             <div className="flex items-center gap-2 flex-wrap">
-              <span className={`inline-flex items-center rounded-full border font-semibold text-xs px-2 py-0.5 ${CATEGORY_COLORS[category]}`}>
-                {CATEGORY_LABELS[category]}
-              </span>
+              <CategoryBadge category={category} size="sm" />
+              {categoryChanged && category && NEXT_CATEGORY[child.category!] === category && (
+                <span className="text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">
+                  🎉 Ya cumplió años, puede pasar a {CATEGORY_LABELS[category]}
+                </span>
+              )}
               <span className="text-sm text-gray-400">
-                {age} año{age !== 1 ? 's' : ''} · {child.parents?.full_name}
+                {age !== null ? `${age} año${age !== 1 ? 's' : ''} · ` : ''}{child.parents?.full_name ?? 'Sin responsable'}
               </span>
             </div>
           </div>
@@ -458,7 +482,7 @@ export default function CheckInPage() {
     const [{ data: all }, { data: todayAtt }] = await Promise.all([
       supabase
         .from('children')
-        .select('id, full_name, birth_date, allergies, medical_notes, parent_id, parents(full_name, phone)')
+        .select('id, full_name, birth_date, category, allergies, medical_notes, parent_id, parents(full_name, phone)')
         .order('full_name'),
       supabase
         .from('attendance')
@@ -485,7 +509,7 @@ export default function CheckInPage() {
       const [{ data: found }, { data: todayAtt }] = await Promise.all([
         supabase
           .from('children')
-          .select('id, full_name, birth_date, allergies, medical_notes, parent_id, parents(full_name, phone)')
+          .select('id, full_name, birth_date, category, allergies, medical_notes, parent_id, parents(full_name, phone)')
           .ilike('full_name', `%${debouncedGlobal}%`)
           .order('full_name')
           .limit(20),
@@ -527,7 +551,7 @@ export default function CheckInPage() {
     const [{ data: all }, { data: todayAtt }] = await Promise.all([
       supabase
         .from('children')
-        .select('id, full_name, birth_date, allergies, medical_notes, parent_id, parents(full_name, phone)')
+        .select('id, full_name, birth_date, category, allergies, medical_notes, parent_id, parents(full_name, phone)')
         .order('full_name'),
       supabase
         .from('attendance')
@@ -540,7 +564,7 @@ export default function CheckInPage() {
 
     const attSet = new Set((todayAtt ?? []).map((a) => a.child_id))
     const filtered = ((all ?? []) as Omit<ChildResult, 'attendance'>[])
-      .filter((c) => getCategoryFromBirthDate(c.birth_date) === category)
+      .filter((c) => getEffectiveCategory(c) === category)
       .map((c) => ({
         ...c,
         attendance: attSet.has(c.id) ? [{ session_date: today }] : [],
@@ -567,7 +591,7 @@ export default function CheckInPage() {
     setSelectedId(null)
     // Deriving category from data avoids depending on activeCategory
     const child = [...children, ...globalResults, ...allChildren].find((c) => c.id === childId)
-    const cat = child ? getCategoryFromBirthDate(child.birth_date) : activeCategory
+    const cat = child ? getEffectiveCategory(child) : activeCategory
     if (cat) {
       setTodayCounts((prev) => ({ ...prev, [cat]: (prev[cat] ?? 0) + 1 }))
       setTotalToday((n) => n + 1)

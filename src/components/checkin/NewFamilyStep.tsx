@@ -3,8 +3,10 @@ import { ChevronLeft, Plus, Trash2 } from 'lucide-react'
 import { differenceInYears } from 'date-fns'
 import { supabase } from '../../lib/supabase'
 import { getCategoryFromBirthDate } from '../../lib/categoryUtils'
+import { uploadPhoto } from '../../lib/photo'
 import { CategoryBadge } from '../ui/CategoryBadge'
-import type { ParentRow } from '../../types/domain'
+import { PhotoCapture } from '../ui/PhotoCapture'
+import { GUARDIAN_RELATIONSHIP_LABELS, type Category, type GuardianRelationship, type ParentRow, type ChildRow } from '../../types/domain'
 
 interface ChildDraft {
   key: string
@@ -12,6 +14,9 @@ interface ChildDraft {
   birth_date: string
   allergies: string
   medical_notes: string
+  guardian_relationship: GuardianRelationship | ''
+  comments: string
+  photoBlob: Blob | null
 }
 
 interface Props {
@@ -21,18 +26,22 @@ interface Props {
 }
 
 function newChild(key: string): ChildDraft {
-  return { key, full_name: '', birth_date: '', allergies: '', medical_notes: '' }
+  return {
+    key, full_name: '', birth_date: '', allergies: '', medical_notes: '',
+    guardian_relationship: '', comments: '', photoBlob: null,
+  }
 }
 
 export function NewFamilyStep({ prefillName = '', onSaved, onCancel }: Props) {
   const [parentName, setParentName] = useState(prefillName)
   const [parentPhone, setParentPhone] = useState('')
+  const [parentPhotoBlob, setParentPhotoBlob] = useState<Blob | null>(null)
   const [children, setChildren] = useState<ChildDraft[]>([newChild('0')])
   const [saving, setSaving] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
 
   // ── Child helpers ───────────────────────────────────────────────────────────
-  function updateChild(key: string, field: keyof ChildDraft, value: string) {
+  function updateChild<K extends keyof ChildDraft>(key: string, field: K, value: ChildDraft[K]) {
     setChildren((prev) =>
       prev.map((c) => (c.key === key ? { ...c, [field]: value } : c))
     )
@@ -90,22 +99,43 @@ export function NewFamilyStep({ prefillName = '', onSaved, onCancel }: Props) {
           parent_id: parentData.id,
           full_name: c.full_name.trim(),
           birth_date: c.birth_date,
+          category: getCategoryFromBirthDate(c.birth_date),
           allergies: c.allergies.trim() || null,
           medical_notes: c.medical_notes.trim() || null,
+          guardian_relationship: c.guardian_relationship || null,
+          comments: c.comments.trim() || null,
         }))
       )
       .select()
 
-    if (childrenErr) {
+    if (childrenErr || !childrenData) {
       setErrors({ global: 'Error al guardar los niños. Intenta de nuevo.' })
       setSaving(false)
       return
     }
 
+    // 3. Upload photos (if any) now that we have real ids, then attach the paths
+    let parentPhotoUrl: string | null = null
+    if (parentPhotoBlob) {
+      parentPhotoUrl = await uploadPhoto(`parents/${parentData.id}.jpg`, parentPhotoBlob)
+      if (parentPhotoUrl) await supabase.from('parents').update({ photo_url: parentPhotoUrl }).eq('id', parentData.id)
+    }
+
+    const childrenWithPhotos = await Promise.all(
+      childrenData.map(async (row, i) => {
+        const blob = children[i]?.photoBlob
+        if (!blob) return row
+        const path = await uploadPhoto(`children/${row.id}.jpg`, blob)
+        if (path) await supabase.from('children').update({ photo_url: path }).eq('id', row.id)
+        return { ...row, photo_url: path ?? row.photo_url }
+      })
+    )
+
     // Construye ParentRow completo para pasar al siguiente paso
     const newParent: ParentRow = {
       ...parentData,
-      children: (childrenData ?? []).map((c) => ({ ...c, attendance: [] })),
+      photo_url: parentPhotoUrl,
+      children: childrenWithPhotos.map((c) => ({ ...c, category: c.category as Category | null, attendance: [] })) as ChildRow[],
     }
     onSaved(newParent)
   }
@@ -130,6 +160,8 @@ export function NewFamilyStep({ prefillName = '', onSaved, onCancel }: Props) {
         <h3 className="font-semibold text-gray-700 text-sm uppercase tracking-wider">
           Padre o madre
         </h3>
+
+        <PhotoCapture onFileReady={setParentPhotoBlob} />
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1.5">
@@ -202,6 +234,8 @@ export function NewFamilyStep({ prefillName = '', onSaved, onCancel }: Props) {
                 )}
               </div>
 
+              <PhotoCapture onFileReady={(blob) => updateChild(child.key, 'photoBlob', blob)} />
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">
                   Nombre completo <span className="text-red-500">*</span>
@@ -252,6 +286,23 @@ export function NewFamilyStep({ prefillName = '', onSaved, onCancel }: Props) {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Parentesco del responsable{' '}
+                  <span className="text-gray-400 font-normal">(opcional)</span>
+                </label>
+                <select
+                  value={child.guardian_relationship}
+                  onChange={(e) => updateChild(child.key, 'guardian_relationship', e.target.value as GuardianRelationship | '')}
+                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-indigo-500 focus:outline-none text-base bg-white"
+                >
+                  <option value="">Sin especificar</option>
+                  {Object.entries(GUARDIAN_RELATIONSHIP_LABELS).map(([value, label]) => (
+                    <option key={value} value={value}>{label}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
                   Alergias{' '}
                   <span className="text-gray-400 font-normal">(opcional)</span>
                 </label>
@@ -275,6 +326,20 @@ export function NewFamilyStep({ prefillName = '', onSaved, onCancel }: Props) {
                   onChange={(e) => updateChild(child.key, 'medical_notes', e.target.value)}
                   placeholder="Ej. asma, epilepsia controlada…"
                   className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-indigo-500 focus:outline-none text-base"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Comentarios adicionales{' '}
+                  <span className="text-gray-400 font-normal">(opcional)</span>
+                </label>
+                <textarea
+                  value={child.comments}
+                  onChange={(e) => updateChild(child.key, 'comments', e.target.value)}
+                  placeholder="Ej. ya va solo al baño, le teme a los globos…"
+                  rows={2}
+                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-indigo-500 focus:outline-none text-base resize-none"
                 />
               </div>
             </div>

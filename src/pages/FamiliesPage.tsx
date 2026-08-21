@@ -1,27 +1,32 @@
 import { useState, useEffect, useCallback } from 'react'
-import { differenceInYears } from 'date-fns'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Search, ChevronRight, Edit2, Check, X, Plus, Phone,
   AlertTriangle, UserPlus, Trash2, Users, ChevronLeft,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { getCategoryFromBirthDate } from '../lib/categoryUtils'
+import { getCategoryFromBirthDate, getEffectiveCategory, hasCategoryChanged, getAgeLabel } from '../lib/categoryUtils'
+import { uploadPhoto } from '../lib/photo'
 import { CategoryBadge } from '../components/ui/CategoryBadge'
+import { PhotoCapture, PhotoAvatar } from '../components/ui/PhotoCapture'
 import { useDebounce } from '../hooks/useDebounce'
 import { NewFamilyStep } from '../components/checkin/NewFamilyStep'
-import type { ParentRow } from '../types/domain'
+import { CATEGORY_LABELS, GUARDIAN_RELATIONSHIP_LABELS, NEXT_CATEGORY, type ParentRow, type Category, type GuardianRelationship } from '../types/domain'
 import { BackgroundRadialViolet } from '../components/ui/BackgroundRadialViolet'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type ChildDetail = {
   id: string
-  parent_id: string
+  parent_id: string | null
   full_name: string
-  birth_date: string
+  birth_date: string | null
+  category: Category | null
   allergies: string | null
   medical_notes: string | null
+  guardian_relationship: GuardianRelationship | null
+  comments: string | null
+  photo_url: string | null
   attendance: { count: number }[]
 }
 
@@ -29,6 +34,7 @@ type FamilyDetail = {
   id: string
   full_name: string
   phone: string
+  photo_url: string | null
   children: ChildDetail[]
 }
 
@@ -90,26 +96,43 @@ function ChildEditForm({
   onCancel: () => void
 }) {
   const [name, setName]         = useState(child.full_name)
-  const [birthDate, setBirthDate] = useState(child.birth_date)
+  const [birthDate, setBirthDate] = useState(child.birth_date ?? '')
   const [allergies, setAllergies] = useState(child.allergies ?? '')
   const [notes, setNotes]       = useState(child.medical_notes ?? '')
+  const [relationship, setRelationship] = useState<GuardianRelationship | ''>(child.guardian_relationship ?? '')
+  const [comments, setComments] = useState(child.comments ?? '')
+  const [photoBlob, setPhotoBlob] = useState<Blob | null>(null)
   const [saving, setSaving]     = useState(false)
   const [error, setError]       = useState<string | null>(null)
 
   const previewCategory = birthDate ? getCategoryFromBirthDate(birthDate) : null
-  const previewAge = birthDate ? differenceInYears(new Date(), new Date(birthDate)) : null
+  const previewAge = getAgeLabel(birthDate)
 
   async function handleSave() {
     if (!name.trim()) { setError('El nombre es requerido'); return }
-    if (!birthDate) { setError('La fecha de nacimiento es requerida'); return }
     setSaving(true)
-    await onSave({ full_name: name.trim(), birth_date: birthDate, allergies: allergies.trim() || null, medical_notes: notes.trim() || null })
+    let photo_url = child.photo_url
+    if (photoBlob) {
+      const path = await uploadPhoto(`children/${child.id}.jpg`, photoBlob)
+      if (path) photo_url = path
+    }
+    await onSave({
+      full_name: name.trim(),
+      birth_date: birthDate || null,
+      category: birthDate ? getCategoryFromBirthDate(birthDate) : child.category,
+      allergies: allergies.trim() || null,
+      medical_notes: notes.trim() || null,
+      guardian_relationship: relationship || null,
+      comments: comments.trim() || null,
+      photo_url,
+    })
     setSaving(false)
   }
 
   return (
     <div className="space-y-3 pt-2">
       {error && <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>}
+      <PhotoCapture existingPath={child.photo_url} onFileReady={setPhotoBlob} />
       <div>
         <label className="block text-xs font-medium text-gray-500 mb-1">Nombre completo</label>
         <input type="text" value={name} onChange={(e) => setName(e.target.value)}
@@ -118,16 +141,27 @@ function ChildEditForm({
       <div>
         <label className="block text-xs font-medium text-gray-500 mb-1">Fecha de nacimiento</label>
         <div className="flex items-center gap-2">
-          <input type="date" value={birthDate} max={new Date().toISOString().split('T')[0]}
+          <input type="date" value={birthDate ?? ''} max={new Date().toISOString().split('T')[0]}
             onChange={(e) => setBirthDate(e.target.value)}
             className="flex-1 px-3 py-2.5 border-2 border-gray-200 rounded-lg focus:border-indigo-500 focus:outline-none text-sm" />
-          {previewCategory && (
-            <div className="flex items-center gap-1.5 shrink-0">
-              <CategoryBadge category={previewCategory} size="sm" />
-              <span className="text-xs text-gray-400">{previewAge} a.</span>
-            </div>
-          )}
+          <div className="flex items-center gap-1.5 shrink-0">
+            <CategoryBadge category={previewCategory ?? child.category} size="sm" />
+            {previewAge !== null && <span className="text-xs text-gray-400">{previewAge} a.</span>}
+          </div>
         </div>
+        {!birthDate && (
+          <p className="text-xs text-gray-400 mt-1">Sin fecha de nacimiento — la categoría se mantiene fija hasta que se ingrese.</p>
+        )}
+      </div>
+      <div>
+        <label className="block text-xs font-medium text-gray-500 mb-1">Parentesco del responsable</label>
+        <select value={relationship} onChange={(e) => setRelationship(e.target.value as GuardianRelationship | '')}
+          className="w-full px-3 py-2.5 border-2 border-gray-200 rounded-lg focus:border-indigo-500 focus:outline-none text-sm bg-white">
+          <option value="">Sin especificar</option>
+          {Object.entries(GUARDIAN_RELATIONSHIP_LABELS).map(([value, label]) => (
+            <option key={value} value={value}>{label}</option>
+          ))}
+        </select>
       </div>
       <div>
         <label className="block text-xs font-medium text-gray-500 mb-1">Alergias</label>
@@ -140,6 +174,12 @@ function ChildEditForm({
         <input type="text" value={notes} onChange={(e) => setNotes(e.target.value)}
           placeholder="Ninguna"
           className="w-full px-3 py-2.5 border-2 border-gray-200 rounded-lg focus:border-indigo-500 focus:outline-none text-sm" />
+      </div>
+      <div>
+        <label className="block text-xs font-medium text-gray-500 mb-1">Comentarios adicionales</label>
+        <textarea value={comments} onChange={(e) => setComments(e.target.value)} rows={2}
+          placeholder="Ej. ya va solo al baño…"
+          className="w-full px-3 py-2.5 border-2 border-gray-200 rounded-lg focus:border-indigo-500 focus:outline-none text-sm resize-none" />
       </div>
       <div className="flex gap-2 pt-1">
         <button onClick={onCancel}
@@ -163,22 +203,31 @@ function NewChildForm({ parentId, onSaved, onCancel }: { parentId: string; onSav
   const [birthDate, setBirthDate] = useState('')
   const [allergies, setAllergies] = useState('')
   const [notes, setNotes]       = useState('')
+  const [relationship, setRelationship] = useState<GuardianRelationship | ''>('')
+  const [comments, setComments] = useState('')
+  const [photoBlob, setPhotoBlob] = useState<Blob | null>(null)
   const [saving, setSaving]     = useState(false)
   const [error, setError]       = useState<string | null>(null)
 
   const previewCategory = birthDate ? getCategoryFromBirthDate(birthDate) : null
-  const previewAge = birthDate ? differenceInYears(new Date(), new Date(birthDate)) : null
+  const previewAge = getAgeLabel(birthDate)
 
   async function handleSave() {
     if (!name.trim()) { setError('El nombre es requerido'); return }
     if (!birthDate) { setError('La fecha de nacimiento es requerida'); return }
     setSaving(true)
-    const { error: err } = await supabase.from('children').insert({
+    const { data, error: err } = await supabase.from('children').insert({
       parent_id: parentId, full_name: name.trim(), birth_date: birthDate,
+      category: getCategoryFromBirthDate(birthDate),
       allergies: allergies.trim() || null, medical_notes: notes.trim() || null,
-    })
+      guardian_relationship: relationship || null, comments: comments.trim() || null,
+    }).select().single()
+    if (err || !data) { setSaving(false); setError('Error al guardar.'); return }
+    if (photoBlob) {
+      const path = await uploadPhoto(`children/${data.id}.jpg`, photoBlob)
+      if (path) await supabase.from('children').update({ photo_url: path }).eq('id', data.id)
+    }
     setSaving(false)
-    if (err) { setError('Error al guardar.'); return }
     onSaved()
   }
 
@@ -186,6 +235,7 @@ function NewChildForm({ parentId, onSaved, onCancel }: { parentId: string; onSav
     <div className="border-2 border-dashed border-indigo-200 rounded-xl p-4 space-y-3 bg-indigo-50">
       <p className="text-sm font-semibold text-indigo-700">Nuevo niño</p>
       {error && <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>}
+      <PhotoCapture onFileReady={setPhotoBlob} />
       <div>
         <label className="block text-xs font-medium text-gray-500 mb-1">Nombre completo *</label>
         <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Nombre del niño" autoFocus
@@ -200,10 +250,20 @@ function NewChildForm({ parentId, onSaved, onCancel }: { parentId: string; onSav
           {previewCategory && (
             <div className="flex items-center gap-1.5 shrink-0">
               <CategoryBadge category={previewCategory} size="sm" />
-              <span className="text-xs text-gray-400">{previewAge} a.</span>
+              {previewAge !== null && <span className="text-xs text-gray-400">{previewAge} a.</span>}
             </div>
           )}
         </div>
+      </div>
+      <div>
+        <label className="block text-xs font-medium text-gray-500 mb-1">Parentesco del responsable</label>
+        <select value={relationship} onChange={(e) => setRelationship(e.target.value as GuardianRelationship | '')}
+          className="w-full px-3 py-2.5 border-2 border-gray-200 rounded-lg focus:border-indigo-500 focus:outline-none text-sm bg-white">
+          <option value="">Sin especificar</option>
+          {Object.entries(GUARDIAN_RELATIONSHIP_LABELS).map(([value, label]) => (
+            <option key={value} value={value}>{label}</option>
+          ))}
+        </select>
       </div>
       <div>
         <label className="block text-xs font-medium text-gray-500 mb-1">Alergias</label>
@@ -214,6 +274,11 @@ function NewChildForm({ parentId, onSaved, onCancel }: { parentId: string; onSav
         <label className="block text-xs font-medium text-gray-500 mb-1">Notas médicas</label>
         <input type="text" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Opcional"
           className="w-full px-3 py-2.5 border-2 border-gray-200 rounded-lg focus:border-indigo-500 focus:outline-none text-sm bg-white" />
+      </div>
+      <div>
+        <label className="block text-xs font-medium text-gray-500 mb-1">Comentarios adicionales</label>
+        <textarea value={comments} onChange={(e) => setComments(e.target.value)} rows={2} placeholder="Opcional"
+          className="w-full px-3 py-2.5 border-2 border-gray-200 rounded-lg focus:border-indigo-500 focus:outline-none text-sm bg-white resize-none" />
       </div>
       <div className="flex gap-2">
         <button onClick={onCancel}
@@ -245,7 +310,8 @@ function FamilyDetailPanel({
 }) {
   const [editingParent, setEditingParent]   = useState(false)
   const [parentName, setParentName]         = useState(family.full_name)
-  const [parentPhone, setParentPhone]       = useState(family.phone)
+  const [parentPhone, setParentPhone]       = useState(family.phone ?? '')
+  const [parentPhotoBlob, setParentPhotoBlob] = useState<Blob | null>(null)
   const [savingParent, setSavingParent]     = useState(false)
   const [editingChildId, setEditingChildId] = useState<string | null>(null)
   const [addingChild, setAddingChild]       = useState(false)
@@ -258,7 +324,14 @@ function FamilyDetailPanel({
   async function saveParent() {
     if (!parentName.trim()) return
     setSavingParent(true)
-    await supabase.from('parents').update({ full_name: parentName.trim(), phone: parentPhone.trim() }).eq('id', family.id)
+    const update: { full_name: string; phone: string; photo_url?: string } = {
+      full_name: parentName.trim(), phone: parentPhone.trim(),
+    }
+    if (parentPhotoBlob) {
+      const path = await uploadPhoto(`parents/${family.id}.jpg`, parentPhotoBlob)
+      if (path) update.photo_url = path
+    }
+    await supabase.from('parents').update(update).eq('id', family.id)
     setSavingParent(false)
     setEditingParent(false)
     onRefresh()
@@ -352,18 +425,22 @@ function FamilyDetailPanel({
           </div>
 
           {!editingParent ? (
-            <div className="space-y-1">
-              <p className="text-lg font-bold text-gray-900">{family.full_name}</p>
-              <div className="flex items-center gap-1.5 text-gray-500">
-                <Phone size={13} />
-                <span className="text-sm">{family.phone}</span>
+            <div className="flex items-center gap-3">
+              <PhotoAvatar path={family.photo_url} size={48} />
+              <div className="space-y-1 min-w-0">
+                <p className="text-lg font-bold text-gray-900">{family.full_name}</p>
+                <div className="flex items-center gap-1.5 text-gray-500">
+                  <Phone size={13} />
+                  <span className="text-sm">{family.phone}</span>
+                </div>
+                <p className="text-xs text-gray-400 mt-1">
+                  {family.children.length} niño{family.children.length !== 1 ? 's' : ''} · {totalVisits} visita{totalVisits !== 1 ? 's' : ''} en total
+                </p>
               </div>
-              <p className="text-xs text-gray-400 mt-1">
-                {family.children.length} niño{family.children.length !== 1 ? 's' : ''} · {totalVisits} visita{totalVisits !== 1 ? 's' : ''} en total
-              </p>
             </div>
           ) : (
             <div className="space-y-3">
+              <PhotoCapture existingPath={family.photo_url} onFileReady={setParentPhotoBlob} />
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1">Nombre</label>
                 <input type="text" value={parentName} onChange={(e) => setParentName(e.target.value)}
@@ -396,8 +473,9 @@ function FamilyDetailPanel({
           </p>
 
           {family.children.map((child) => {
-            const category      = getCategoryFromBirthDate(child.birth_date)
-            const age           = differenceInYears(new Date(), new Date(child.birth_date))
+            const category      = getEffectiveCategory(child)
+            const categoryChanged = hasCategoryChanged(child)
+            const age           = getAgeLabel(child.birth_date)
             const visits        = child.attendance?.[0]?.count ?? 0
             const hasAlert      = !!(child.allergies || child.medical_notes)
             const isEditing     = editingChildId === child.id
@@ -406,13 +484,24 @@ function FamilyDetailPanel({
               <div key={child.id}
                 className={`bg-white rounded-xl border-2 p-4 space-y-3 ${hasAlert ? 'border-red-200' : 'border-gray-200'}`}>
                 <div className="flex items-start justify-between gap-2">
-                  <div className="space-y-1.5 min-w-0">
-                    <p className="font-bold text-gray-900 leading-tight">{child.full_name}</p>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <CategoryBadge category={category} size="sm" />
-                      <span className="text-xs text-gray-400">{age} años</span>
-                      <span className="text-xs text-gray-400">·</span>
-                      <span className="text-xs font-semibold text-indigo-600">{visits} visita{visits !== 1 ? 's' : ''}</span>
+                  <div className="flex items-start gap-3 min-w-0">
+                    <PhotoAvatar path={child.photo_url} size={40} />
+                    <div className="space-y-1.5 min-w-0">
+                      <p className="font-bold text-gray-900 leading-tight">{child.full_name}</p>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <CategoryBadge category={category} size="sm" />
+                        {age !== null && <span className="text-xs text-gray-400">{age} años</span>}
+                        <span className="text-xs text-gray-400">·</span>
+                        <span className="text-xs font-semibold text-indigo-600">{visits} visita{visits !== 1 ? 's' : ''}</span>
+                      </div>
+                      {categoryChanged && category && child.category && NEXT_CATEGORY[child.category] === category && (
+                        <span className="inline-block text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">
+                          🎉 Ya cumplió años, puede pasar a {CATEGORY_LABELS[category]}
+                        </span>
+                      )}
+                      {child.guardian_relationship && (
+                        <p className="text-xs text-gray-400">Responsable: {GUARDIAN_RELATIONSHIP_LABELS[child.guardian_relationship]}</p>
+                      )}
                     </div>
                   </div>
                   {!isEditing && (
@@ -442,6 +531,12 @@ function FamilyDetailPanel({
                       <p className="text-xs text-red-700 ml-5"><span className="font-semibold">Notas:</span> {child.medical_notes}</p>
                     )}
                   </div>
+                )}
+
+                {child.comments && !isEditing && (
+                  <p className="text-xs text-gray-500 bg-gray-50 rounded-lg px-3 py-2">
+                    <span className="font-semibold">Comentarios:</span> {child.comments}
+                  </p>
                 )}
 
                 {isEditing && (
@@ -499,12 +594,172 @@ function FamilyListItem({ family, onSelect }: { family: FamilyDetail; onSelect: 
         </div>
         <div className="flex items-center gap-2 shrink-0">
           {family.children?.slice(0, 3).map((c) => (
-            <CategoryBadge key={c.id} category={getCategoryFromBirthDate(c.birth_date)} size="sm" />
+            <CategoryBadge key={c.id} category={getEffectiveCategory(c)} size="sm" />
           ))}
           <ChevronRight className="text-gray-300 group-hover:text-indigo-500 transition-colors" size={18} />
         </div>
       </div>
     </button>
+  )
+}
+
+// ─── Roster completo (por niño, con filtros para casos incompletos) ───────────
+
+type RosterChild = ChildDetail & { parents: { id: string; full_name: string; phone: string } | null }
+type RosterFilter = 'todos' | 'sin_responsable' | 'sin_categoria'
+
+function ParentPicker({ onSelect }: { onSelect: (parent: { id: string; full_name: string }) => void }) {
+  const [query, setQuery] = useState('')
+  const [results, setResults] = useState<{ id: string; full_name: string; phone: string | null }[]>([])
+  const debounced = useDebounce(query.trim(), 300)
+
+  useEffect(() => {
+    if (debounced.length < 2) { setResults([]); return }
+    let cancelled = false
+    supabase.from('parents').select('id, full_name, phone').ilike('full_name', `%${debounced}%`).limit(8)
+      .then(({ data }) => { if (!cancelled) setResults(data ?? []) })
+    return () => { cancelled = true }
+  }, [debounced])
+
+  return (
+    <div className="space-y-2 pt-1">
+      <input
+        type="text" value={query} onChange={(e) => setQuery(e.target.value)}
+        placeholder="Buscar responsable por nombre…"
+        className="w-full px-3 py-2 border-2 border-gray-200 rounded-lg focus:border-indigo-500 focus:outline-none text-sm"
+      />
+      {results.map((p) => (
+        <button key={p.id} onClick={() => onSelect(p)}
+          className="w-full text-left px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg hover:border-indigo-400 hover:bg-indigo-50 transition-colors">
+          {p.full_name} · {p.phone}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function RosterRow({ child, onChanged }: { child: RosterChild; onChanged: () => void }) {
+  const [editing, setEditing] = useState(false)
+  const [assigning, setAssigning] = useState(false)
+  const category = getEffectiveCategory(child)
+  const age = getAgeLabel(child.birth_date)
+
+  async function assignParent(parent: { id: string; full_name: string }) {
+    await supabase.from('children').update({ parent_id: parent.id }).eq('id', child.id)
+    setAssigning(false)
+    onChanged()
+  }
+
+  async function saveChild(data: Omit<Partial<ChildDetail>, 'id' | 'parent_id' | 'attendance'>) {
+    await supabase.from('children').update(data).eq('id', child.id)
+    setEditing(false)
+    onChanged()
+  }
+
+  return (
+    <div className="bg-white rounded-xl border-2 border-gray-200 p-4 space-y-2">
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex items-start gap-3 min-w-0">
+          <PhotoAvatar path={child.photo_url} size={36} />
+          <div className="space-y-1 min-w-0">
+            <p className="font-bold text-gray-900 leading-tight">{child.full_name}</p>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <CategoryBadge category={category} size="sm" />
+              {age !== null && <span className="text-xs text-gray-400">{age} años</span>}
+              {!child.parent_id && (
+                <span className="text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">
+                  Sin responsable
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-gray-400">{child.parents?.full_name ?? 'Sin responsable asignado'}</p>
+          </div>
+        </div>
+        {!editing && (
+          <div className="flex items-center gap-1 shrink-0">
+            {!child.parent_id && (
+              <button onClick={() => setAssigning((v) => !v)}
+                className="text-xs text-amber-700 bg-amber-50 hover:bg-amber-100 px-2 py-1 rounded-lg font-medium transition-colors">
+                Asignar
+              </button>
+            )}
+            <button onClick={() => setEditing(true)}
+              className="flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800 font-medium px-2 py-1 hover:bg-indigo-50 rounded-lg transition-colors">
+              <Edit2 size={11} /> Editar
+            </button>
+          </div>
+        )}
+      </div>
+      {assigning && <ParentPicker onSelect={assignParent} />}
+      {editing && <ChildEditForm child={child} onSave={saveChild} onCancel={() => setEditing(false)} />}
+    </div>
+  )
+}
+
+function RosterPanel({ onClose }: { onClose: () => void }) {
+  const [children, setChildren] = useState<RosterChild[]>([])
+  const [loading, setLoading] = useState(true)
+  const [filter, setFilter] = useState<RosterFilter>('todos')
+
+  const fetchAll = useCallback(async () => {
+    setLoading(true)
+    const { data } = await supabase
+      .from('children')
+      .select('*, parents(id, full_name, phone), attendance(count)')
+      .order('full_name')
+    setChildren((data as RosterChild[]) ?? [])
+    setLoading(false)
+  }, [])
+
+  useEffect(() => { fetchAll() }, [fetchAll])
+
+  const filtered = children.filter((c) => {
+    if (filter === 'sin_responsable') return !c.parent_id
+    if (filter === 'sin_categoria') return getEffectiveCategory(c) === null
+    return true
+  })
+
+  const counts = {
+    todos: children.length,
+    sin_responsable: children.filter((c) => !c.parent_id).length,
+    sin_categoria: children.filter((c) => getEffectiveCategory(c) === null).length,
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-2">
+        <button onClick={onClose} className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">
+          <ChevronLeft size={18} />
+        </button>
+        <div>
+          <h3 className="text-lg font-bold text-gray-900">Roster completo</h3>
+          <p className="text-xs text-gray-400">Todos los niños, con filtros para casos incompletos</p>
+        </div>
+      </div>
+
+      <div className="flex gap-1.5 flex-wrap">
+        {([
+          ['todos', `Todos (${counts.todos})`],
+          ['sin_responsable', `Sin responsable (${counts.sin_responsable})`],
+          ['sin_categoria', `Sin categoría (${counts.sin_categoria})`],
+        ] as [RosterFilter, string][]).map(([key, label]) => (
+          <button key={key} onClick={() => setFilter(key)}
+            className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${
+              filter === key ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {loading && <p className="text-center text-gray-400 py-10">Cargando…</p>}
+      {!loading && filtered.length === 0 && (
+        <p className="text-center text-gray-400 py-10 bg-white rounded-2xl border border-gray-200">Nada que mostrar aquí.</p>
+      )}
+      <div className="space-y-2">
+        {filtered.map((c) => <RosterRow key={c.id} child={c} onChanged={fetchAll} />)}
+      </div>
+    </div>
   )
 }
 
@@ -520,6 +775,7 @@ export default function FamiliesPage() {
   const [showAll, setShowAll]       = useState(false)
   const [selected, setSelected]     = useState<FamilyDetail | null>(null)
   const [showNewFamily, setShowNewFamily] = useState(false)
+  const [showRoster, setShowRoster] = useState(false)
   const [totalFamilies, setTotalFamilies] = useState<number | null>(null)
 
   const debouncedQuery = useDebounce(query.trim(), 350)
@@ -597,6 +853,10 @@ export default function FamiliesPage() {
     return <NewFamilyStep onSaved={handleNewFamilySaved} onCancel={() => setShowNewFamily(false)} />
   }
 
+  if (showRoster) {
+    return <RosterPanel onClose={() => setShowRoster(false)} />
+  }
+
   if (selected) {
     return (
       <FamilyDetailPanel
@@ -622,12 +882,20 @@ export default function FamiliesPage() {
             {totalFamilies !== null ? `${totalFamilies} familias registradas` : 'Cargando…'}
           </p>
         </div>
-        <button
-          onClick={() => setShowNewFamily(true)}
-          className="flex items-center gap-2 px-4 py-2.5 text-sm font-semibold text-white bg-indigo-600 rounded-xl hover:bg-indigo-700 transition-colors shrink-0"
-        >
-          <UserPlus size={15} /> Nueva familia
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={() => setShowRoster(true)}
+            className="flex items-center gap-2 px-3.5 py-2.5 text-sm font-semibold text-gray-600 bg-white border-2 border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
+          >
+            Roster por niño
+          </button>
+          <button
+            onClick={() => setShowNewFamily(true)}
+            className="flex items-center gap-2 px-4 py-2.5 text-sm font-semibold text-white bg-indigo-600 rounded-xl hover:bg-indigo-700 transition-colors"
+          >
+            <UserPlus size={15} /> Nueva familia
+          </button>
+        </div>
       </div>
 
       {/* Search */}
