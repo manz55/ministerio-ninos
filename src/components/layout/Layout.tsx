@@ -9,6 +9,7 @@ import type { Profile } from '../../types/domain'
 
 const maestroNavItems = [
   { icon: ClipboardList, label: 'Registro', to: '/registro' },
+  { icon: NotebookPen,   label: 'Notas',    to: '/notas' },
 ]
 
 const adminNavItems = [

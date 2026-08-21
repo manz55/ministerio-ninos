@@ -44,6 +44,7 @@ function App() {
         <Route element={<Layout isAdmin={isAdmin} profile={profile} />}>
           <Route index element={<Navigate to="/registro" replace />} />
           <Route path="/registro" element={<Suspense fallback={<PageSpinner />}><CheckInPage /></Suspense>} />
+          <Route path="/notas" element={<Suspense fallback={<PageSpinner />}><NotesPage /></Suspense>} />
           <Route
             path="/reportes"
             element={
@@ -57,14 +58,6 @@ function App() {
             element={
               <RequireAdmin isAdmin={isAdmin}>
                 <Suspense fallback={<PageSpinner />}><FamiliesPage /></Suspense>
-              </RequireAdmin>
-            }
-          />
-          <Route
-            path="/notas"
-            element={
-              <RequireAdmin isAdmin={isAdmin}>
-                <Suspense fallback={<PageSpinner />}><NotesPage /></Suspense>
               </RequireAdmin>
             }
           />

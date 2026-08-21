@@ -250,9 +250,11 @@ function ChildCard({
       return
     }
     // Keep the stored category in sync with age now that we know it — future
-    // imports/no-birth-date children simply keep whatever was last set.
+    // imports/no-birth-date children simply keep whatever was last set. Uses a
+    // narrow RPC (not a blanket UPDATE grant) so a maestro's session can only
+    // ever touch this one column, not rewrite arbitrary child data.
     if (computedCategory && computedCategory !== child.category) {
-      await supabase.from('children').update({ category: computedCategory }).eq('id', child.id)
+      await supabase.rpc('sync_child_category', { p_child_id: child.id, p_category: computedCategory })
     }
     setSubmitting(false)
     setBadge('')
@@ -476,6 +478,39 @@ export default function CheckInPage() {
     supabase.from('children').select('id', { count: 'exact', head: true })
       .then(({ count }) => setTotalChildren(count))
   }, [])
+
+  // Keeps every maestro's screen in sync — a check-in (or its deletion) made
+  // from any other device today shows up here without needing to refresh.
+  useEffect(() => {
+    const channel = supabase
+      .channel('attendance-today-sync')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'attendance', filter: `session_date=eq.${today}` },
+        (payload) => {
+          fetchCounts()
+          if (payload.eventType === 'INSERT') {
+            const childId = (payload.new as { child_id: string }).child_id
+            const mark = (c: ChildResult) =>
+              c.id === childId && !c.attendance.some((a) => a.session_date === today)
+                ? { ...c, attendance: [...c.attendance, { session_date: today }] }
+                : c
+            setChildren((prev) => prev.map(mark))
+            setGlobalResults((prev) => prev.map(mark))
+            setAllChildren((prev) => prev.map(mark))
+          } else if (payload.eventType === 'DELETE') {
+            const childId = (payload.old as { child_id: string }).child_id
+            const unmark = (c: ChildResult) =>
+              c.id === childId ? { ...c, attendance: c.attendance.filter((a) => a.session_date !== today) } : c
+            setChildren((prev) => prev.map(unmark))
+            setGlobalResults((prev) => prev.map(unmark))
+            setAllChildren((prev) => prev.map(unmark))
+          }
+        }
+      )
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
+  }, [fetchCounts])
 
   const loadAllChildren = useCallback(async () => {
     setLoadingAllChildren(true)
