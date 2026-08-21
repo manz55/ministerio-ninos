@@ -641,6 +641,8 @@ function ParentPicker({ onSelect }: { onSelect: (parent: { id: string; full_name
 function RosterRow({ child, onChanged }: { child: RosterChild; onChanged: () => void }) {
   const [editing, setEditing] = useState(false)
   const [assigning, setAssigning] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const category = getEffectiveCategory(child)
   const age = getAgeLabel(child.birth_date)
 
@@ -656,43 +658,69 @@ function RosterRow({ child, onChanged }: { child: RosterChild; onChanged: () => 
     onChanged()
   }
 
+  async function handleDelete() {
+    setDeleting(true)
+    await supabase.from('attendance').delete().eq('child_id', child.id)
+    await supabase.from('children').delete().eq('id', child.id)
+    setDeleting(false)
+    setConfirmDelete(false)
+    onChanged()
+  }
+
   return (
-    <div className="bg-white rounded-xl border-2 border-gray-200 p-4 space-y-2">
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex items-start gap-3 min-w-0">
-          <PhotoAvatar path={child.photo_url} size={36} />
-          <div className="space-y-1 min-w-0">
-            <p className="font-bold text-gray-900 leading-tight">{child.full_name}</p>
-            <div className="flex flex-wrap items-center gap-1.5">
-              <CategoryBadge category={category} size="sm" />
-              {age !== null && <span className="text-xs text-gray-400">{age} años</span>}
-              {!child.parent_id && (
-                <span className="text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">
-                  Sin responsable
-                </span>
-              )}
-            </div>
-            <p className="text-xs text-gray-400">{child.parents?.full_name ?? 'Sin responsable asignado'}</p>
-          </div>
-        </div>
-        {!editing && (
-          <div className="flex items-center gap-1 shrink-0">
-            {!child.parent_id && (
-              <button onClick={() => setAssigning((v) => !v)}
-                className="text-xs text-amber-700 bg-amber-50 hover:bg-amber-100 px-2 py-1 rounded-lg font-medium transition-colors">
-                Asignar
-              </button>
-            )}
-            <button onClick={() => setEditing(true)}
-              className="flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800 font-medium px-2 py-1 hover:bg-indigo-50 rounded-lg transition-colors">
-              <Edit2 size={11} /> Editar
-            </button>
-          </div>
+    <>
+      <AnimatePresence>
+        {confirmDelete && (
+          <ConfirmDialog
+            message={`¿Eliminar a ${child.full_name}?`}
+            subtext="Se eliminarán también sus registros de asistencia. Esta acción no se puede deshacer."
+            destructive
+            onConfirm={handleDelete}
+            onCancel={() => setConfirmDelete(false)}
+          />
         )}
+      </AnimatePresence>
+      <div className="bg-white rounded-xl border-2 border-gray-200 p-4 space-y-2">
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex items-start gap-3 min-w-0">
+            <PhotoAvatar path={child.photo_url} size={36} />
+            <div className="space-y-1 min-w-0">
+              <p className="font-bold text-gray-900 leading-tight">{child.full_name}</p>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <CategoryBadge category={category} size="sm" />
+                {age !== null && <span className="text-xs text-gray-400">{age} años</span>}
+                {!child.parent_id && (
+                  <span className="text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">
+                    Sin responsable
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-gray-400">{child.parents?.full_name ?? 'Sin responsable asignado'}</p>
+            </div>
+          </div>
+          {!editing && (
+            <div className="flex items-center gap-1 shrink-0">
+              {!child.parent_id && (
+                <button onClick={() => setAssigning((v) => !v)}
+                  className="text-xs text-amber-700 bg-amber-50 hover:bg-amber-100 px-2 py-1 rounded-lg font-medium transition-colors">
+                  Asignar
+                </button>
+              )}
+              <button onClick={() => setEditing(true)}
+                className="flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800 font-medium px-2 py-1 hover:bg-indigo-50 rounded-lg transition-colors">
+                <Edit2 size={11} /> Editar
+              </button>
+              <button onClick={() => setConfirmDelete(true)} disabled={deleting}
+                className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
+                <Trash2 size={14} />
+              </button>
+            </div>
+          )}
+        </div>
+        {assigning && <ParentPicker onSelect={assignParent} />}
+        {editing && <ChildEditForm child={child} onSave={saveChild} onCancel={() => setEditing(false)} />}
       </div>
-      {assigning && <ParentPicker onSelect={assignParent} />}
-      {editing && <ChildEditForm child={child} onSave={saveChild} onCancel={() => setEditing(false)} />}
-    </div>
+    </>
   )
 }
 
