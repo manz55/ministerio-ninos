@@ -361,8 +361,11 @@ function FamilyDetailPanel({
     setDeleteError(null)
     // First delete attendance records for this child
     await supabase.from('attendance').delete().eq('child_id', child.id)
-    const { error } = await supabase.from('children').delete().eq('id', child.id)
-    if (error) { setDeleteError('Error al eliminar. Intenta de nuevo.'); return }
+    // .select() forces PostgREST to report which rows were actually deleted —
+    // without it, a DELETE silently blocked by RLS (0 rows affected) still
+    // returns no error, and the record would reappear on the next refetch.
+    const { data, error } = await supabase.from('children').delete().eq('id', child.id).select('id')
+    if (error || !data || data.length === 0) { setDeleteError('Error al eliminar. Intenta de nuevo.'); return }
     setConfirmDeleteChild(null)
     onRefresh()
   }
@@ -376,8 +379,8 @@ function FamilyDetailPanel({
     // Delete children
     await supabase.from('children').delete().eq('parent_id', family.id)
     // Delete parent
-    const { error } = await supabase.from('parents').delete().eq('id', family.id)
-    if (error) { setDeleteError('Error al eliminar la familia. Intenta de nuevo.'); return }
+    const { data, error } = await supabase.from('parents').delete().eq('id', family.id).select('id')
+    if (error || !data || data.length === 0) { setDeleteError('Error al eliminar la familia. Intenta de nuevo.'); return }
     setConfirmDeleteFamily(false)
     onDeleted()
   }
@@ -659,6 +662,7 @@ function RosterRow({ child, onChanged }: { child: RosterChild; onChanged: () => 
   const [assigning, setAssigning] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
   const category = getEffectiveCategory(child)
   const age = getAgeLabel(child.birth_date)
 
@@ -676,9 +680,17 @@ function RosterRow({ child, onChanged }: { child: RosterChild; onChanged: () => 
 
   async function handleDelete() {
     setDeleting(true)
+    setDeleteError(null)
     await supabase.from('attendance').delete().eq('child_id', child.id)
-    await supabase.from('children').delete().eq('id', child.id)
+    // .select() forces PostgREST to report which rows were actually deleted —
+    // without it, a DELETE silently blocked by RLS (0 rows affected) still
+    // comes back with no error, and the UI would wrongly act like it worked.
+    const { data, error } = await supabase.from('children').delete().eq('id', child.id).select('id')
     setDeleting(false)
+    if (error || !data || data.length === 0) {
+      setDeleteError('No se pudo eliminar. Intenta de nuevo.')
+      return
+    }
     setConfirmDelete(false)
     onChanged()
   }
@@ -697,6 +709,7 @@ function RosterRow({ child, onChanged }: { child: RosterChild; onChanged: () => 
         )}
       </AnimatePresence>
       <div className="bg-white rounded-xl border-2 border-gray-200 p-4 space-y-2">
+        {deleteError && <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">{deleteError}</p>}
         <div className="flex items-start justify-between gap-2">
           <div className="flex items-start gap-3 min-w-0">
             <PhotoAvatar path={child.photo_url} size={36} />

@@ -8,6 +8,7 @@ import { getCategoryFromBirthDate, getEffectiveCategory, hasCategoryChanged, get
 import { CATEGORY_LABELS, CATEGORY_COLORS, NEXT_CATEGORY, type Category, type TeamColor } from '../types/domain'
 import { CategoryBadge } from '../components/ui/CategoryBadge'
 import { ChildContacts } from '../components/ui/ChildContacts'
+import { useAuth } from '../lib/auth'
 import { NewFamilyStep } from '../components/checkin/NewFamilyStep'
 import { useDebounce } from '../hooks/useDebounce'
 import { BalloonBackground } from '../components/ui/BalloonBackground'
@@ -446,11 +447,13 @@ function ChildCard({
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function CheckInPage() {
+  const { isAdmin } = useAuth()
   const [activeCategory, setActiveCategory] = useState<Category | null>(null)
   const [todayCounts, setTodayCounts] = useState<Partial<Record<Category, number>>>({})
   const [totalToday, setTotalToday] = useState(0)
   const [todayRecords, setTodayRecords] = useState<TodayRecord[]>([])
   const [confirmDeleteRecordId, setConfirmDeleteRecordId] = useState<string | null>(null)
+  const [deleteRecordError, setDeleteRecordError] = useState<string | null>(null)
   const [children, setChildren] = useState<ChildResult[]>([])
   const [filter, setFilter] = useState('')
   const [loadingChildren, setLoadingChildren] = useState(false)
@@ -660,9 +663,18 @@ export default function CheckInPage() {
   }
 
   async function deleteAttendanceRecord(id: string) {
+    setDeleteRecordError(null)
     // Capture the record before any state update to avoid closure staleness
     const rec = todayRecords.find((r) => r.id === id)
-    await supabase.from('attendance').delete().eq('id', id)
+    // .select() forces PostgREST to report which rows were actually deleted —
+    // without it, a DELETE silently blocked by RLS (only admins may delete
+    // attendance) still returns no error, and the record would falsely look
+    // deleted here while reappearing on the next reload/refetch.
+    const { data, error } = await supabase.from('attendance').delete().eq('id', id).select('id')
+    if (error || !data || data.length === 0) {
+      setDeleteRecordError('No se pudo borrar el registro. Intenta de nuevo.')
+      return
+    }
     setTodayRecords((prev) => prev.filter((r) => r.id !== id))
     if (rec) {
       setTodayCounts((prev) => ({
@@ -1079,6 +1091,9 @@ export default function CheckInPage() {
       {/* ── Registros de hoy ── */}
       {todayRecords.length > 0 && (
         <div className="space-y-2 pt-1">
+          {deleteRecordError && (
+            <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2">{deleteRecordError}</p>
+          )}
           <div className="flex items-center gap-2 px-1">
             <LogIn size={13} className="text-gray-400" />
             <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">
@@ -1134,12 +1149,14 @@ export default function CheckInPage() {
                         <span className="text-xs text-gray-400 font-medium">
                           {format(new Date(rec.checked_in_at), 'HH:mm')}
                         </span>
-                        <button
-                          onClick={() => setConfirmDeleteRecordId(rec.id)}
-                          className="p-1 text-gray-300 hover:text-red-400 rounded-lg hover:bg-red-50 transition-colors"
-                        >
-                          <Trash2 size={13} />
-                        </button>
+                        {isAdmin && (
+                          <button
+                            onClick={() => setConfirmDeleteRecordId(rec.id)}
+                            className="p-1 text-gray-300 hover:text-red-400 rounded-lg hover:bg-red-50 transition-colors"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        )}
                       </div>
                       {rec.checked_out_at ? (
                         <span className="text-xs font-semibold text-gray-400 bg-gray-100 rounded-full px-2 py-0.5">

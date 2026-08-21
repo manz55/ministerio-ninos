@@ -306,10 +306,11 @@ export default function ReportsPage() {
 
   async function deleteRecord(id: string) {
     setDeleting(true)
-    await supabase.from('attendance').delete().eq('id', id)
+    const { data, error } = await supabase.from('attendance').delete().eq('id', id).select('id')
+    setDeleting(false)
+    if (error || !data || data.length === 0) return
     setLiveRecords((prev) => prev.filter((r) => r.id !== id))
     setConfirmDeleteId(null)
-    setDeleting(false)
   }
 
   function exportHistoryCSV() {
