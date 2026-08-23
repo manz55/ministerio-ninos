@@ -22,6 +22,7 @@ type TodayRecord = {
   id: string
   category: Category
   badge_number: number | null
+  pager_number: number | null
   checked_in_at: string
   checked_out_at: string | null
   children: { full_name: string }
@@ -574,7 +575,7 @@ export default function CheckInPage() {
   const fetchCounts = useCallback(async () => {
     const { data } = await supabase
       .from('attendance')
-      .select('id, category, badge_number, checked_in_at, checked_out_at, children(full_name)')
+      .select('id, category, badge_number, pager_number, checked_in_at, checked_out_at, children(full_name)')
       .eq('session_date', today)
       .order('checked_in_at', { ascending: false })
     if (!data) return
@@ -1259,6 +1260,11 @@ export default function CheckInPage() {
                       {rec.badge_number && (
                         <span className="text-xs text-gray-400 font-medium">
                           #{rec.badge_number}
+                        </span>
+                      )}
+                      {rec.pager_number && (
+                        <span className="text-xs text-gray-400 font-medium">
+                          📟 #{rec.pager_number}
                         </span>
                       )}
                     </div>
