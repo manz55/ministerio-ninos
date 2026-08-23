@@ -471,6 +471,21 @@ function ChildCard({
               : 'Sin especificar si ya va al baño'}
           </div>
 
+          <div>
+            <label className="block text-sm font-semibold text-gray-600 mb-1.5">
+              Número de biper <span className="text-gray-300 font-normal">(opcional)</span>
+            </label>
+            <input
+              type="number"
+              inputMode="numeric"
+              min={1}
+              value={pager}
+              onChange={(e) => setPager(e.target.value)}
+              placeholder="Núm."
+              className="w-full px-3 py-4 text-3xl font-black border-2 border-gray-200 rounded-xl focus:border-indigo-500 focus:outline-none text-center"
+            />
+          </div>
+
           <div className="flex gap-2">
             <button
               type="button"
@@ -481,7 +496,7 @@ function ChildCard({
             </button>
             <button
               type="button"
-              onClick={() => doCheckIn(null, null)}
+              onClick={() => doCheckIn(null, pager ? parseInt(pager, 10) : null)}
               disabled={submitting}
               className="flex-[2] py-3.5 text-base font-bold text-white bg-indigo-600 rounded-xl hover:bg-indigo-700 active:bg-indigo-800 disabled:opacity-40 transition-colors"
             >
@@ -636,35 +651,42 @@ export default function CheckInPage() {
     setShowAllChildren(true)
   }, [roleCategory])
 
-  // Búsqueda global: dos queries pequeñas en paralelo
+  // Búsqueda global: dos queries pequeñas en paralelo. Fetch logic is shared
+  // with the post-"nueva familia" refresh below; the effect adds its own
+  // `cancelled` guard so a slow keystroke-triggered fetch can't clobber a
+  // newer one, which the one-off refresh doesn't need.
+  const fetchGlobalResults = useCallback(async (term: string) => {
+    const [{ data: found }, { data: todayAtt }] = await Promise.all([
+      supabase
+        .from('children')
+        .select(CHILD_SELECT)
+        .ilike('full_name', `%${term}%`)
+        .order('full_name')
+        .limit(20),
+      supabase
+        .from('attendance')
+        .select('child_id')
+        .eq('session_date', today),
+    ])
+    const attSet = new Set((todayAtt ?? []).map((a) => a.child_id))
+    const mapped = ((found ?? []) as Omit<ChildResult, 'attendance'>[]).map((c) => ({
+      ...c,
+      attendance: attSet.has(c.id) ? [{ session_date: today }] : [],
+    })) as ChildResult[]
+    return roleCategory ? mapped.filter((c) => getEffectiveCategory(c) === roleCategory) : mapped
+  }, [roleCategory])
+
   useEffect(() => {
     if (debouncedGlobal.length < 2) { setGlobalResults([]); return }
     let cancelled = false
     setGlobalLoading(true)
-    ;(async () => {
-      const [{ data: found }, { data: todayAtt }] = await Promise.all([
-        supabase
-          .from('children')
-          .select(CHILD_SELECT)
-          .ilike('full_name', `%${debouncedGlobal}%`)
-          .order('full_name')
-          .limit(20),
-        supabase
-          .from('attendance')
-          .select('child_id')
-          .eq('session_date', today),
-      ])
+    fetchGlobalResults(debouncedGlobal).then((results) => {
       if (cancelled) return
-      const attSet = new Set((todayAtt ?? []).map((a) => a.child_id))
-      const mapped = ((found ?? []) as Omit<ChildResult, 'attendance'>[]).map((c) => ({
-        ...c,
-        attendance: attSet.has(c.id) ? [{ session_date: today }] : [],
-      })) as ChildResult[]
-      setGlobalResults(roleCategory ? mapped.filter((c) => getEffectiveCategory(c) === roleCategory) : mapped)
+      setGlobalResults(results)
       setGlobalLoading(false)
-    })()
+    })
     return () => { cancelled = true }
-  }, [debouncedGlobal, roleCategory])
+  }, [debouncedGlobal, fetchGlobalResults])
 
   // Evita que una respuesta "vieja" (de una categoría abandonada) sobrescriba
   // la lista de la categoría que el usuario seleccionó después
@@ -733,6 +755,28 @@ export default function CheckInPage() {
     }
   }
 
+  // Refreshes whichever list(s) are currently on screen so a newly-added
+  // family shows up immediately — otherwise it only appears after manually
+  // leaving and re-entering the category or re-typing the search.
+  async function handleFamilySaved() {
+    setShowNewFamily(false)
+    if (activeCategory) {
+      openCategory(activeCategory)
+    }
+    if (debouncedGlobal.length >= 2) {
+      setGlobalLoading(true)
+      const results = await fetchGlobalResults(debouncedGlobal)
+      setGlobalResults(results)
+      setGlobalLoading(false)
+    }
+    if (showAllChildren) {
+      loadAllChildren()
+    } else if (!roleCategory) {
+      supabase.from('children').select('id', { count: 'exact', head: true })
+        .then(({ count }) => setTotalChildren(count))
+    }
+  }
+
   function confirmTeam(color: TeamColor, coordinator: string) {
     setTeamColor(color)
     setCoordinatorName(coordinator)
@@ -796,7 +840,7 @@ export default function CheckInPage() {
   if (showNewFamily) {
     return (
       <NewFamilyStep
-        onSaved={() => setShowNewFamily(false)}
+        onSaved={handleFamilySaved}
         onCancel={() => setShowNewFamily(false)}
       />
     )
