@@ -259,6 +259,8 @@ function ChildCard({
       setSubmitting(false)
       if (err.code === '23505' && err.message.includes('attendance_badge_category_unique')) {
         setError(`El gafete #${badgeNumber} ya está en uso en ${CATEGORY_LABELS[category]} hoy.`)
+      } else if (err.code === '23505' && err.message.includes('attendance_pager_category_unique')) {
+        setError(`El bíper #${pagerNumber} ya está en uso en ${CATEGORY_LABELS[category]} hoy.`)
       } else if (err.code === '23505') {
         setError('Este niño ya fue registrado hoy.')
       } else {
