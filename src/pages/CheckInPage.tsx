@@ -4,7 +4,6 @@ import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { Search, CheckCircle2, UserPlus, AlertTriangle, ChevronLeft, Bug, Zap, Compass, Baby, User, Pencil, LogIn, Trash2, X, Users } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { useLayoutProfile } from '../components/layout/Layout'
 import { getCategoryFromBirthDate, getEffectiveCategory, hasCategoryChanged, getAgeLabel, requiresBadge, requiresPager } from '../lib/categoryUtils'
 import { CATEGORY_LABELS, CATEGORY_COLORS, NEXT_CATEGORY, type Category, type TeamColor } from '../types/domain'
 import { CategoryBadge } from '../components/ui/CategoryBadge'
@@ -539,11 +538,6 @@ function ChildCard({
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function CheckInPage() {
-  const profile = useLayoutProfile()
-  // The dedicated corderitos account only ever sees/registers babies — every
-  // list below is scoped to this category when set.
-  const roleCategory: Category | null = profile?.role === 'maestro_corderitos' ? 'corderitos' : null
-
   const [activeCategory, setActiveCategory] = useState<Category | null>(null)
   const [todayCounts, setTodayCounts] = useState<Partial<Record<Category, number>>>({})
   const [totalToday, setTotalToday] = useState(0)
@@ -592,10 +586,9 @@ export default function CheckInPage() {
   useEffect(() => { fetchCounts() }, [fetchCounts])
 
   useEffect(() => {
-    if (roleCategory) return // count comes from allChildren.length once loaded — see loadAllChildren
     supabase.from('children').select('id', { count: 'exact', head: true })
       .then(({ count }) => setTotalChildren(count))
-  }, [roleCategory])
+  }, [])
 
   // Keeps every maestro's screen in sync — a check-in (or its deletion) made
   // from any other device today shows up here without needing to refresh.
@@ -647,12 +640,10 @@ export default function CheckInPage() {
       ...c,
       attendance: attSet.has(c.id) ? [{ session_date: today }] : [],
     })) as ChildResult[]
-    const scoped = roleCategory ? mapped.filter((c) => getEffectiveCategory(c) === roleCategory) : mapped
-    setAllChildren(scoped)
-    if (roleCategory) setTotalChildren(scoped.length)
+    setAllChildren(mapped)
     setLoadingAllChildren(false)
     setShowAllChildren(true)
-  }, [roleCategory])
+  }, [])
 
   // Búsqueda global: dos queries pequeñas en paralelo. Fetch logic is shared
   // with the post-"nueva familia" refresh below; the effect adds its own
@@ -672,12 +663,11 @@ export default function CheckInPage() {
         .eq('session_date', today),
     ])
     const attSet = new Set((todayAtt ?? []).map((a) => a.child_id))
-    const mapped = ((found ?? []) as Omit<ChildResult, 'attendance'>[]).map((c) => ({
+    return ((found ?? []) as Omit<ChildResult, 'attendance'>[]).map((c) => ({
       ...c,
       attendance: attSet.has(c.id) ? [{ session_date: today }] : [],
     })) as ChildResult[]
-    return roleCategory ? mapped.filter((c) => getEffectiveCategory(c) === roleCategory) : mapped
-  }, [roleCategory])
+  }, [])
 
   useEffect(() => {
     if (debouncedGlobal.length < 2) { setGlobalResults([]); return }
@@ -774,7 +764,7 @@ export default function CheckInPage() {
     }
     if (showAllChildren) {
       loadAllChildren()
-    } else if (!roleCategory) {
+    } else {
       supabase.from('children').select('id', { count: 'exact', head: true })
         .then(({ count }) => setTotalChildren(count))
     }
@@ -945,14 +935,7 @@ export default function CheckInPage() {
   }
 
   // ── Grid / home view ───────────────────────────────────────────────────────
-  // maestro_corderitos: only the corderitos tile. admin: all 4. general maestro: the original 3 (unchanged).
-  const visibleTiles =
-    profile?.role === 'maestro_corderitos'
-      ? TILES.filter((t) => t.category === 'corderitos')
-      : profile?.role === 'admin'
-      ? TILES
-      : TILES.filter((t) => t.category !== 'corderitos')
-  const [hero, ...rest] = visibleTiles
+  const [hero, ...rest] = TILES
 
   return (
     <>
@@ -1180,7 +1163,7 @@ export default function CheckInPage() {
           <div className="flex items-center gap-2">
             <Users size={13} className="text-gray-400" />
             <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">
-              {roleCategory ? 'Corderitos registrados en el sistema' : 'Niños registrados en el sistema'}{totalChildren !== null ? ` · ${totalChildren}` : ''}
+              Niños registrados en el sistema{totalChildren !== null ? ` · ${totalChildren}` : ''}
             </p>
           </div>
           {showAllChildren && (
