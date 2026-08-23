@@ -4,7 +4,7 @@ import { es } from 'date-fns/locale'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Users, RefreshCw, Download, AlertTriangle, FileText,
-  Bug, Zap, Compass, TrendingUp, ChevronDown, ChevronUp, User, Trash2, X, CalendarRange,
+  Bug, Zap, Compass, Baby, TrendingUp, ChevronDown, ChevronUp, User, Trash2, X, CalendarRange,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { CATEGORY_LABELS, CATEGORY_COLORS, ACTIVE_CATEGORIES, type Category } from '../types/domain'
@@ -20,6 +20,7 @@ type WeekRow = {
   week_start: string
   week_end: string
   total: number
+  corderitos: number
   hormiguitas: number
   saltamontes: number
   exploradores: number
@@ -73,6 +74,7 @@ function downloadCSV(content: string, filename: string) {
 // ─── Category config for display ─────────────────────────────────────────────
 
 const CAT_CONFIG: Record<string, { icon: React.ComponentType<{ className?: string }>, color: string, bg: string, bar: string }> = {
+  corderitos:  { icon: Baby,    color: 'text-pink-600',    bg: 'bg-pink-50',     bar: 'bg-pink-500'    },
   hormiguitas: { icon: Bug,     color: 'text-emerald-600', bg: 'bg-emerald-50',  bar: 'bg-emerald-500' },
   saltamontes: { icon: Zap,     color: 'text-amber-600',   bg: 'bg-amber-50',    bar: 'bg-amber-500'   },
   exploradores:{ icon: Compass, color: 'text-sky-600',     bg: 'bg-sky-50',      bar: 'bg-sky-500'     },
@@ -259,6 +261,7 @@ export default function ReportsPage() {
           week_start: start,
           week_end: end,
           total: Object.values(counts).reduce((s, n) => s + n, 0),
+          corderitos:   counts.corderitos,
           hormiguitas:  counts.hormiguitas,
           saltamontes:  counts.saltamontes,
           exploradores: counts.exploradores,
@@ -314,8 +317,8 @@ export default function ReportsPage() {
   }
 
   function exportHistoryCSV() {
-    const headers = ['Semana inicio', 'Semana fin', 'Total', 'Hormiguitas', 'Saltamontes', 'Exploradores']
-    const rows = weekHistory.map((r) => [r.week_start, r.week_end, r.total, r.hormiguitas, r.saltamontes, r.exploradores])
+    const headers = ['Semana inicio', 'Semana fin', 'Total', 'Corderitos', 'Hormiguitas', 'Saltamontes', 'Exploradores']
+    const rows = weekHistory.map((r) => [r.week_start, r.week_end, r.total, r.corderitos, r.hormiguitas, r.saltamontes, r.exploradores])
     downloadCSV([headers, ...rows].map((row) => row.map(String).join(',')).join('\n'), 'historial-asistencia.csv')
   }
 
@@ -431,7 +434,7 @@ export default function ReportsPage() {
 
       {/* ── Breakdown por categoría ── */}
       {total > 0 && (
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {ACTIVE_CATEGORIES.map((cat) => {
             const cfg = CAT_CONFIG[cat]!
             const count = byCategory[cat]

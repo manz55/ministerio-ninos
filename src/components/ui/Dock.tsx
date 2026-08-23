@@ -14,26 +14,26 @@ interface DockProps {
 export default function Dock({ items }: DockProps) {
   return (
     <div
-      className="fixed bottom-0 left-0 right-0 flex justify-center z-50 pointer-events-none"
+      className="fixed bottom-0 left-0 right-0 flex justify-center z-50 pointer-events-none px-2"
       style={{ paddingBottom: 'max(16px, env(safe-area-inset-bottom))' }}
     >
-      <div className="pointer-events-auto flex items-end gap-1 px-4 py-3 rounded-3xl border border-gray-200/80 bg-white/80 backdrop-blur-xl shadow-xl shadow-black/10">
+      <div className="pointer-events-auto flex items-end gap-0.5 sm:gap-1 px-1.5 sm:px-4 py-2.5 sm:py-3 rounded-3xl border border-gray-200/80 bg-white/80 backdrop-blur-xl shadow-xl shadow-black/10 max-w-full overflow-x-auto">
         {items.map((item) => (
-          <NavLink key={item.to} to={item.to} className="outline-none">
+          <NavLink key={item.to} to={item.to} className="outline-none shrink-0">
             {({ isActive }) => (
               <motion.div
                 whileTap={{ scale: 0.9 }}
-                className="relative flex flex-col items-center gap-1 px-5 py-1 min-w-[60px]"
+                className="relative flex flex-col items-center gap-1 px-2 sm:px-5 py-1 min-w-[52px] sm:min-w-[60px]"
               >
                 <div
                   className={[
-                    'relative rounded-2xl p-2.5 transition-colors',
+                    'relative rounded-2xl p-2 sm:p-2.5 transition-colors',
                     isActive ? 'bg-indigo-50' : 'bg-transparent',
                   ].join(' ')}
                 >
                   <item.icon
                     className={[
-                      'h-6 w-6 transition-colors',
+                      'h-5 w-5 sm:h-6 sm:w-6 transition-colors',
                       isActive ? 'text-indigo-600' : 'text-gray-500',
                     ].join(' ')}
                   />
@@ -41,7 +41,7 @@ export default function Dock({ items }: DockProps) {
 
                 <span
                   className={[
-                    'text-[11px] font-medium leading-none transition-colors',
+                    'text-[10px] sm:text-[11px] font-medium leading-none whitespace-nowrap transition-colors',
                     isActive ? 'text-indigo-600' : 'text-gray-400',
                   ].join(' ')}
                 >

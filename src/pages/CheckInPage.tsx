@@ -2,8 +2,9 @@ import { useState, useEffect, useRef, useCallback, useMemo, startTransition } fr
 import { motion, AnimatePresence } from 'framer-motion'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
-import { Search, CheckCircle2, UserPlus, AlertTriangle, ChevronLeft, Bug, Zap, Compass, User, Pencil, LogIn, Trash2, X, Users } from 'lucide-react'
+import { Search, CheckCircle2, UserPlus, AlertTriangle, ChevronLeft, Bug, Zap, Compass, Baby, User, Pencil, LogIn, Trash2, X, Users } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { useLayoutProfile } from '../components/layout/Layout'
 import { getCategoryFromBirthDate, getEffectiveCategory, hasCategoryChanged, getAgeLabel, requiresBadge, requiresPager } from '../lib/categoryUtils'
 import { CATEGORY_LABELS, CATEGORY_COLORS, NEXT_CATEGORY, type Category, type TeamColor } from '../types/domain'
 import { CategoryBadge } from '../components/ui/CategoryBadge'
@@ -33,10 +34,13 @@ type ChildResult = {
   category: Category | null
   allergies: string | null
   medical_notes: string | null
+  toilet_trained: boolean | null
   parent_id: string | null
   parents: { full_name: string; phone: string } | null
   attendance: { session_date: string }[]
 }
+
+const CHILD_SELECT = 'id, full_name, birth_date, category, allergies, medical_notes, toilet_trained, parent_id, parents(full_name, phone)'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -109,6 +113,17 @@ const TILES = [
     bar: 'bg-sky-500',
     barBg: 'bg-sky-200/60',
     textColor: 'text-sky-900',
+  },
+  {
+    category: 'corderitos' as Category,
+    icon: Baby,
+    ages: 'Meses–3 años',
+    cardBg: 'bg-pink-100',
+    iconBg: 'bg-pink-500/20',
+    iconColor: 'text-pink-700',
+    bar: 'bg-pink-500',
+    barBg: 'bg-pink-200/60',
+    textColor: 'text-pink-900',
   },
 ]
 
@@ -268,18 +283,20 @@ function ChildCard({
     }, 1600)
   }
 
-  // Auto-check-in for no-badge categories (corderitos) reads fresh values via
-  // this ref instead of depending on `doCheckIn`/`needsBadge`/`alreadyIn`
+  // Auto-check-in for no-badge, non-corderitos categories reads fresh values
+  // via this ref instead of depending on `doCheckIn`/`needsBadge`/`alreadyIn`
   // directly — those change identity every render, so including them as
   // effect deps would either miss updates (stale closure) or re-fire the
-  // check-in on every unrelated re-render while still selected.
+  // check-in on every unrelated re-render while still selected. Corderitos is
+  // excluded here on purpose — it gets a manual confirm step below so the
+  // maestro always sees allergy/medical/baño info before registering a baby.
   const latest = useRef({ needsBadge, alreadyIn, category, doCheckIn })
   latest.current = { needsBadge, alreadyIn, category, doCheckIn }
 
   useEffect(() => {
     if (!isSelected) return
     const { needsBadge, alreadyIn, category, doCheckIn } = latest.current
-    if (!needsBadge && !alreadyIn && category) {
+    if (!needsBadge && category !== 'corderitos' && !alreadyIn && category) {
       doCheckIn(null, null)
     }
   }, [isSelected])
@@ -421,6 +438,64 @@ function ChildCard({
           )}
         </form>
       )}
+
+      {/* ── Corderitos: confirm step with baby-specific info before registering ── */}
+      {isSelected && !needsBadge && category === 'corderitos' && !alreadyIn && (
+        <div className="px-5 pb-5 space-y-3 border-t border-gray-100 pt-4">
+          {hasAlert && (
+            <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-3">
+              <p className="text-xs font-bold text-red-700 uppercase tracking-wide mb-1">⚠ Alerta médica</p>
+              {child.allergies && (
+                <p className="text-sm text-red-700"><span className="font-semibold">Alergias:</span> {child.allergies}</p>
+              )}
+              {child.medical_notes && (
+                <p className="text-sm text-red-700"><span className="font-semibold">Notas:</span> {child.medical_notes}</p>
+              )}
+            </div>
+          )}
+
+          <div
+            className={`rounded-xl border px-4 py-3 text-sm font-medium ${
+              child.toilet_trained === true
+                ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                : child.toilet_trained === false
+                ? 'bg-amber-50 border-amber-200 text-amber-700'
+                : 'bg-gray-50 border-gray-200 text-gray-500'
+            }`}
+          >
+            🚼{' '}
+            {child.toilet_trained === true
+              ? 'Ya va solo al baño'
+              : child.toilet_trained === false
+              ? 'Aún usa pañal / no va solo al baño'
+              : 'Sin especificar si ya va al baño'}
+          </div>
+
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={onDeselect}
+              className="flex-1 py-3.5 text-sm font-semibold text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 active:bg-gray-300 transition-colors"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={() => doCheckIn(null, null)}
+              disabled={submitting}
+              className="flex-[2] py-3.5 text-base font-bold text-white bg-indigo-600 rounded-xl hover:bg-indigo-700 active:bg-indigo-800 disabled:opacity-40 transition-colors"
+            >
+              {submitting ? 'Registrando…' : 'Registrar ✓'}
+            </button>
+          </div>
+
+          {error && (
+            <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-xl px-4 py-3">
+              {error}
+            </p>
+          )}
+        </div>
+      )}
     </div>
 
     {/* ── Stamp ── */}
@@ -446,6 +521,11 @@ function ChildCard({
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function CheckInPage() {
+  const profile = useLayoutProfile()
+  // The dedicated corderitos account only ever sees/registers babies — every
+  // list below is scoped to this category when set.
+  const roleCategory: Category | null = profile?.role === 'maestro_corderitos' ? 'corderitos' : null
+
   const [activeCategory, setActiveCategory] = useState<Category | null>(null)
   const [todayCounts, setTodayCounts] = useState<Partial<Record<Category, number>>>({})
   const [totalToday, setTotalToday] = useState(0)
@@ -494,9 +574,10 @@ export default function CheckInPage() {
   useEffect(() => { fetchCounts() }, [fetchCounts])
 
   useEffect(() => {
+    if (roleCategory) return // count comes from allChildren.length once loaded — see loadAllChildren
     supabase.from('children').select('id', { count: 'exact', head: true })
       .then(({ count }) => setTotalChildren(count))
-  }, [])
+  }, [roleCategory])
 
   // Keeps every maestro's screen in sync — a check-in (or its deletion) made
   // from any other device today shows up here without needing to refresh.
@@ -536,7 +617,7 @@ export default function CheckInPage() {
     const [{ data: all }, { data: todayAtt }] = await Promise.all([
       supabase
         .from('children')
-        .select('id, full_name, birth_date, category, allergies, medical_notes, parent_id, parents(full_name, phone)')
+        .select(CHILD_SELECT)
         .order('full_name'),
       supabase
         .from('attendance')
@@ -544,15 +625,16 @@ export default function CheckInPage() {
         .eq('session_date', today),
     ])
     const attSet = new Set((todayAtt ?? []).map((a) => a.child_id))
-    setAllChildren(
-      ((all ?? []) as Omit<ChildResult, 'attendance'>[]).map((c) => ({
-        ...c,
-        attendance: attSet.has(c.id) ? [{ session_date: today }] : [],
-      })) as ChildResult[]
-    )
+    const mapped = ((all ?? []) as Omit<ChildResult, 'attendance'>[]).map((c) => ({
+      ...c,
+      attendance: attSet.has(c.id) ? [{ session_date: today }] : [],
+    })) as ChildResult[]
+    const scoped = roleCategory ? mapped.filter((c) => getEffectiveCategory(c) === roleCategory) : mapped
+    setAllChildren(scoped)
+    if (roleCategory) setTotalChildren(scoped.length)
     setLoadingAllChildren(false)
     setShowAllChildren(true)
-  }, [])
+  }, [roleCategory])
 
   // Búsqueda global: dos queries pequeñas en paralelo
   useEffect(() => {
@@ -563,7 +645,7 @@ export default function CheckInPage() {
       const [{ data: found }, { data: todayAtt }] = await Promise.all([
         supabase
           .from('children')
-          .select('id, full_name, birth_date, category, allergies, medical_notes, parent_id, parents(full_name, phone)')
+          .select(CHILD_SELECT)
           .ilike('full_name', `%${debouncedGlobal}%`)
           .order('full_name')
           .limit(20),
@@ -574,16 +656,15 @@ export default function CheckInPage() {
       ])
       if (cancelled) return
       const attSet = new Set((todayAtt ?? []).map((a) => a.child_id))
-      setGlobalResults(
-        ((found ?? []) as Omit<ChildResult, 'attendance'>[]).map((c) => ({
-          ...c,
-          attendance: attSet.has(c.id) ? [{ session_date: today }] : [],
-        })) as ChildResult[]
-      )
+      const mapped = ((found ?? []) as Omit<ChildResult, 'attendance'>[]).map((c) => ({
+        ...c,
+        attendance: attSet.has(c.id) ? [{ session_date: today }] : [],
+      })) as ChildResult[]
+      setGlobalResults(roleCategory ? mapped.filter((c) => getEffectiveCategory(c) === roleCategory) : mapped)
       setGlobalLoading(false)
     })()
     return () => { cancelled = true }
-  }, [debouncedGlobal])
+  }, [debouncedGlobal, roleCategory])
 
   // Evita que una respuesta "vieja" (de una categoría abandonada) sobrescriba
   // la lista de la categoría que el usuario seleccionó después
@@ -605,7 +686,7 @@ export default function CheckInPage() {
     const [{ data: all }, { data: todayAtt }] = await Promise.all([
       supabase
         .from('children')
-        .select('id, full_name, birth_date, category, allergies, medical_notes, parent_id, parents(full_name, phone)')
+        .select(CHILD_SELECT)
         .order('full_name'),
       supabase
         .from('attendance')
@@ -730,6 +811,7 @@ export default function CheckInPage() {
       <div className={`fixed inset-0 -z-10 ${
         activeCategory === 'saltamontes' ? 'bg-white' :
         activeCategory === 'exploradores' ? 'bg-sky-50' :
+        activeCategory === 'corderitos' ? 'bg-pink-50/70' :
         'bg-emerald-50/70'
       }`} />
       {activeCategory === 'hormiguitas'  && <BalloonBackground />}
@@ -816,7 +898,14 @@ export default function CheckInPage() {
   }
 
   // ── Grid / home view ───────────────────────────────────────────────────────
-  const [hero, ...rest] = TILES
+  // maestro_corderitos: only the corderitos tile. admin: all 4. general maestro: the original 3 (unchanged).
+  const visibleTiles =
+    profile?.role === 'maestro_corderitos'
+      ? TILES.filter((t) => t.category === 'corderitos')
+      : profile?.role === 'admin'
+      ? TILES
+      : TILES.filter((t) => t.category !== 'corderitos')
+  const [hero, ...rest] = visibleTiles
 
   return (
     <>
@@ -998,17 +1087,19 @@ export default function CheckInPage() {
         )
       })()}
 
-      {/* ── Remaining 2 tiles ── */}
+      {/* ── Remaining tiles ── */}
+      {rest.length > 0 && (
       <div className="grid grid-cols-2 gap-3">
-        {rest.map(({ category, icon: Icon, ages, cardBg, iconBg, iconColor, bar, barBg, textColor }) => {
+        {rest.map(({ category, icon: Icon, ages, cardBg, iconBg, iconColor, bar, barBg, textColor }, i) => {
           const count = todayCounts[category] ?? 0
+          const isTrailingOdd = rest.length % 2 === 1 && i === rest.length - 1
           return (
             <motion.button
               key={category}
               onClick={() => openCategory(category)}
               whileTap={{ scale: 0.97 }}
               whileHover={{ scale: 1.02 }}
-              className={`relative overflow-hidden rounded-2xl p-5 text-left shadow-md ${cardBg}`}
+              className={`relative overflow-hidden rounded-2xl p-5 text-left shadow-md ${cardBg} ${isTrailingOdd ? 'col-span-2' : ''}`}
             >
               <div>
                 <div className={`w-12 h-12 rounded-2xl ${iconBg} flex items-center justify-center mb-4 backdrop-blur-sm`}>
@@ -1034,6 +1125,7 @@ export default function CheckInPage() {
           )
         })}
       </div>
+      )}
 
       {/* ── Padrón general: niños ya existentes en la base de datos ── */}
       <div className="space-y-2 pt-1">
@@ -1041,7 +1133,7 @@ export default function CheckInPage() {
           <div className="flex items-center gap-2">
             <Users size={13} className="text-gray-400" />
             <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">
-              Niños registrados en el sistema{totalChildren !== null ? ` · ${totalChildren}` : ''}
+              {roleCategory ? 'Corderitos registrados en el sistema' : 'Niños registrados en el sistema'}{totalChildren !== null ? ` · ${totalChildren}` : ''}
             </p>
           </div>
           {showAllChildren && (

@@ -1,10 +1,16 @@
 import { useEffect, useState, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { UserPlus, Shield, User, Trash2, Power, Check } from 'lucide-react'
+import { UserPlus, Shield, User, Baby, Trash2, Power, Check } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { createUser, updateUserRole, setUserActive, deleteUser } from '../lib/adminUsers'
 import { useAuth } from '../lib/auth'
 import type { Profile, UserRole } from '../types/domain'
+
+const ROLE_LABELS: Record<UserRole, string> = {
+  admin: 'Coordinador',
+  maestro: 'Maestro',
+  maestro_corderitos: 'Maestro de Corderitos',
+}
 
 function ConfirmDialog({
   message, onConfirm, onCancel,
@@ -74,13 +80,13 @@ function NewUserForm({ onCreated, onCancel }: { onCreated: () => void; onCancel:
       </div>
       <div>
         <label className="block text-xs font-medium text-gray-500 mb-1">Rol</label>
-        <div className="flex gap-2">
-          {(['maestro', 'admin'] as UserRole[]).map((r) => (
+        <div className="grid grid-cols-3 gap-2">
+          {(['maestro', 'maestro_corderitos', 'admin'] as UserRole[]).map((r) => (
             <button key={r} type="button" onClick={() => setRole(r)}
-              className={`flex-1 py-2 text-sm font-semibold rounded-lg border-2 transition-colors ${
+              className={`py-2 px-1 text-xs sm:text-sm font-semibold rounded-lg border-2 transition-colors ${
                 role === r ? 'border-indigo-500 bg-indigo-100 text-indigo-700' : 'border-gray-200 bg-white text-gray-500'
               }`}>
-              {r === 'admin' ? 'Coordinador' : 'Maestro'}
+              {ROLE_LABELS[r]}
             </button>
           ))}
         </div>
@@ -104,9 +110,10 @@ function UserRow({ user, isSelf, onChanged }: { user: Profile; isSelf: boolean; 
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  async function toggleRole() {
+  async function changeRole(role: UserRole) {
+    if (role === user.role) return
     setBusy(true)
-    const res = await updateUserRole(user.id, user.role === 'admin' ? 'maestro' : 'admin')
+    const res = await updateUserRole(user.id, role)
     setBusy(false)
     if (res.error) { setError(res.error); return }
     onChanged()
@@ -144,27 +151,37 @@ function UserRow({ user, isSelf, onChanged }: { user: Profile; isSelf: boolean; 
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
             <div className="flex items-center gap-1.5">
-              {user.role === 'admin' ? <Shield size={13} className="text-indigo-500 shrink-0" /> : <User size={13} className="text-gray-400 shrink-0" />}
+              {user.role === 'admin' ? <Shield size={13} className="text-indigo-500 shrink-0" />
+                : user.role === 'maestro_corderitos' ? <Baby size={13} className="text-pink-500 shrink-0" />
+                : <User size={13} className="text-gray-400 shrink-0" />}
               <p className="font-bold text-gray-900 truncate">{user.full_name}</p>
               {isSelf && <span className="text-[10px] text-gray-400">(tú)</span>}
             </div>
             <p className="text-xs text-gray-500 truncate">{user.email}</p>
           </div>
           <span className={`shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full ${
-            user.role === 'admin' ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-600'
+            user.role === 'admin' ? 'bg-indigo-100 text-indigo-700'
+              : user.role === 'maestro_corderitos' ? 'bg-pink-100 text-pink-700'
+              : 'bg-gray-100 text-gray-600'
           }`}>
-            {user.role === 'admin' ? 'Coordinador' : 'Maestro'}
+            {ROLE_LABELS[user.role]}
           </span>
         </div>
 
         {error && <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>}
 
         {!isSelf && (
-          <div className="flex items-center gap-1.5 pt-1">
-            <button onClick={toggleRole} disabled={busy}
-              className="flex-1 flex items-center justify-center gap-1 py-1.5 text-xs font-medium text-indigo-600 bg-indigo-50 rounded-lg hover:bg-indigo-100 disabled:opacity-50 transition-colors">
-              Hacer {user.role === 'admin' ? 'maestro' : 'coordinador'}
-            </button>
+          <div className="flex flex-wrap items-center gap-1.5 pt-1">
+            <select
+              value={user.role}
+              disabled={busy}
+              onChange={(e) => changeRole(e.target.value as UserRole)}
+              className="flex-1 min-w-[9rem] py-1.5 px-2 text-xs font-medium text-indigo-600 bg-indigo-50 rounded-lg hover:bg-indigo-100 disabled:opacity-50 transition-colors border-0 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+            >
+              {(['maestro', 'maestro_corderitos', 'admin'] as UserRole[]).map((r) => (
+                <option key={r} value={r}>{ROLE_LABELS[r]}</option>
+              ))}
+            </select>
             <button onClick={toggleActive} disabled={busy}
               className="flex items-center justify-center gap-1 px-2.5 py-1.5 text-xs font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 disabled:opacity-50 transition-colors">
               <Power size={12} /> {user.active ? 'Desactivar' : 'Activar'}

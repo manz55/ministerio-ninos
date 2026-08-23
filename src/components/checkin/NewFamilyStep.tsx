@@ -16,6 +16,7 @@ interface ChildDraft {
   medical_notes: string
   guardian_relationship: GuardianRelationship | ''
   comments: string
+  toilet_trained: boolean | null
   photoBlob: Blob | null
 }
 
@@ -28,7 +29,7 @@ interface Props {
 function newChild(key: string): ChildDraft {
   return {
     key, full_name: '', birth_date: '', allergies: '', medical_notes: '',
-    guardian_relationship: '', comments: '', photoBlob: null,
+    guardian_relationship: '', comments: '', toilet_trained: null, photoBlob: null,
   }
 }
 
@@ -104,6 +105,7 @@ export function NewFamilyStep({ prefillName = '', onSaved, onCancel }: Props) {
           medical_notes: c.medical_notes.trim() || null,
           guardian_relationship: c.guardian_relationship || null,
           comments: c.comments.trim() || null,
+          toilet_trained: c.toilet_trained,
         }))
       )
       .select()
@@ -283,6 +285,34 @@ export function NewFamilyStep({ prefillName = '', onSaved, onCancel }: Props) {
                   <p className="text-xs text-red-600 mt-1">{errors[`date_${i}`]}</p>
                 )}
               </div>
+
+              {category === 'corderitos' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                    ¿Ya va solo al baño?
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {([
+                      { value: true, label: 'Sí' },
+                      { value: false, label: 'No / pañal' },
+                      { value: null, label: 'No sé' },
+                    ] as const).map((opt) => (
+                      <button
+                        key={String(opt.value)}
+                        type="button"
+                        onClick={() => updateChild(child.key, 'toilet_trained', opt.value)}
+                        className={`py-2.5 rounded-xl text-sm font-semibold border-2 transition-colors ${
+                          child.toilet_trained === opt.value
+                            ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
+                            : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300'
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">

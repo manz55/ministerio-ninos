@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Outlet } from 'react-router-dom'
+import { Outlet, useOutletContext } from 'react-router-dom'
 import { ClipboardList, BarChart3, Users, NotebookPen, UserCog, LogOut, KeyRound } from 'lucide-react'
 import Dock from '../ui/Dock'
 import { ChurchLogo } from '../ui/ChurchLogo'
@@ -59,10 +59,17 @@ export default function Layout({ isAdmin, profile }: { isAdmin: boolean; profile
         className="max-w-4xl mx-auto px-4 py-6"
         style={{ paddingBottom: 'max(8rem, calc(6rem + env(safe-area-inset-bottom)))' }}
       >
-        <Outlet />
+        <Outlet context={profile} />
       </main>
 
       <Dock items={navItems} />
     </div>
   )
+}
+
+// Pages already know `profile` is loaded — Layout only mounts once App.tsx
+// has confirmed session+profile — so this skips the loading/null states a
+// fresh useAuth() call would otherwise have to handle.
+export function useLayoutProfile() {
+  return useOutletContext<Profile>()
 }

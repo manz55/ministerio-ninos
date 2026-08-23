@@ -8,8 +8,8 @@ export const TEAM_COLOR_LABELS: Record<TeamColor, string> = {
 
 export type Category = 'corderitos' | 'hormiguitas' | 'saltamontes' | 'exploradores'
 
-// Categories actively managed (corderitos excluded — they stay with parents)
-export const ACTIVE_CATEGORIES: Category[] = ['hormiguitas', 'saltamontes', 'exploradores']
+// All categories that get checked in (corderitos included — parent stays with the child, no badge/pager)
+export const ACTIVE_CATEGORIES: Category[] = ['corderitos', 'hormiguitas', 'saltamontes', 'exploradores']
 
 export const CATEGORY_LABELS: Record<Category, string> = {
   corderitos: 'Corderitos',
@@ -43,7 +43,7 @@ export const GUARDIAN_RELATIONSHIP_LABELS: Record<GuardianRelationship, string> 
   otro: 'Otro',
 }
 
-export type UserRole = 'admin' | 'maestro'
+export type UserRole = 'admin' | 'maestro' | 'maestro_corderitos'
 
 export interface Profile {
   id: string
@@ -89,6 +89,7 @@ export interface Child {
   category: Category | null
   guardian_relationship: GuardianRelationship | null
   comments: string | null
+  toilet_trained: boolean | null
   photo_url: string | null
   created_at: string
   parent?: Parent
@@ -127,6 +128,7 @@ export interface ChildRow {
   category: Category | null
   guardian_relationship: GuardianRelationship | null
   comments: string | null
+  toilet_trained: boolean | null
   photo_url: string | null
   created_at: string
   attendance: AttendanceToday[]

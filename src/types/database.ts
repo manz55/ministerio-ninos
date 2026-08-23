@@ -109,6 +109,7 @@ export type Database = {
           medical_notes: string | null
           parent_id: string | null
           photo_url: string | null
+          toilet_trained: boolean | null
         }
         Insert: {
           allergies?: string | null
@@ -122,6 +123,7 @@ export type Database = {
           medical_notes?: string | null
           parent_id?: string | null
           photo_url?: string | null
+          toilet_trained?: boolean | null
         }
         Update: {
           allergies?: string | null
@@ -135,6 +137,7 @@ export type Database = {
           medical_notes?: string | null
           parent_id?: string | null
           photo_url?: string | null
+          toilet_trained?: boolean | null
         }
         Relationships: [
           {

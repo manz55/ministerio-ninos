@@ -27,6 +27,7 @@ type ChildDetail = {
   medical_notes: string | null
   guardian_relationship: GuardianRelationship | null
   comments: string | null
+  toilet_trained: boolean | null
   photo_url: string | null
   attendance: { count: number }[]
 }
@@ -102,6 +103,7 @@ function ChildEditForm({
   const [notes, setNotes]       = useState(child.medical_notes ?? '')
   const [relationship, setRelationship] = useState<GuardianRelationship | ''>(child.guardian_relationship ?? '')
   const [comments, setComments] = useState(child.comments ?? '')
+  const [toiletTrained, setToiletTrained] = useState<boolean | null>(child.toilet_trained)
   const [manualCategory, setManualCategory] = useState<Category | ''>(child.category ?? '')
   const [photoBlob, setPhotoBlob] = useState<Blob | null>(null)
   const [saving, setSaving]     = useState(false)
@@ -126,6 +128,7 @@ function ChildEditForm({
       medical_notes: notes.trim() || null,
       guardian_relationship: relationship || null,
       comments: comments.trim() || null,
+      toilet_trained: toiletTrained,
       photo_url,
     })
     setSaving(false)
@@ -165,6 +168,31 @@ function ChildEditForm({
               <option key={value} value={value}>{label}</option>
             ))}
           </select>
+        </div>
+      )}
+      {(previewCategory ?? child.category) === 'corderitos' && (
+        <div>
+          <label className="block text-xs font-medium text-gray-500 mb-1">¿Ya va solo al baño?</label>
+          <div className="grid grid-cols-3 gap-2">
+            {([
+              { value: true, label: 'Sí' },
+              { value: false, label: 'No / pañal' },
+              { value: null, label: 'No sé' },
+            ] as const).map((opt) => (
+              <button
+                key={String(opt.value)}
+                type="button"
+                onClick={() => setToiletTrained(opt.value)}
+                className={`py-2 rounded-lg text-xs font-semibold border-2 transition-colors ${
+                  toiletTrained === opt.value
+                    ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
+                    : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
         </div>
       )}
       <div>
@@ -219,6 +247,7 @@ function NewChildForm({ parentId, onSaved, onCancel }: { parentId: string; onSav
   const [notes, setNotes]       = useState('')
   const [relationship, setRelationship] = useState<GuardianRelationship | ''>('')
   const [comments, setComments] = useState('')
+  const [toiletTrained, setToiletTrained] = useState<boolean | null>(null)
   const [photoBlob, setPhotoBlob] = useState<Blob | null>(null)
   const [saving, setSaving]     = useState(false)
   const [error, setError]       = useState<string | null>(null)
@@ -235,6 +264,7 @@ function NewChildForm({ parentId, onSaved, onCancel }: { parentId: string; onSav
       category: getCategoryFromBirthDate(birthDate),
       allergies: allergies.trim() || null, medical_notes: notes.trim() || null,
       guardian_relationship: relationship || null, comments: comments.trim() || null,
+      toilet_trained: toiletTrained,
     }).select().single()
     if (err || !data) { setSaving(false); setError('Error al guardar.'); return }
     if (photoBlob) {
@@ -269,6 +299,31 @@ function NewChildForm({ parentId, onSaved, onCancel }: { parentId: string; onSav
           )}
         </div>
       </div>
+      {previewCategory === 'corderitos' && (
+        <div>
+          <label className="block text-xs font-medium text-gray-500 mb-1">¿Ya va solo al baño?</label>
+          <div className="grid grid-cols-3 gap-2">
+            {([
+              { value: true, label: 'Sí' },
+              { value: false, label: 'No / pañal' },
+              { value: null, label: 'No sé' },
+            ] as const).map((opt) => (
+              <button
+                key={String(opt.value)}
+                type="button"
+                onClick={() => setToiletTrained(opt.value)}
+                className={`py-2 rounded-lg text-xs font-semibold border-2 transition-colors ${
+                  toiletTrained === opt.value
+                    ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
+                    : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
       <div>
         <label className="block text-xs font-medium text-gray-500 mb-1">Parentesco del responsable</label>
         <select value={relationship} onChange={(e) => setRelationship(e.target.value as GuardianRelationship | '')}
@@ -548,6 +603,12 @@ function FamilyDetailPanel({
                       <p className="text-xs text-red-700 ml-5"><span className="font-semibold">Notas:</span> {child.medical_notes}</p>
                     )}
                   </div>
+                )}
+
+                {category === 'corderitos' && child.toilet_trained !== null && !isEditing && (
+                  <p className="text-xs text-gray-500 bg-gray-50 rounded-lg px-3 py-2">
+                    🚼 {child.toilet_trained ? 'Ya va solo al baño' : 'Aún usa pañal / no va solo al baño'}
+                  </p>
                 )}
 
                 {child.comments && !isEditing && (
