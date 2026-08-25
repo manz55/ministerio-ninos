@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Search, ChevronRight, Edit2, Check, X, Plus, Phone,
@@ -12,7 +13,7 @@ import { PhotoCapture, PhotoAvatar } from '../components/ui/PhotoCapture'
 import { ChildContacts } from '../components/ui/ChildContacts'
 import { useDebounce } from '../hooks/useDebounce'
 import { NewFamilyStep } from '../components/checkin/NewFamilyStep'
-import { CATEGORY_LABELS, GUARDIAN_RELATIONSHIP_LABELS, NEXT_CATEGORY, type ParentRow, type Category, type GuardianRelationship } from '../types/domain'
+import { CATEGORY_LABELS, GUARDIAN_RELATIONSHIP_LABELS, NEXT_CATEGORY, isCorderitos, type ParentRow, type Category, type GuardianRelationship } from '../types/domain'
 import { BackgroundRadialViolet } from '../components/ui/BackgroundRadialViolet'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -170,7 +171,7 @@ function ChildEditForm({
           </select>
         </div>
       )}
-      {(previewCategory ?? child.category) === 'corderitos' && (
+      {isCorderitos(previewCategory ?? child.category) && (
         <div>
           <label className="block text-xs font-medium text-gray-500 mb-1">¿Ya va solo al baño?</label>
           <div className="grid grid-cols-3 gap-2">
@@ -299,7 +300,7 @@ function NewChildForm({ parentId, onSaved, onCancel }: { parentId: string; onSav
           )}
         </div>
       </div>
-      {previewCategory === 'corderitos' && (
+      {isCorderitos(previewCategory) && (
         <div>
           <label className="block text-xs font-medium text-gray-500 mb-1">¿Ya va solo al baño?</label>
           <div className="grid grid-cols-3 gap-2">
@@ -605,7 +606,7 @@ function FamilyDetailPanel({
                   </div>
                 )}
 
-                {category === 'corderitos' && child.toilet_trained !== null && !isEditing && (
+                {isCorderitos(category) && child.toilet_trained !== null && !isEditing && (
                   <p className="text-xs text-gray-500 bg-gray-50 rounded-lg px-3 py-2">
                     🚼 {child.toilet_trained ? 'Ya va solo al baño' : 'Aún usa pañal / no va solo al baño'}
                   </p>
@@ -686,7 +687,7 @@ function FamilyListItem({ family, onSelect }: { family: FamilyDetail; onSelect: 
 // ─── Roster completo (por niño, con filtros para casos incompletos) ───────────
 
 type RosterChild = ChildDetail & { parents: { id: string; full_name: string; phone: string } | null }
-type RosterFilter = 'todos' | 'sin_responsable' | 'sin_categoria'
+type RosterFilter = 'todos' | 'sin_responsable' | 'sin_categoria' | 'sin_fecha_nacimiento'
 
 function ParentPicker({ onSelect }: { onSelect: (parent: { id: string; full_name: string }) => void }) {
   const [query, setQuery] = useState('')
@@ -814,10 +815,10 @@ function RosterRow({ child, onChanged }: { child: RosterChild; onChanged: () => 
   )
 }
 
-function RosterPanel({ onClose }: { onClose: () => void }) {
+function RosterPanel({ onClose, initialFilter }: { onClose: () => void; initialFilter?: RosterFilter }) {
   const [children, setChildren] = useState<RosterChild[]>([])
   const [loading, setLoading] = useState(true)
-  const [filter, setFilter] = useState<RosterFilter>('todos')
+  const [filter, setFilter] = useState<RosterFilter>(initialFilter ?? 'todos')
 
   const fetchAll = useCallback(async () => {
     setLoading(true)
@@ -834,6 +835,7 @@ function RosterPanel({ onClose }: { onClose: () => void }) {
   const filtered = children.filter((c) => {
     if (filter === 'sin_responsable') return !c.parent_id
     if (filter === 'sin_categoria') return getEffectiveCategory(c) === null
+    if (filter === 'sin_fecha_nacimiento') return !c.birth_date
     return true
   })
 
@@ -841,6 +843,7 @@ function RosterPanel({ onClose }: { onClose: () => void }) {
     todos: children.length,
     sin_responsable: children.filter((c) => !c.parent_id).length,
     sin_categoria: children.filter((c) => getEffectiveCategory(c) === null).length,
+    sin_fecha_nacimiento: children.filter((c) => !c.birth_date).length,
   }
 
   return (
@@ -860,6 +863,7 @@ function RosterPanel({ onClose }: { onClose: () => void }) {
           ['todos', `Todos (${counts.todos})`],
           ['sin_responsable', `Sin responsable (${counts.sin_responsable})`],
           ['sin_categoria', `Sin categoría (${counts.sin_categoria})`],
+          ['sin_fecha_nacimiento', `Sin fecha de nacimiento (${counts.sin_fecha_nacimiento})`],
         ] as [RosterFilter, string][]).map(([key, label]) => (
           <button key={key} onClick={() => setFilter(key)}
             className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${
@@ -893,7 +897,9 @@ export default function FamiliesPage() {
   const [showAll, setShowAll]       = useState(false)
   const [selected, setSelected]     = useState<FamilyDetail | null>(null)
   const [showNewFamily, setShowNewFamily] = useState(false)
-  const [showRoster, setShowRoster] = useState(false)
+  const [searchParams, setSearchParams] = useSearchParams()
+  const rosterParam = searchParams.get('roster') as RosterFilter | null
+  const [showRoster, setShowRoster] = useState(rosterParam !== null)
   const [totalFamilies, setTotalFamilies] = useState<number | null>(null)
 
   const debouncedQuery = useDebounce(query.trim(), 350)
@@ -972,7 +978,12 @@ export default function FamiliesPage() {
   }
 
   if (showRoster) {
-    return <RosterPanel onClose={() => setShowRoster(false)} />
+    return (
+      <RosterPanel
+        initialFilter={rosterParam ?? undefined}
+        onClose={() => { setShowRoster(false); setSearchParams({}) }}
+      />
+    )
   }
 
   if (selected) {

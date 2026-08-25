@@ -2,10 +2,12 @@ import { useState, useEffect, useRef, useCallback, useMemo, startTransition } fr
 import { motion, AnimatePresence } from 'framer-motion'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
-import { Search, CheckCircle2, UserPlus, AlertTriangle, ChevronLeft, Bug, Zap, Compass, Baby, User, Pencil, LogIn, Trash2, X, Users } from 'lucide-react'
+import { Search, CheckCircle2, UserPlus, AlertTriangle, ChevronLeft, Bug, Zap, Compass, Baby, PersonStanding, User, Pencil, LogIn, Trash2, X, Users, Lock, Check } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { useAuth } from '../lib/auth'
 import { getCategoryFromBirthDate, getEffectiveCategory, hasCategoryChanged, getAgeLabel, requiresBadge, requiresPager } from '../lib/categoryUtils'
-import { CATEGORY_LABELS, CATEGORY_COLORS, NEXT_CATEGORY, type Category, type TeamColor } from '../types/domain'
+import { createChildSearcher, searchChildrenSplit } from '../lib/fuzzySearch'
+import { CATEGORY_LABELS, CATEGORY_COLORS, NEXT_CATEGORY, isCorderitos, type Category, type TeamColor } from '../types/domain'
 import { CategoryBadge } from '../components/ui/CategoryBadge'
 import { ChildContacts } from '../components/ui/ChildContacts'
 import { NewFamilyStep } from '../components/checkin/NewFamilyStep'
@@ -115,9 +117,9 @@ const TILES = [
     textColor: 'text-sky-900',
   },
   {
-    category: 'corderitos' as Category,
+    category: 'corderitos_0_2' as Category,
     icon: Baby,
-    ages: 'Meses–3 años',
+    ages: '0–2 años',
     cardBg: 'bg-pink-100',
     iconBg: 'bg-pink-500/20',
     iconColor: 'text-pink-700',
@@ -125,12 +127,24 @@ const TILES = [
     barBg: 'bg-pink-200/60',
     textColor: 'text-pink-900',
   },
+  {
+    category: 'corderitos_2_4' as Category,
+    icon: PersonStanding,
+    ages: '2–4 años',
+    cardBg: 'bg-rose-100',
+    iconBg: 'bg-rose-500/20',
+    iconColor: 'text-rose-700',
+    bar: 'bg-rose-500',
+    barBg: 'bg-rose-200/60',
+    textColor: 'text-rose-900',
+  },
 ]
 
 // ─── Team picker screen ───────────────────────────────────────────────────────
 
-function TeamPickerScreen({ onConfirm }: { onConfirm: (color: TeamColor, coordinator: string) => void }) {
+function TeamPickerScreen({ onConfirm, isAdmin }: { onConfirm: (color: TeamColor, coordinator: string) => void; isAdmin: boolean }) {
   const [coordinator, setCoordinator] = useState(getStoredCoordinatorForToday)
+  const coordinatorLocked = !isAdmin && coordinator.trim().length > 0
 
   const TEAMS: { color: TeamColor; hover: string }[] = [
     { color: 'rojo',     hover: 'hover:brightness-110' },
@@ -163,14 +177,23 @@ function TeamPickerScreen({ onConfirm }: { onConfirm: (color: TeamColor, coordin
           <User size={12} />
           ¿Quién está de encargado hoy?
         </label>
-        <input
-          type="text"
-          value={coordinator}
-          onChange={(e) => setCoordinator(e.target.value)}
-          placeholder="Tu nombre…"
-          autoComplete="off"
-          className="w-full px-4 py-3 bg-white border-2 border-gray-200 rounded-2xl text-base font-medium text-gray-800 placeholder:text-gray-300 focus:border-indigo-400 focus:outline-none shadow-sm"
-        />
+        {coordinatorLocked ? (
+          <div className="w-full px-4 py-3 bg-gray-50 border-2 border-gray-200 rounded-2xl text-base font-medium text-gray-600 flex items-center justify-between gap-2">
+            <span>{coordinator}</span>
+            <span className="flex items-center gap-1 text-xs text-gray-400 shrink-0">
+              <Lock size={12} /> Solo un coordinador lo cambia
+            </span>
+          </div>
+        ) : (
+          <input
+            type="text"
+            value={coordinator}
+            onChange={(e) => setCoordinator(e.target.value)}
+            placeholder="Tu nombre…"
+            autoComplete="off"
+            className="w-full px-4 py-3 bg-white border-2 border-gray-200 rounded-2xl text-base font-medium text-gray-800 placeholder:text-gray-300 focus:border-indigo-400 focus:outline-none shadow-sm"
+          />
+        )}
       </div>
 
       {/* Prompt */}
@@ -298,7 +321,7 @@ function ChildCard({
   useEffect(() => {
     if (!isSelected) return
     const { needsBadge, alreadyIn, category, doCheckIn } = latest.current
-    if (!needsBadge && category !== 'corderitos' && !alreadyIn && category) {
+    if (!needsBadge && !isCorderitos(category) && !alreadyIn && category) {
       doCheckIn(null, null)
     }
   }, [isSelected])
@@ -442,7 +465,7 @@ function ChildCard({
       )}
 
       {/* ── Corderitos: confirm step with baby-specific info before registering ── */}
-      {isSelected && !needsBadge && category === 'corderitos' && !alreadyIn && (
+      {isSelected && !needsBadge && isCorderitos(category) && !alreadyIn && (
         <div className="px-5 pb-5 space-y-3 border-t border-gray-100 pt-4">
           {hasAlert && (
             <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-3">
@@ -538,12 +561,17 @@ function ChildCard({
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function CheckInPage() {
+  const { isAdmin } = useAuth()
   const [activeCategory, setActiveCategory] = useState<Category | null>(null)
   const [todayCounts, setTodayCounts] = useState<Partial<Record<Category, number>>>({})
   const [totalToday, setTotalToday] = useState(0)
   const [todayRecords, setTodayRecords] = useState<TodayRecord[]>([])
   const [confirmDeleteRecordId, setConfirmDeleteRecordId] = useState<string | null>(null)
   const [deleteRecordError, setDeleteRecordError] = useState<string | null>(null)
+  const [editingBadgeRecordId, setEditingBadgeRecordId] = useState<string | null>(null)
+  const [badgeEditValue, setBadgeEditValue] = useState('')
+  const [badgeEditError, setBadgeEditError] = useState<string | null>(null)
+  const [savingBadgeEdit, setSavingBadgeEdit] = useState(false)
   const [children, setChildren] = useState<ChildResult[]>([])
   const [filter, setFilter] = useState('')
   const [loadingChildren, setLoadingChildren] = useState(false)
@@ -556,12 +584,9 @@ export default function CheckInPage() {
 
   // ── Búsqueda global ──
   const [globalSearch, setGlobalSearch] = useState('')
-  const [globalResults, setGlobalResults] = useState<ChildResult[]>([])
-  const [globalLoading, setGlobalLoading] = useState(false)
   const debouncedGlobal = useDebounce(globalSearch.trim(), 280)
 
   // ── Padrón general (niños ya existentes en la base de datos) ──
-  const [totalChildren, setTotalChildren] = useState<number | null>(null)
   const [allChildren, setAllChildren] = useState<ChildResult[]>([])
   const [loadingAllChildren, setLoadingAllChildren] = useState(false)
   const [showAllChildren, setShowAllChildren] = useState(false)
@@ -585,11 +610,6 @@ export default function CheckInPage() {
 
   useEffect(() => { fetchCounts() }, [fetchCounts])
 
-  useEffect(() => {
-    supabase.from('children').select('id', { count: 'exact', head: true })
-      .then(({ count }) => setTotalChildren(count))
-  }, [])
-
   // Keeps every maestro's screen in sync — a check-in (or its deletion) made
   // from any other device today shows up here without needing to refresh.
   useEffect(() => {
@@ -607,14 +627,12 @@ export default function CheckInPage() {
                 ? { ...c, attendance: [...c.attendance, { session_date: today }] }
                 : c
             setChildren((prev) => prev.map(mark))
-            setGlobalResults((prev) => prev.map(mark))
             setAllChildren((prev) => prev.map(mark))
           } else if (payload.eventType === 'DELETE') {
             const childId = (payload.old as { child_id: string }).child_id
             const unmark = (c: ChildResult) =>
               c.id === childId ? { ...c, attendance: c.attendance.filter((a) => a.session_date !== today) } : c
             setChildren((prev) => prev.map(unmark))
-            setGlobalResults((prev) => prev.map(unmark))
             setAllChildren((prev) => prev.map(unmark))
           }
         }
@@ -623,7 +641,12 @@ export default function CheckInPage() {
     return () => { supabase.removeChannel(channel) }
   }, [fetchCounts])
 
-  const loadAllChildren = useCallback(async () => {
+  // Carga el padrón completo una sola vez (no solo al abrir "Ver padrón
+  // completo") porque también alimenta la búsqueda global difusa de abajo —
+  // con ~170 niños es más simple y más rápido buscar en el navegador que
+  // pegarle a Postgres por cada tecla, y de paso resuelve que `ilike` no
+  // ignora tildes (buscar "jose" nunca encontraba "José").
+  const fetchRoster = useCallback(async () => {
     setLoadingAllChildren(true)
     const [{ data: all }, { data: todayAtt }] = await Promise.all([
       supabase
@@ -642,44 +665,25 @@ export default function CheckInPage() {
     })) as ChildResult[]
     setAllChildren(mapped)
     setLoadingAllChildren(false)
+  }, [])
+
+  useEffect(() => { fetchRoster() }, [fetchRoster])
+
+  function loadAllChildren() {
     setShowAllChildren(true)
-  }, [])
+  }
 
-  // Búsqueda global: dos queries pequeñas en paralelo. Fetch logic is shared
-  // with the post-"nueva familia" refresh below; the effect adds its own
-  // `cancelled` guard so a slow keystroke-triggered fetch can't clobber a
-  // newer one, which the one-off refresh doesn't need.
-  const fetchGlobalResults = useCallback(async (term: string) => {
-    const [{ data: found }, { data: todayAtt }] = await Promise.all([
-      supabase
-        .from('children')
-        .select(CHILD_SELECT)
-        .ilike('full_name', `%${term}%`)
-        .order('full_name')
-        .limit(20),
-      supabase
-        .from('attendance')
-        .select('child_id')
-        .eq('session_date', today),
-    ])
-    const attSet = new Set((todayAtt ?? []).map((a) => a.child_id))
-    return ((found ?? []) as Omit<ChildResult, 'attendance'>[]).map((c) => ({
-      ...c,
-      attendance: attSet.has(c.id) ? [{ session_date: today }] : [],
-    })) as ChildResult[]
-  }, [])
-
-  useEffect(() => {
-    if (debouncedGlobal.length < 2) { setGlobalResults([]); return }
-    let cancelled = false
-    setGlobalLoading(true)
-    fetchGlobalResults(debouncedGlobal).then((results) => {
-      if (cancelled) return
-      setGlobalResults(results)
-      setGlobalLoading(false)
-    })
-    return () => { cancelled = true }
-  }, [debouncedGlobal, fetchGlobalResults])
+  const globalSearcher = useMemo(() => createChildSearcher(allChildren), [allChildren])
+  const globalResults = useMemo(
+    () =>
+      debouncedGlobal.length < 2
+        ? { exact: [], suggestions: [] }
+        : (() => {
+            const { exact, suggestions } = searchChildrenSplit(globalSearcher, debouncedGlobal)
+            return { exact: exact.slice(0, 20), suggestions: suggestions.slice(0, 8) }
+          })(),
+    [debouncedGlobal, globalSearcher]
+  )
 
   // Evita que una respuesta "vieja" (de una categoría abandonada) sobrescriba
   // la lista de la categoría que el usuario seleccionó después
@@ -736,11 +740,10 @@ export default function CheckInPage() {
     const mark = (c: ChildResult) =>
       c.id === childId ? { ...c, attendance: [...c.attendance, { session_date: today }] } : c
     setChildren((prev) => prev.map(mark))
-    setGlobalResults((prev) => prev.map(mark))
     setAllChildren((prev) => prev.map(mark))
     setSelectedId(null)
     // Deriving category from data avoids depending on activeCategory
-    const child = [...children, ...globalResults, ...allChildren].find((c) => c.id === childId)
+    const child = [...children, ...globalResults.exact, ...globalResults.suggestions, ...allChildren].find((c) => c.id === childId)
     const cat = child ? getEffectiveCategory(child) : activeCategory
     if (cat) {
       setTodayCounts((prev) => ({ ...prev, [cat]: (prev[cat] ?? 0) + 1 }))
@@ -756,18 +759,9 @@ export default function CheckInPage() {
     if (activeCategory) {
       openCategory(activeCategory)
     }
-    if (debouncedGlobal.length >= 2) {
-      setGlobalLoading(true)
-      const results = await fetchGlobalResults(debouncedGlobal)
-      setGlobalResults(results)
-      setGlobalLoading(false)
-    }
-    if (showAllChildren) {
-      loadAllChildren()
-    } else {
-      supabase.from('children').select('id', { count: 'exact', head: true })
-        .then(({ count }) => setTotalChildren(count))
-    }
+    // El padrón (allChildren) alimenta la búsqueda global y difusa, así que
+    // se refresca siempre, esté o no abierto el panel "Ver padrón completo".
+    fetchRoster()
   }
 
   function confirmTeam(color: TeamColor, coordinator: string) {
@@ -802,21 +796,46 @@ export default function CheckInPage() {
     setConfirmDeleteRecordId(null)
   }
 
+  function startBadgeEdit(rec: TodayRecord) {
+    setEditingBadgeRecordId(rec.id)
+    setBadgeEditValue(String(rec.badge_number ?? ''))
+    setBadgeEditError(null)
+  }
+
+  async function saveBadgeEdit(id: string) {
+    const num = parseInt(badgeEditValue, 10)
+    if (!badgeEditValue || isNaN(num) || num <= 0) { setBadgeEditError('Número inválido.'); return }
+    setSavingBadgeEdit(true)
+    setBadgeEditError(null)
+    const { data, error } = await supabase
+      .from('attendance')
+      .update({ badge_number: num })
+      .eq('id', id)
+      .select('id')
+    setSavingBadgeEdit(false)
+    if (error || !data || data.length === 0) {
+      if (error?.code === '23505' && error.message.includes('attendance_badge_category_unique')) {
+        setBadgeEditError(`El gafete #${num} ya está en uso hoy en esa categoría.`)
+      } else {
+        setBadgeEditError('No se pudo guardar. Intenta de nuevo.')
+      }
+      return
+    }
+    setTodayRecords((prev) => prev.map((r) => (r.id === id ? { ...r, badge_number: num } : r)))
+    setEditingBadgeRecordId(null)
+  }
+
   function saveCoordinator(name: string) {
     setCoordinatorName(name)
     persistCoordinator(name)
     setEditingCoordinator(false)
   }
 
-  const filteredChildren = useMemo(() =>
-    filter.trim()
-      ? children.filter(
-          (c) =>
-            c.full_name.toLowerCase().includes(filter.toLowerCase()) ||
-            c.parents?.full_name.toLowerCase().includes(filter.toLowerCase())
-        )
-      : children,
-  [filter, children])
+  const categorySearcher = useMemo(() => createChildSearcher(children), [children])
+  const filteredChildren = useMemo(
+    () => (filter.trim() ? searchChildrenSplit(categorySearcher, filter) : { exact: children, suggestions: [] }),
+    [filter, children, categorySearcher]
+  )
 
   const registeredCount = useMemo(
     () => children.filter((c) => c.attendance.some((a) => a.session_date === today)).length,
@@ -827,7 +846,7 @@ export default function CheckInPage() {
 
   // Team must be confirmed before anything else each day
   if (!teamConfirmed) {
-    return <TeamPickerScreen onConfirm={confirmTeam} />
+    return <TeamPickerScreen onConfirm={confirmTeam} isAdmin={isAdmin} />
   }
 
   if (showNewFamily) {
@@ -848,7 +867,8 @@ export default function CheckInPage() {
       <div className={`fixed inset-0 -z-10 ${
         activeCategory === 'saltamontes' ? 'bg-white' :
         activeCategory === 'exploradores' ? 'bg-sky-50' :
-        activeCategory === 'corderitos' ? 'bg-pink-50/70' :
+        activeCategory === 'corderitos_0_2' ? 'bg-pink-50/70' :
+        activeCategory === 'corderitos_2_4' ? 'bg-rose-50/70' :
         'bg-emerald-50/70'
       }`} />
       {activeCategory === 'hormiguitas'  && <BalloonBackground />}
@@ -893,34 +913,60 @@ export default function CheckInPage() {
         {/* Children list */}
         {loadingChildren ? (
           <p className="text-center text-gray-400 py-10 text-lg">Cargando…</p>
-        ) : filteredChildren.length === 0 ? (
+        ) : filteredChildren.exact.length === 0 && filteredChildren.suggestions.length === 0 ? (
           <div className="text-center py-12 space-y-4 text-gray-400">
             <p className="text-base">{filter ? `Sin resultados para "${filter}"` : 'No hay niños en esta categoría todavía'}</p>
-            <button
-              onClick={() => setShowNewFamily(true)}
-              className="inline-flex items-center gap-2 px-6 py-3.5 text-base font-semibold text-white bg-indigo-600 rounded-2xl hover:bg-indigo-700 transition-colors"
-            >
-              <UserPlus size={18} />
-              Registrar familia nueva
-            </button>
+            {isAdmin ? (
+              <button
+                onClick={() => setShowNewFamily(true)}
+                className="inline-flex items-center gap-2 px-6 py-3.5 text-base font-semibold text-white bg-indigo-600 rounded-2xl hover:bg-indigo-700 transition-colors"
+              >
+                <UserPlus size={18} />
+                Registrar familia nueva
+              </button>
+            ) : (
+              <p className="text-sm text-gray-400">¿Es familia nueva? Avísale a tu coordinador para registrarla.</p>
+            )}
           </div>
         ) : (
-          <div className="space-y-2.5">
-            {filteredChildren.map((child) => (
-              <ChildCard
-                key={child.id}
-                child={child}
-                teamColor={teamColor}
-                isSelected={selectedId === child.id}
-                onSelect={() => setSelectedId(child.id)}
-                onDeselect={() => setSelectedId(null)}
-                onRegistered={handleRegistered}
-              />
-            ))}
-          </div>
+          <>
+            {filteredChildren.exact.length > 0 && (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-2.5 items-start">
+                {filteredChildren.exact.map((child) => (
+                  <ChildCard
+                    key={child.id}
+                    child={child}
+                    teamColor={teamColor}
+                    isSelected={selectedId === child.id}
+                    onSelect={() => setSelectedId(child.id)}
+                    onDeselect={() => setSelectedId(null)}
+                    onRegistered={handleRegistered}
+                  />
+                ))}
+              </div>
+            )}
+            {filteredChildren.suggestions.length > 0 && (
+              <div className="space-y-2.5 pt-1">
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-widest px-1">¿Quisiste decir…?</p>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-2.5 items-start">
+                  {filteredChildren.suggestions.map((child) => (
+                    <ChildCard
+                      key={child.id}
+                      child={child}
+                      teamColor={teamColor}
+                      isSelected={selectedId === child.id}
+                      onSelect={() => setSelectedId(child.id)}
+                      onDeselect={() => setSelectedId(null)}
+                      onRegistered={handleRegistered}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
         )}
 
-        {!loadingChildren && children.length > 0 && (
+        {!loadingChildren && children.length > 0 && isAdmin && (
           <button
             onClick={() => setShowNewFamily(true)}
             className="w-full flex items-center justify-center gap-2 py-3.5 text-sm font-medium text-indigo-600 border-2 border-dashed border-indigo-200 rounded-2xl hover:bg-indigo-50 transition-colors"
@@ -935,7 +981,6 @@ export default function CheckInPage() {
   }
 
   // ── Grid / home view ───────────────────────────────────────────────────────
-  const [hero, ...rest] = TILES
 
   return (
     <>
@@ -978,6 +1023,13 @@ export default function CheckInPage() {
                   placeholder="Tu nombre…"
                   className="text-sm border-b-2 border-indigo-400 focus:outline-none font-medium text-gray-700 bg-transparent w-36"
                 />
+              ) : !isAdmin && coordinatorName ? (
+                <span className="flex items-center gap-1.5 text-sm text-gray-700 font-semibold">
+                  {coordinatorName}
+                  <span title="Solo un coordinador puede cambiar esto">
+                    <Lock size={11} className="text-gray-300" />
+                  </span>
+                </span>
               ) : (
                 <button
                   onClick={() => setEditingCoordinator(true)}
@@ -1022,7 +1074,7 @@ export default function CheckInPage() {
         />
         {globalSearch && (
           <button
-            onClick={() => { setGlobalSearch(''); setGlobalResults([]) }}
+            onClick={() => setGlobalSearch('')}
             className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-1"
           >
             <X size={18} />
@@ -1033,32 +1085,58 @@ export default function CheckInPage() {
       {/* ── Resultados de búsqueda global ── */}
       {isSearching ? (
         <div className="space-y-2.5">
-          {globalLoading && (
-            <p className="text-center text-gray-400 py-8 text-base">Buscando…</p>
+          {loadingAllChildren && allChildren.length === 0 && (
+            <p className="text-center text-gray-400 py-8 text-base">Cargando padrón…</p>
           )}
-          {!globalLoading && globalResults.length === 0 && (
+          {!(loadingAllChildren && allChildren.length === 0) && globalResults.exact.length === 0 && globalResults.suggestions.length === 0 && (
             <div className="text-center py-10 space-y-4 bg-white rounded-2xl border border-gray-200">
               <p className="text-gray-400">Sin resultados para "{debouncedGlobal}"</p>
-              <button
-                onClick={() => setShowNewFamily(true)}
-                className="inline-flex items-center gap-2 px-5 py-3 text-sm font-semibold text-white bg-indigo-600 rounded-2xl hover:bg-indigo-700 transition-colors"
-              >
-                <UserPlus size={16} /> Registrar familia nueva
-              </button>
+              {isAdmin ? (
+                <button
+                  onClick={() => setShowNewFamily(true)}
+                  className="inline-flex items-center gap-2 px-5 py-3 text-sm font-semibold text-white bg-indigo-600 rounded-2xl hover:bg-indigo-700 transition-colors"
+                >
+                  <UserPlus size={16} /> Registrar familia nueva
+                </button>
+              ) : (
+                <p className="text-sm text-gray-400">¿Es familia nueva? Avísale a tu coordinador para registrarla.</p>
+              )}
             </div>
           )}
-          {globalResults.map((child) => (
-            <ChildCard
-              key={child.id}
-              child={child}
-              teamColor={teamColor}
-              isSelected={selectedId === child.id}
-              onSelect={() => setSelectedId(child.id)}
-              onDeselect={() => setSelectedId(null)}
-              onRegistered={handleRegistered}
-            />
-          ))}
-          {!globalLoading && globalResults.length > 0 && (
+          {globalResults.exact.length > 0 && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-2.5 items-start">
+              {globalResults.exact.map((child) => (
+                <ChildCard
+                  key={child.id}
+                  child={child}
+                  teamColor={teamColor}
+                  isSelected={selectedId === child.id}
+                  onSelect={() => setSelectedId(child.id)}
+                  onDeselect={() => setSelectedId(null)}
+                  onRegistered={handleRegistered}
+                />
+              ))}
+            </div>
+          )}
+          {globalResults.suggestions.length > 0 && (
+            <div className="space-y-2.5 pt-1">
+              <p className="text-xs font-bold text-gray-400 uppercase tracking-widest px-1">¿Quisiste decir…?</p>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-2.5 items-start">
+                {globalResults.suggestions.map((child) => (
+                  <ChildCard
+                    key={child.id}
+                    child={child}
+                    teamColor={teamColor}
+                    isSelected={selectedId === child.id}
+                    onSelect={() => setSelectedId(child.id)}
+                    onDeselect={() => setSelectedId(null)}
+                    onRegistered={handleRegistered}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+          {(globalResults.exact.length > 0 || globalResults.suggestions.length > 0) && isAdmin && (
             <button
               onClick={() => setShowNewFamily(true)}
               className="w-full flex items-center justify-center gap-2 py-3.5 text-sm font-medium text-indigo-600 border-2 border-dashed border-indigo-200 rounded-2xl hover:bg-indigo-50 transition-colors"
@@ -1075,61 +1153,18 @@ export default function CheckInPage() {
         O selecciona el grupo
       </p>
 
-      {/* ── Hero tile (Hormiguitas) ── */}
-      {(() => {
-        const { category, icon: Icon, ages, cardBg, iconBg, iconColor, bar, barBg, textColor } = hero
-        const count = todayCounts[category] ?? 0
-        return (
-          <motion.button
-            onClick={() => openCategory(category)}
-            whileTap={{ scale: 0.98 }}
-            whileHover={{ scale: 1.01 }}
-            className={`relative w-full overflow-hidden rounded-2xl p-5 text-left shadow-md ${cardBg}`}
-          >
-            <div className="flex items-center gap-5">
-              <div className={`w-16 h-16 rounded-2xl ${iconBg} flex items-center justify-center shrink-0 backdrop-blur-sm`}>
-                <Icon className={`w-8 h-8 ${iconColor}`} />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className={`font-black text-base uppercase tracking-wide ${textColor}`}>
-                  {CATEGORY_LABELS[category]}
-                </p>
-                <p className={`text-xs ${iconColor} opacity-70 mb-2`}>{ages}</p>
-                <div className={`h-1.5 w-full rounded-full ${barBg}`}>
-                  <motion.div
-                    initial={{ width: 0 }}
-                    animate={{ width: count > 0 ? `${Math.min(count * 10, 100)}%` : '0%' }}
-                    transition={{ duration: 0.7, ease: 'easeOut' }}
-                    className={`h-1.5 rounded-full ${bar}`}
-                  />
-                </div>
-                <span className={`text-xs font-medium mt-1 block ${iconColor}`}>
-                  {count > 0 ? `${count} registrado${count !== 1 ? 's' : ''}` : 'Sin registros aún'}
-                </span>
-              </div>
-              {count > 0 && (
-                <div className={`w-14 h-14 rounded-2xl ${iconBg} flex items-center justify-center shrink-0 backdrop-blur-sm`}>
-                  <span className={`text-3xl font-black ${iconColor}`}>{count}</span>
-                </div>
-              )}
-            </div>
-          </motion.button>
-        )
-      })()}
-
-      {/* ── Remaining tiles ── */}
-      {rest.length > 0 && (
-      <div className="grid grid-cols-2 gap-3">
-        {rest.map(({ category, icon: Icon, ages, cardBg, iconBg, iconColor, bar, barBg, textColor }, i) => {
+      {/* ── Category tiles: even grid, no category shown bigger than the rest ── */}
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+        {TILES.map(({ category, icon: Icon, ages, cardBg, iconBg, iconColor, bar, barBg, textColor }, i) => {
           const count = todayCounts[category] ?? 0
-          const isTrailingOdd = rest.length % 2 === 1 && i === rest.length - 1
+          const isTrailingOdd = TILES.length % 2 === 1 && i === TILES.length - 1
           return (
             <motion.button
               key={category}
               onClick={() => openCategory(category)}
               whileTap={{ scale: 0.97 }}
               whileHover={{ scale: 1.02 }}
-              className={`relative overflow-hidden rounded-2xl p-5 text-left shadow-md ${cardBg} ${isTrailingOdd ? 'col-span-2' : ''}`}
+              className={`relative overflow-hidden rounded-2xl p-5 text-left shadow-md ${cardBg} ${isTrailingOdd ? 'col-span-2 lg:col-span-1' : ''}`}
             >
               <div>
                 <div className={`w-12 h-12 rounded-2xl ${iconBg} flex items-center justify-center mb-4 backdrop-blur-sm`}>
@@ -1155,7 +1190,6 @@ export default function CheckInPage() {
           )
         })}
       </div>
-      )}
 
       {/* ── Padrón general: niños ya existentes en la base de datos ── */}
       <div className="space-y-2 pt-1">
@@ -1163,7 +1197,7 @@ export default function CheckInPage() {
           <div className="flex items-center gap-2">
             <Users size={13} className="text-gray-400" />
             <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">
-              Niños registrados en el sistema{totalChildren !== null ? ` · ${totalChildren}` : ''}
+              Niños registrados en el sistema{allChildren.length > 0 ? ` · ${allChildren.length}` : ''}
             </p>
           </div>
           {showAllChildren && (
@@ -1183,27 +1217,25 @@ export default function CheckInPage() {
             className="w-full flex items-center justify-center gap-2 py-3 text-sm font-medium text-gray-600 bg-white border-2 border-gray-200 rounded-2xl hover:bg-gray-50 transition-colors"
           >
             <Users size={15} />
-            {loadingAllChildren ? 'Cargando…' : `Ver padrón completo${totalChildren !== null ? ` (${totalChildren})` : ''}`}
+            {loadingAllChildren ? 'Cargando…' : `Ver padrón completo${allChildren.length > 0 ? ` (${allChildren.length})` : ''}`}
           </button>
+        ) : allChildren.length === 0 ? (
+          <p className="text-center text-gray-400 py-6 text-sm bg-white rounded-2xl border border-gray-200">
+            No hay niños registrados todavía.
+          </p>
         ) : (
-          <div className="space-y-2.5">
-            {allChildren.length === 0 ? (
-              <p className="text-center text-gray-400 py-6 text-sm bg-white rounded-2xl border border-gray-200">
-                No hay niños registrados todavía.
-              </p>
-            ) : (
-              allChildren.map((child) => (
-                <ChildCard
-                  key={child.id}
-                  child={child}
-                  teamColor={teamColor}
-                  isSelected={selectedId === child.id}
-                  onSelect={() => setSelectedId(child.id)}
-                  onDeselect={() => setSelectedId(null)}
-                  onRegistered={handleRegistered}
-                />
-              ))
-            )}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-2.5 items-start">
+            {allChildren.map((child) => (
+              <ChildCard
+                key={child.id}
+                child={child}
+                teamColor={teamColor}
+                isSelected={selectedId === child.id}
+                onSelect={() => setSelectedId(child.id)}
+                onDeselect={() => setSelectedId(null)}
+                onRegistered={handleRegistered}
+              />
+            ))}
           </div>
         )}
       </div>
@@ -1240,17 +1272,54 @@ export default function CheckInPage() {
                       <span className={`inline-flex items-center rounded-full border font-semibold text-xs px-2 py-0.5 ${CATEGORY_COLORS[rec.category]}`}>
                         {CATEGORY_LABELS[rec.category]}
                       </span>
-                      {rec.badge_number && (
-                        <span className="text-xs text-gray-400 font-medium">
-                          #{rec.badge_number}
+                      {rec.badge_number && editingBadgeRecordId === rec.id ? (
+                        <span className="flex items-center gap-1">
+                          <input
+                            type="number"
+                            inputMode="numeric"
+                            min={1}
+                            autoFocus
+                            value={badgeEditValue}
+                            onChange={(e) => setBadgeEditValue(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') saveBadgeEdit(rec.id)
+                              if (e.key === 'Escape') setEditingBadgeRecordId(null)
+                            }}
+                            className="w-14 px-1.5 py-0.5 text-xs font-bold border-2 border-indigo-300 rounded-md focus:border-indigo-500 focus:outline-none text-center"
+                          />
+                          <button
+                            onClick={() => saveBadgeEdit(rec.id)}
+                            disabled={savingBadgeEdit}
+                            className="p-1 text-emerald-500 hover:text-emerald-600 rounded-md hover:bg-emerald-50"
+                          >
+                            <Check size={13} />
+                          </button>
+                          <button
+                            onClick={() => setEditingBadgeRecordId(null)}
+                            className="p-1 text-gray-300 hover:text-gray-500 rounded-md hover:bg-gray-100"
+                          >
+                            <X size={13} />
+                          </button>
                         </span>
-                      )}
+                      ) : rec.badge_number ? (
+                        <button
+                          onClick={() => startBadgeEdit(rec)}
+                          className="flex items-center gap-1 pl-2 pr-1.5 py-0.5 text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-full hover:bg-indigo-100 hover:border-indigo-300 active:scale-95 transition-all"
+                          title="Editar número de gafete"
+                        >
+                          #{rec.badge_number}
+                          <Pencil size={10} className="text-indigo-400" />
+                        </button>
+                      ) : null}
                       {rec.pager_number && (
                         <span className="text-xs text-gray-400 font-medium">
                           📟 #{rec.pager_number}
                         </span>
                       )}
                     </div>
+                    {editingBadgeRecordId === rec.id && badgeEditError && (
+                      <p className="text-[11px] text-red-600 mt-1">{badgeEditError}</p>
+                    )}
                   </div>
 
                   {isConfirming ? (

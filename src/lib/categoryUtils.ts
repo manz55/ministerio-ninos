@@ -1,5 +1,5 @@
 import { differenceInYears, isValid, parseISO } from 'date-fns'
-import type { Category } from '../types/domain'
+import { isCorderitos, type Category } from '../types/domain'
 
 /**
  * Returns null (instead of silently guessing) when birthDate is missing or
@@ -15,14 +15,15 @@ export function getCategoryFromBirthDate(birthDate: string | null | undefined): 
   const age = differenceInYears(new Date(), parsed)
   if (age < 0) return null
 
-  if (age <= 3) return 'corderitos'
+  if (age <= 1) return 'corderitos_0_2'
+  if (age <= 3) return 'corderitos_2_4'
   if (age <= 6) return 'hormiguitas'
   if (age <= 9) return 'saltamontes'
   return 'exploradores'
 }
 
 export function requiresBadge(category: Category | null): boolean {
-  return category !== null && category !== 'corderitos'
+  return category !== null && !isCorderitos(category)
 }
 
 export function requiresPager(category: Category | null): boolean {
@@ -30,7 +31,7 @@ export function requiresPager(category: Category | null): boolean {
 }
 
 export function requiresCheckout(category: Category | null): boolean {
-  return category !== null && category !== 'corderitos'
+  return category !== null && !isCorderitos(category)
 }
 
 /**

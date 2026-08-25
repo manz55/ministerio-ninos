@@ -6,27 +6,36 @@ export const TEAM_COLOR_LABELS: Record<TeamColor, string> = {
   azul: 'Azul',
 }
 
-export type Category = 'corderitos' | 'hormiguitas' | 'saltamontes' | 'exploradores'
+export type Category = 'corderitos_0_2' | 'corderitos_2_4' | 'hormiguitas' | 'saltamontes' | 'exploradores'
 
-// All categories that get checked in (corderitos included — parent stays with the child, no badge/pager)
-export const ACTIVE_CATEGORIES: Category[] = ['corderitos', 'hormiguitas', 'saltamontes', 'exploradores']
+// All categories that get checked in (corderitos_* included — parent stays with the child, no badge/pager)
+export const ACTIVE_CATEGORIES: Category[] = ['corderitos_0_2', 'corderitos_2_4', 'hormiguitas', 'saltamontes', 'exploradores']
+
+// The two "parent stays with the child" groups — no badge, no checkout, pager optional.
+export const CORDERITOS_CATEGORIES: Category[] = ['corderitos_0_2', 'corderitos_2_4']
+export function isCorderitos(category: Category | null): boolean {
+  return category !== null && CORDERITOS_CATEGORIES.includes(category)
+}
 
 export const CATEGORY_LABELS: Record<Category, string> = {
-  corderitos: 'Corderitos',
+  corderitos_0_2: 'Corderitos 0-2 años',
+  corderitos_2_4: 'Corderitos 2-4 años',
   hormiguitas: 'Hormiguitas',
   saltamontes: 'Saltamontes',
   exploradores: 'Exploradores',
 }
 
 export const CATEGORY_AGE_RANGES: Record<Category, { min: number; max: number }> = {
-  corderitos: { min: 1, max: 3 },
+  corderitos_0_2: { min: 0, max: 1 },
+  corderitos_2_4: { min: 2, max: 3 },
   hormiguitas: { min: 4, max: 6 },
   saltamontes: { min: 7, max: 9 },
   exploradores: { min: 10, max: 12 },
 }
 
 export const NEXT_CATEGORY: Record<Category, Category | null> = {
-  corderitos: 'hormiguitas',
+  corderitos_0_2: 'corderitos_2_4',
+  corderitos_2_4: 'hormiguitas',
   hormiguitas: 'saltamontes',
   saltamontes: 'exploradores',
   exploradores: null,
@@ -55,7 +64,8 @@ export interface Profile {
 }
 
 export const CATEGORY_COLORS: Record<Category, string> = {
-  corderitos: 'bg-pink-100 text-pink-800 border-pink-200',
+  corderitos_0_2: 'bg-pink-100 text-pink-800 border-pink-200',
+  corderitos_2_4: 'bg-rose-100 text-rose-800 border-rose-200',
   hormiguitas: 'bg-yellow-100 text-yellow-800 border-yellow-200',
   saltamontes: 'bg-green-100 text-green-800 border-green-200',
   exploradores: 'bg-blue-100 text-blue-800 border-blue-200',

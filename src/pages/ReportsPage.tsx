@@ -3,11 +3,12 @@ import { format, subWeeks, startOfWeek, endOfWeek } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  Users, RefreshCw, Download, AlertTriangle, FileText,
-  Bug, Zap, Compass, Baby, TrendingUp, ChevronDown, ChevronUp, User, Trash2, X, CalendarRange,
+  Users, RefreshCw, Download, AlertTriangle, FileText, PartyPopper, Check, Pencil,
+  Bug, Zap, Compass, Baby, PersonStanding, TrendingUp, ChevronDown, ChevronUp, User, Trash2, X, CalendarRange,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { CATEGORY_LABELS, CATEGORY_COLORS, ACTIVE_CATEGORIES, type Category } from '../types/domain'
+import { CATEGORY_LABELS, CATEGORY_COLORS, ACTIVE_CATEGORIES, NEXT_CATEGORY, type Category } from '../types/domain'
+import { hasCategoryChanged, getCategoryFromBirthDate } from '../lib/categoryUtils'
 import { DatePicker } from '../components/ui/DatePicker'
 import { AnimatedBlobBackground } from '../components/ui/AnimatedBlobBackground'
 import { fetchAttendanceRange, exportRangeCSV, exportRangePDF, MAX_RANGE_ROWS } from '../lib/exportUtils'
@@ -20,7 +21,8 @@ type WeekRow = {
   week_start: string
   week_end: string
   total: number
-  corderitos: number
+  corderitos_0_2: number
+  corderitos_2_4: number
   hormiguitas: number
   saltamontes: number
   exploradores: number
@@ -43,6 +45,16 @@ type MedicalChild = {
   parents: { full_name: string; phone: string }
 }
 
+type RosterChild = {
+  id: string
+  full_name: string
+  birth_date: string | null
+  category: Category | null
+  allergies: string | null
+  medical_notes: string | null
+  parents: { full_name: string; phone: string } | null
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const todayStr = format(new Date(), 'yyyy-MM-dd')
@@ -60,7 +72,7 @@ function getStoredCoordinatorForDate(dateStr: string): string {
 }
 
 function emptyCount(): CategoryCount {
-  return { corderitos: 0, hormiguitas: 0, saltamontes: 0, exploradores: 0 }
+  return { corderitos_0_2: 0, corderitos_2_4: 0, hormiguitas: 0, saltamontes: 0, exploradores: 0 }
 }
 
 function downloadCSV(content: string, filename: string) {
@@ -74,7 +86,8 @@ function downloadCSV(content: string, filename: string) {
 // ─── Category config for display ─────────────────────────────────────────────
 
 const CAT_CONFIG: Record<string, { icon: React.ComponentType<{ className?: string }>, color: string, bg: string, bar: string }> = {
-  corderitos:  { icon: Baby,    color: 'text-pink-600',    bg: 'bg-pink-50',     bar: 'bg-pink-500'    },
+  corderitos_0_2: { icon: Baby,           color: 'text-pink-600', bg: 'bg-pink-50', bar: 'bg-pink-500' },
+  corderitos_2_4: { icon: PersonStanding, color: 'text-rose-600', bg: 'bg-rose-50', bar: 'bg-rose-500' },
   hormiguitas: { icon: Bug,     color: 'text-emerald-600', bg: 'bg-emerald-50',  bar: 'bg-emerald-500' },
   saltamontes: { icon: Zap,     color: 'text-amber-600',   bg: 'bg-amber-50',    bar: 'bg-amber-500'   },
   exploradores:{ icon: Compass, color: 'text-sky-600',     bg: 'bg-sky-50',      bar: 'bg-sky-500'     },
@@ -184,9 +197,14 @@ export default function ReportsPage() {
   const [lastRefresh, setLastRefresh]   = useState(new Date())
   const [medicalChildren, setMedicalChildren] = useState<MedicalChild[]>([])
   const [showMedical, setShowMedical]   = useState(false)
+  const [graduatingChildren, setGraduatingChildren] = useState<RosterChild[]>([])
+  const [showGraduating, setShowGraduating] = useState(false)
   const [catFilter, setCatFilter]       = useState<Category | 'all'>('all')
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
   const [deleting, setDeleting]         = useState(false)
+  const [editingBadgeId, setEditingBadgeId] = useState<string | null>(null)
+  const [badgeEditValue, setBadgeEditValue] = useState('')
+  const [badgeEditError, setBadgeEditError] = useState<string | null>(null)
 
   const [rangeFrom, setRangeFrom] = useState(format(subWeeks(new Date(), 1), 'yyyy-MM-dd'))
   const [rangeTo, setRangeTo]     = useState(todayStr)
@@ -227,11 +245,13 @@ export default function ReportsPage() {
   const fetchMedical = useCallback(async () => {
     const { data } = await supabase
       .from('children')
-      .select('id, full_name, allergies, medical_notes, parents(full_name, phone)')
+      .select('id, full_name, birth_date, category, allergies, medical_notes, parents(full_name, phone)')
       .order('full_name')
+    const roster = (data ?? []) as unknown as RosterChild[]
     setMedicalChildren(
-      ((data ?? []) as MedicalChild[]).filter((c) => c.allergies || c.medical_notes)
+      (roster as unknown as MedicalChild[]).filter((c) => c.allergies || c.medical_notes)
     )
+    setGraduatingChildren(roster.filter((c) => hasCategoryChanged(c)))
   }, [])
 
   const fetchHistory = useCallback(async () => {
@@ -261,7 +281,8 @@ export default function ReportsPage() {
           week_start: start,
           week_end: end,
           total: Object.values(counts).reduce((s, n) => s + n, 0),
-          corderitos:   counts.corderitos,
+          corderitos_0_2: counts.corderitos_0_2,
+          corderitos_2_4: counts.corderitos_2_4,
           hormiguitas:  counts.hormiguitas,
           saltamontes:  counts.saltamontes,
           exploradores: counts.exploradores,
@@ -316,9 +337,35 @@ export default function ReportsPage() {
     setConfirmDeleteId(null)
   }
 
+  function startBadgeEdit(r: LiveRecord) {
+    setEditingBadgeId(r.id)
+    setBadgeEditValue(String(r.badge_number ?? ''))
+    setBadgeEditError(null)
+  }
+
+  async function saveBadgeEdit(id: string) {
+    const num = parseInt(badgeEditValue, 10)
+    if (!badgeEditValue || isNaN(num) || num <= 0) { setBadgeEditError('Número inválido.'); return }
+    const { data, error } = await supabase
+      .from('attendance')
+      .update({ badge_number: num })
+      .eq('id', id)
+      .select('id')
+    if (error || !data || data.length === 0) {
+      setBadgeEditError(
+        error?.code === '23505' && error.message.includes('attendance_badge_category_unique')
+          ? `El gafete #${num} ya está en uso hoy en esa categoría.`
+          : 'No se pudo guardar. Intenta de nuevo.'
+      )
+      return
+    }
+    setLiveRecords((prev) => prev.map((r) => (r.id === id ? { ...r, badge_number: num } : r)))
+    setEditingBadgeId(null)
+  }
+
   function exportHistoryCSV() {
-    const headers = ['Semana inicio', 'Semana fin', 'Total', 'Corderitos', 'Hormiguitas', 'Saltamontes', 'Exploradores']
-    const rows = weekHistory.map((r) => [r.week_start, r.week_end, r.total, r.corderitos, r.hormiguitas, r.saltamontes, r.exploradores])
+    const headers = ['Semana inicio', 'Semana fin', 'Total', 'Corderitos 0-2', 'Corderitos 2-4', 'Hormiguitas', 'Saltamontes', 'Exploradores']
+    const rows = weekHistory.map((r) => [r.week_start, r.week_end, r.total, r.corderitos_0_2, r.corderitos_2_4, r.hormiguitas, r.saltamontes, r.exploradores])
     downloadCSV([headers, ...rows].map((row) => row.map(String).join(',')).join('\n'), 'historial-asistencia.csv')
   }
 
@@ -582,13 +629,43 @@ export default function ReportsPage() {
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className="font-semibold text-gray-900 text-sm leading-tight">{r.children?.full_name}</p>
-                      {r.badge_number !== null && (
-                        <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded-md">
-                          #{r.badge_number}
+                      {editingBadgeId === r.id ? (
+                        <span className="flex items-center gap-1">
+                          <input
+                            type="number"
+                            inputMode="numeric"
+                            min={1}
+                            autoFocus
+                            value={badgeEditValue}
+                            onChange={(e) => setBadgeEditValue(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') saveBadgeEdit(r.id)
+                              if (e.key === 'Escape') setEditingBadgeId(null)
+                            }}
+                            className="w-14 px-1.5 py-0.5 text-xs font-bold border-2 border-indigo-300 rounded-md focus:border-indigo-500 focus:outline-none text-center"
+                          />
+                          <button onClick={() => saveBadgeEdit(r.id)} className="p-1 text-emerald-500 hover:text-emerald-600 rounded-md hover:bg-emerald-50">
+                            <Check size={13} />
+                          </button>
+                          <button onClick={() => setEditingBadgeId(null)} className="p-1 text-gray-300 hover:text-gray-500 rounded-md hover:bg-gray-100">
+                            <X size={13} />
+                          </button>
                         </span>
-                      )}
+                      ) : r.badge_number !== null ? (
+                        <button
+                          onClick={() => startBadgeEdit(r)}
+                          title="Editar número de gafete"
+                          className="flex items-center gap-1 pl-2 pr-1.5 py-0.5 text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-full hover:bg-indigo-100 hover:border-indigo-300 active:scale-95 transition-all"
+                        >
+                          #{r.badge_number}
+                          <Pencil size={10} className="text-indigo-400" />
+                        </button>
+                      ) : null}
                     </div>
                     <p className="text-xs text-gray-400 mt-0.5">{r.children?.parents?.full_name}</p>
+                    {editingBadgeId === r.id && badgeEditError && (
+                      <p className="text-[11px] text-red-600 mt-1">{badgeEditError}</p>
+                    )}
                   </div>
 
                   {isConfirming ? (
@@ -693,6 +770,67 @@ export default function ReportsPage() {
                   )}
                 </div>
               ))}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </section>
+
+      {/* ── Niños que deben graduar de categoría ── */}
+      <section className="space-y-3">
+        <button
+          onClick={() => setShowGraduating((v) => !v)}
+          className="w-full flex items-center justify-between p-4 bg-amber-50 border border-amber-200 rounded-2xl hover:bg-amber-100 transition-colors"
+        >
+          <div className="flex items-center gap-2 text-amber-700">
+            <PartyPopper size={15} />
+            <span className="font-semibold text-sm">
+              Niños que deben graduar
+              {graduatingChildren.length > 0 && (
+                <span className="ml-2 bg-amber-200 text-amber-800 text-xs font-bold px-2 py-0.5 rounded-full">
+                  {graduatingChildren.length}
+                </span>
+              )}
+            </span>
+          </div>
+          {showGraduating ? <ChevronUp size={14} className="text-amber-400" /> : <ChevronDown size={14} className="text-amber-400" />}
+        </button>
+
+        <AnimatePresence>
+          {showGraduating && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              className="space-y-2 overflow-hidden"
+            >
+              {graduatingChildren.length === 0 && (
+                <p className="text-sm text-gray-400 text-center py-4">Nadie por graduar por ahora.</p>
+              )}
+              {graduatingChildren.map((child) => {
+                const nextCat = child.category ? NEXT_CATEGORY[child.category] : null
+                const computedCat = getCategoryFromBirthDate(child.birth_date)
+                return (
+                  <div key={child.id} className="bg-white rounded-xl border-2 border-amber-200 p-4 flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="font-bold text-gray-900 text-sm truncate">{child.full_name}</p>
+                      <p className="text-xs text-gray-500">{child.parents?.full_name ?? 'Sin responsable'}</p>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-xs font-semibold shrink-0">
+                      {child.category && (
+                        <span className={`px-2 py-0.5 rounded-full border ${CATEGORY_COLORS[child.category]}`}>
+                          {CATEGORY_LABELS[child.category]}
+                        </span>
+                      )}
+                      <span className="text-amber-500">→</span>
+                      {(computedCat ?? nextCat) && (
+                        <span className={`px-2 py-0.5 rounded-full border ${CATEGORY_COLORS[(computedCat ?? nextCat)!]}`}>
+                          {CATEGORY_LABELS[(computedCat ?? nextCat)!]}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
             </motion.div>
           )}
         </AnimatePresence>

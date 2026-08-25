@@ -6,7 +6,7 @@ import { getCategoryFromBirthDate } from '../../lib/categoryUtils'
 import { uploadPhoto } from '../../lib/photo'
 import { CategoryBadge } from '../ui/CategoryBadge'
 import { PhotoCapture } from '../ui/PhotoCapture'
-import { GUARDIAN_RELATIONSHIP_LABELS, type Category, type GuardianRelationship, type ParentRow, type ChildRow } from '../../types/domain'
+import { GUARDIAN_RELATIONSHIP_LABELS, isCorderitos, type Category, type GuardianRelationship, type ParentRow, type ChildRow } from '../../types/domain'
 
 interface ChildDraft {
   key: string
@@ -286,7 +286,7 @@ export function NewFamilyStep({ prefillName = '', onSaved, onCancel }: Props) {
                 )}
               </div>
 
-              {category === 'corderitos' && (
+              {isCorderitos(category) && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1.5">
                     ¿Ya va solo al baño?

@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { NavLink } from 'react-router-dom'
 import { motion } from 'framer-motion'
 
@@ -11,10 +12,38 @@ interface DockProps {
   items: DockItem[]
 }
 
+/**
+ * True when the on-screen keyboard is very likely open: iOS Safari doesn't
+ * resize `window.innerHeight` when the keyboard shows, but it does shrink
+ * `visualViewport.height` — that gap is what we use to detect it, since a
+ * `position: fixed` dock otherwise stays put and ends up sitting on top of
+ * whatever input the keyboard was opened for.
+ */
+function useKeyboardOpen() {
+  const [open, setOpen] = useState(false)
+
+  useEffect(() => {
+    const vv = window.visualViewport
+    if (!vv) return
+    function handleResize() {
+      setOpen(window.innerHeight - vv!.height > 150)
+    }
+    handleResize()
+    vv.addEventListener('resize', handleResize)
+    return () => vv.removeEventListener('resize', handleResize)
+  }, [])
+
+  return open
+}
+
 export default function Dock({ items }: DockProps) {
+  const keyboardOpen = useKeyboardOpen()
+
   return (
     <div
-      className="fixed bottom-0 left-0 right-0 flex justify-center z-50 pointer-events-none px-2"
+      className={`fixed bottom-0 left-0 right-0 flex justify-center z-50 pointer-events-none px-2 transition-transform duration-200 ${
+        keyboardOpen ? 'translate-y-full' : 'translate-y-0'
+      }`}
       style={{ paddingBottom: 'max(16px, env(safe-area-inset-bottom))' }}
     >
       <div className="pointer-events-auto flex items-end gap-0.5 sm:gap-1 px-1.5 sm:px-4 py-2.5 sm:py-3 rounded-3xl border border-gray-200/80 bg-white/80 backdrop-blur-xl shadow-xl shadow-black/10 max-w-full overflow-x-auto">
