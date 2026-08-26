@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo, startTransition } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -583,7 +584,8 @@ export default function CheckInPage() {
   const [teamConfirmed, setTeamConfirmed]   = useState(() => getStoredTeamForToday() !== null)
   const [coordinatorName, setCoordinatorName] = useState(getStoredCoordinatorForToday)
   const [editingCoordinator, setEditingCoordinator] = useState(false)
-  const [showNewFamily, setShowNewFamily] = useState(false)
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [showNewFamily, setShowNewFamily] = useState(() => searchParams.get('nueva') !== null)
 
   // ── Búsqueda global ──
   const [globalSearch, setGlobalSearch] = useState('')
@@ -759,6 +761,7 @@ export default function CheckInPage() {
   // leaving and re-entering the category or re-typing the search.
   async function handleFamilySaved() {
     setShowNewFamily(false)
+    if (searchParams.get('nueva') !== null) setSearchParams({})
     if (activeCategory) {
       openCategory(activeCategory)
     }
@@ -846,6 +849,11 @@ export default function CheckInPage() {
   )
 
   const isSearching = debouncedGlobal.length >= 2
+  // Debounce means there's a brief window where the input already shows what
+  // was typed but the results haven't caught up yet — the dots (same visual
+  // language as a chat app's "typing…" bubble) fill that gap instead of the
+  // list just sitting there stale for 280ms.
+  const isTyping = globalSearch.trim().length >= 2 && globalSearch.trim() !== debouncedGlobal
 
   // Team must be confirmed before anything else each day
   if (!teamConfirmed) {
@@ -856,7 +864,7 @@ export default function CheckInPage() {
     return (
       <NewFamilyStep
         onSaved={handleFamilySaved}
-        onCancel={() => setShowNewFamily(false)}
+        onCancel={() => { setShowNewFamily(false); if (searchParams.get('nueva') !== null) setSearchParams({}) }}
       />
     )
   }
@@ -1072,7 +1080,20 @@ export default function CheckInPage() {
 
       {/* ── Búsqueda global ── */}
       <div className="relative">
-        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={20} />
+        {isTyping ? (
+          <div className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center gap-0.5 pointer-events-none">
+            {[0, 1, 2].map((i) => (
+              <motion.span
+                key={i}
+                className="w-1.5 h-1.5 rounded-full bg-indigo-400"
+                animate={{ y: [0, -4, 0] }}
+                transition={{ duration: 0.6, repeat: Infinity, delay: i * 0.15 }}
+              />
+            ))}
+          </div>
+        ) : (
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={20} />
+        )}
         <input
           type="text"
           value={globalSearch}
@@ -1092,7 +1113,7 @@ export default function CheckInPage() {
 
       {/* ── Resultados de búsqueda global ── */}
       {isSearching ? (
-        <div className="space-y-2.5">
+        <div className={`space-y-2.5 transition-opacity ${isTyping ? 'opacity-50' : 'opacity-100'}`}>
           {loadingAllChildren && allChildren.length === 0 && (
             <p className="text-center text-gray-400 py-8 text-base">Cargando padrón…</p>
           )}
