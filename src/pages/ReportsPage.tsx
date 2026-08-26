@@ -744,11 +744,12 @@ export default function ReportsPage() {
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: 'auto' }}
               exit={{ opacity: 0, height: 0 }}
-              className="space-y-2 overflow-hidden"
+              className="overflow-hidden"
             >
               {medicalChildren.length === 0 && (
                 <p className="text-sm text-gray-400 text-center py-4">Ningún niño tiene alertas registradas.</p>
               )}
+              <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-2 items-start">
               {medicalChildren.map((child) => (
                 <div key={child.id} className="bg-white rounded-xl border-2 border-red-200 p-4 space-y-2">
                   <div className="flex items-start justify-between gap-2">
@@ -770,6 +771,7 @@ export default function ReportsPage() {
                   )}
                 </div>
               ))}
+              </div>
             </motion.div>
           )}
         </AnimatePresence>
@@ -801,11 +803,12 @@ export default function ReportsPage() {
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: 'auto' }}
               exit={{ opacity: 0, height: 0 }}
-              className="space-y-2 overflow-hidden"
+              className="overflow-hidden"
             >
               {graduatingChildren.length === 0 && (
                 <p className="text-sm text-gray-400 text-center py-4">Nadie por graduar por ahora.</p>
               )}
+              <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-2 items-start">
               {graduatingChildren.map((child) => {
                 const nextCat = child.category ? NEXT_CATEGORY[child.category] : null
                 const computedCat = getCategoryFromBirthDate(child.birth_date)
@@ -831,6 +834,7 @@ export default function ReportsPage() {
                   </div>
                 )
               })}
+              </div>
             </motion.div>
           )}
         </AnimatePresence>

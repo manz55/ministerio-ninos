@@ -10,7 +10,7 @@ import { CoordinatorRequestButton } from '../ui/CoordinatorRequestButton'
 import { signOut } from '../../lib/auth'
 import type { Profile } from '../../types/domain'
 
-const CONTAINER = 'max-w-4xl lg:max-w-6xl mx-auto'
+const CONTAINER = 'max-w-4xl lg:max-w-6xl xl:max-w-[88rem] mx-auto'
 
 const maestroNavItems = [
   { icon: ClipboardList, label: 'Registro', to: '/registro' },

@@ -878,7 +878,7 @@ function RosterPanel({ onClose, initialFilter }: { onClose: () => void; initialF
       {!loading && filtered.length === 0 && (
         <p className="text-center text-gray-400 py-10 bg-white rounded-2xl border border-gray-200">Nada que mostrar aquí.</p>
       )}
-      <div className="space-y-2">
+      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-2 items-start">
         {filtered.map((c) => <RosterRow key={c.id} child={c} onChanged={fetchAll} />)}
       </div>
     </div>
@@ -1079,7 +1079,7 @@ export default function FamiliesPage() {
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          className="space-y-2"
+          className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-2 items-start"
         >
           {displayList.map((family) => (
             <FamilyListItem key={family.id} family={family} onSelect={() => setSelected(family)} />

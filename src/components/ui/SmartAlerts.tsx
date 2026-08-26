@@ -3,7 +3,8 @@ import { Link } from 'react-router-dom'
 import { formatDistanceToNow } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Sparkles, GraduationCap, Check, FileWarning, ArrowRight, Wand2, AlertCircle, CornerDownLeft, Inbox } from 'lucide-react'
+import { GraduationCap, Check, FileWarning, ArrowRight, Wand2, AlertCircle, CornerDownLeft, Inbox } from 'lucide-react'
+import { CoderIcon } from './CoderIcon'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../lib/auth'
 import { getCategoryFromBirthDate, hasCategoryChanged } from '../../lib/categoryUtils'
@@ -210,7 +211,7 @@ export function SmartAlerts() {
               : 'bg-indigo-50 group-hover:bg-indigo-100'
           }`}
         >
-          <Sparkles size={19} className={pendingCount > 0 ? 'text-white' : 'text-indigo-400'} />
+          <CoderIcon size={19} className={pendingCount > 0 ? 'text-white' : 'text-indigo-400'} />
         </motion.div>
         {pendingCount > 0 && (
           <span
@@ -233,7 +234,7 @@ export function SmartAlerts() {
           >
             <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2">
               <div className="w-7 h-7 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-500 flex items-center justify-center shrink-0">
-                <Sparkles size={13} className="text-white" />
+                <CoderIcon size={13} className="text-white" />
               </div>
               <div>
                 <p className="text-sm font-bold text-gray-900 leading-tight">Coder</p>

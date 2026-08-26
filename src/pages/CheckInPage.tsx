@@ -935,7 +935,7 @@ export default function CheckInPage() {
         ) : (
           <>
             {filteredChildren.exact.length > 0 && (
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-2.5 items-start">
+              <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-2.5 items-start">
                 {filteredChildren.exact.map((child) => (
                   <ChildCard
                     key={child.id}
@@ -952,7 +952,7 @@ export default function CheckInPage() {
             {filteredChildren.suggestions.length > 0 && (
               <div className="space-y-2.5 pt-1">
                 <p className="text-xs font-bold text-gray-400 uppercase tracking-widest px-1">¿Quisiste decir…?</p>
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-2.5 items-start">
+                <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-2.5 items-start">
                   {filteredChildren.suggestions.map((child) => (
                     <ChildCard
                       key={child.id}
@@ -1111,7 +1111,7 @@ export default function CheckInPage() {
             </div>
           )}
           {globalResults.exact.length > 0 && (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-2.5 items-start">
+            <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-2.5 items-start">
               {globalResults.exact.map((child) => (
                 <ChildCard
                   key={child.id}
@@ -1128,7 +1128,7 @@ export default function CheckInPage() {
           {globalResults.suggestions.length > 0 && (
             <div className="space-y-2.5 pt-1">
               <p className="text-xs font-bold text-gray-400 uppercase tracking-widest px-1">¿Quisiste decir…?</p>
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-2.5 items-start">
+              <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-2.5 items-start">
                 {globalResults.suggestions.map((child) => (
                   <ChildCard
                     key={child.id}
@@ -1161,7 +1161,7 @@ export default function CheckInPage() {
       </p>
 
       {/* ── Category tiles: even grid, no category shown bigger than the rest ── */}
-      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
         {TILES.map(({ category, icon: Icon, ages, cardBg, iconBg, iconColor, bar, barBg, textColor }, i) => {
           const count = todayCounts[category] ?? 0
           const isTrailingOdd = TILES.length % 2 === 1 && i === TILES.length - 1
@@ -1231,7 +1231,7 @@ export default function CheckInPage() {
             No hay niños registrados todavía.
           </p>
         ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-2.5 items-start">
+          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-2.5 items-start">
             {allChildren.map((child) => (
               <ChildCard
                 key={child.id}
