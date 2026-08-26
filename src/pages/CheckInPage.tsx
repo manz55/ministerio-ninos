@@ -16,6 +16,8 @@ import { useDebounce } from '../hooks/useDebounce'
 import { BalloonBackground } from '../components/ui/BalloonBackground'
 import { FloatingIconsBackground } from '../components/ui/FloatingIconsBackground'
 import { SaltamontesBackground } from '../components/ui/SaltamontesBackground'
+import { Corderitos02Background } from '../components/ui/Corderitos02Background'
+import { Corderitos24Background } from '../components/ui/Corderitos24Background'
 import { SoftGradientBackground } from '../components/ui/SoftGradientBackground'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -872,9 +874,11 @@ export default function CheckInPage() {
         activeCategory === 'corderitos_2_4' ? 'bg-rose-50/70' :
         'bg-emerald-50/70'
       }`} />
-      {activeCategory === 'hormiguitas'  && <BalloonBackground />}
-      {activeCategory === 'exploradores' && <FloatingIconsBackground />}
-      {activeCategory === 'saltamontes'  && <SaltamontesBackground />}
+      {activeCategory === 'hormiguitas'    && <BalloonBackground />}
+      {activeCategory === 'exploradores'   && <FloatingIconsBackground />}
+      {activeCategory === 'saltamontes'    && <SaltamontesBackground />}
+      {activeCategory === 'corderitos_0_2' && <Corderitos02Background />}
+      {activeCategory === 'corderitos_2_4' && <Corderitos24Background />}
       <div className="relative z-10 space-y-4">
         {/* Header */}
         <div className="flex items-center gap-3 bg-white rounded-2xl border border-gray-200 px-4 py-3">

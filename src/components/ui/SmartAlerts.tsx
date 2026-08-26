@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Link } from 'react-router-dom'
 import { formatDistanceToNow } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { AnimatePresence, motion } from 'framer-motion'
-import { GraduationCap, Check, FileWarning, ArrowRight, Wand2, AlertCircle, CornerDownLeft, Inbox } from 'lucide-react'
+import { GraduationCap, Check, FileWarning, ArrowRight, Wand2, AlertCircle, CornerDownLeft, Inbox, X } from 'lucide-react'
 import { CoderIcon } from './CoderIcon'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../lib/auth'
@@ -40,7 +41,6 @@ export function SmartAlerts() {
   const [commandError, setCommandError] = useState<string | null>(null)
   const [pendingCommand, setPendingCommand] = useState<PendingCommand | null>(null)
   const [commandResult, setCommandResult] = useState<{ status: 'thinking' | 'done'; message: string } | null>(null)
-  const containerRef = useRef<HTMLDivElement>(null)
 
   const fetchChildren = useCallback(async () => {
     const { data } = await supabase.from('children').select('id, full_name, birth_date, category')
@@ -77,16 +77,9 @@ export function SmartAlerts() {
 
   useEffect(() => {
     if (!open) return
-    function onClick(e: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) setOpen(false)
-    }
     function onKey(e: KeyboardEvent) { if (e.key === 'Escape') setOpen(false) }
-    document.addEventListener('mousedown', onClick)
     document.addEventListener('keydown', onKey)
-    return () => {
-      document.removeEventListener('mousedown', onClick)
-      document.removeEventListener('keydown', onKey)
-    }
+    return () => { document.removeEventListener('keydown', onKey) }
   }, [open])
 
   // Alerts still open in the data, minus anything we're already acting on —
@@ -196,9 +189,9 @@ export function SmartAlerts() {
   }
 
   return (
-    <div className="relative shrink-0" ref={containerRef}>
+    <div className="relative shrink-0">
       <button
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => setOpen(true)}
         className="relative block group"
         title="Coder · avisos inteligentes"
       >
@@ -223,27 +216,41 @@ export function SmartAlerts() {
         )}
       </button>
 
+      {createPortal(
       <AnimatePresence>
         {open && (
           <motion.div
-            initial={{ opacity: 0, y: -8, scale: 0.97 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -8, scale: 0.97 }}
-            transition={{ duration: 0.15 }}
-            className="absolute right-0 top-full mt-2 w-[340px] max-h-[70vh] overflow-y-auto rounded-2xl border border-gray-200 bg-white/95 backdrop-blur-xl shadow-xl shadow-black/10 z-50"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/30 backdrop-blur-sm"
+            onClick={() => setOpen(false)}
           >
-            <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2">
-              <div className="w-7 h-7 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-500 flex items-center justify-center shrink-0">
-                <CoderIcon size={13} className="text-white" />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-lg max-h-[85vh] overflow-y-auto rounded-3xl bg-white shadow-2xl shadow-black/20"
+            >
+            <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-3 sticky top-0 bg-white/95 backdrop-blur-xl">
+              <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-500 flex items-center justify-center shrink-0 shadow-md shadow-indigo-500/20">
+                <CoderIcon size={20} className="text-white" />
               </div>
-              <div>
-                <p className="text-sm font-bold text-gray-900 leading-tight">Coder</p>
+              <div className="flex-1 min-w-0">
+                <p className="text-base font-black text-gray-900 leading-tight">Coder</p>
                 <p className="text-xs text-gray-400 leading-tight">Avisos detectados automáticamente</p>
               </div>
+              <button
+                onClick={() => setOpen(false)}
+                className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors shrink-0"
+              >
+                <X size={18} />
+              </button>
             </div>
 
             {/* ── Command bar: rule-based, no LLM — see coderCommands.ts ── */}
-            <div className="px-4 py-3 border-b border-gray-100 space-y-2">
+            <div className="px-5 py-4 border-b border-gray-100 space-y-2">
               <div className="relative">
                 <Wand2 size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-300" />
                 <input
@@ -307,14 +314,14 @@ export function SmartAlerts() {
             </div>
 
             {alerts.length === 0 && Object.keys(actions).length === 0 && missingBirthDate === 0 && requests.length === 0 ? (
-              <div className="px-4 py-8 text-center">
+              <div className="px-5 py-10 text-center">
                 <p className="text-sm text-gray-400">Todo al día ✨</p>
                 <p className="text-xs text-gray-300 mt-1">No hay avisos pendientes</p>
               </div>
             ) : (
               <div className="divide-y divide-gray-50">
                 {requests.map((r) => (
-                  <div key={r.id} className="px-4 py-3 flex items-start gap-2.5 bg-indigo-50/40">
+                  <div key={r.id} className="px-5 py-3.5 flex items-start gap-2.5 bg-indigo-50/40">
                     <Inbox size={16} className="text-indigo-500 shrink-0 mt-0.5" />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm text-gray-700 leading-snug">{r.message}</p>
@@ -334,7 +341,7 @@ export function SmartAlerts() {
                   </div>
                 ))}
                 {missingBirthDate > 0 && (
-                  <div className="px-4 py-3 flex items-start gap-2.5 bg-amber-50/60">
+                  <div className="px-5 py-3.5 flex items-start gap-2.5 bg-amber-50/60">
                     <FileWarning size={16} className="text-amber-500 shrink-0 mt-0.5" />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm text-gray-700 leading-snug">
@@ -360,7 +367,7 @@ export function SmartAlerts() {
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
                       exit={{ opacity: 0 }}
-                      className="px-4 py-3 flex items-center gap-2.5"
+                      className="px-5 py-3.5 flex items-center gap-2.5"
                     >
                       {a.status === 'thinking' ? (
                         <>
@@ -400,7 +407,7 @@ export function SmartAlerts() {
                 </AnimatePresence>
 
                 {alerts.map((a) => (
-                  <div key={a.id} className="px-4 py-3 flex items-start gap-2.5">
+                  <div key={a.id} className="px-5 py-3.5 flex items-start gap-2.5">
                     <span className="text-lg leading-none mt-0.5">🎉</span>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm text-gray-700 leading-snug">
@@ -419,9 +426,12 @@ export function SmartAlerts() {
                 ))}
               </div>
             )}
+            </motion.div>
           </motion.div>
         )}
-      </AnimatePresence>
+      </AnimatePresence>,
+      document.body
+      )}
     </div>
   )
 }
