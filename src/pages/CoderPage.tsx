@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { formatDistanceToNow } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -8,21 +8,8 @@ import {
   Inbox, UserPlus, Repeat, Pencil, CalendarDays,
 } from 'lucide-react'
 import { CoderIcon } from '../components/ui/CoderIcon'
-import { supabase } from '../lib/supabase'
-import { useAuth } from '../lib/auth'
-import { getCategoryFromBirthDate, hasCategoryChanged } from '../lib/categoryUtils'
-import { createChildSearcher, searchChildrenSplit } from '../lib/fuzzySearch'
-import { parseCommand, resolveCategoryLabel, parseSpanishDate } from '../lib/coderCommands'
-import { CATEGORY_LABELS, type Category, type CoordinatorRequest } from '../types/domain'
-
-type ChildRow = { id: string; full_name: string; birth_date: string | null; category: Category | null }
-type ActionStatus = 'thinking' | 'done'
-type ActionState = { status: ActionStatus; name: string; to: Category }
-
-type PendingCommand =
-  | { type: 'rename'; newName: string; candidates: ChildRow[] }
-  | { type: 'category'; target: Category; targetLabel: string; candidates: ChildRow[] }
-  | { type: 'birthdate'; isoDate: string; displayDate: string; candidates: ChildRow[] }
+import { CATEGORY_LABELS } from '../types/domain'
+import { useCoderState } from '../hooks/useCoderState'
 
 // Clicking one of these fills the command bar with its starter text instead
 // of just describing it — you still have to type the name (and category/
@@ -34,157 +21,21 @@ const CAPABILITIES = [
   { Icon: UserPlus, title: 'Crear familia nueva', to: '/registro?nueva=1' },
 ] as const
 
-// Full-page version of what used to be a header dropdown — this is
-// Coder's home: graduation alerts, missing-data nudges, maestro requests,
-// and the rule-based command bar, all in one place instead of squeezed
-// into a small popover. A slim badge (CoderHeaderLink) stays in the header
-// pointing back here so it's noticeable even off this page.
+// Full-page version of the same state MiniCoder (the header popover) drives
+// — this is Coder's home: graduation alerts, missing-data nudges, maestro
+// requests, and the rule-based command bar, all with room to breathe
+// instead of squeezed into a small popover.
 export default function CoderPage() {
-  const { session } = useAuth()
-  const [children, setChildren] = useState<ChildRow[]>([])
-  const [requests, setRequests] = useState<CoordinatorRequest[]>([])
-  const [resolvingId, setResolvingId] = useState<string | null>(null)
-  const [actions, setActions] = useState<Record<string, ActionState>>({})
-  const [commandText, setCommandText] = useState('')
-  const [commandError, setCommandError] = useState<string | null>(null)
-  const [pendingCommand, setPendingCommand] = useState<PendingCommand | null>(null)
-  const [commandResult, setCommandResult] = useState<{ status: 'thinking' | 'done'; message: string } | null>(null)
+  const {
+    resolvingId, actions, commandText, setCommandText, commandError, setCommandError,
+    pendingCommand, setPendingCommand, commandResult, alerts, missingBirthDate,
+    requests, resolveRequest, graduate, fillTemplate, submitCommand, executeCommand,
+  } = useCoderState()
   const commandInputRef = useRef<HTMLInputElement>(null)
 
-  function fillTemplate(template: string) {
-    setCommandText(template)
-    setCommandError(null)
-    setPendingCommand(null)
+  function fillAndFocus(template: string) {
+    fillTemplate(template)
     commandInputRef.current?.focus()
-  }
-
-  const fetchChildren = useCallback(async () => {
-    const { data } = await supabase.from('children').select('id, full_name, birth_date, category')
-    setChildren((data ?? []) as ChildRow[])
-  }, [])
-
-  const fetchRequests = useCallback(async () => {
-    const { data } = await supabase
-      .from('coordinator_requests')
-      .select('*, profiles!coordinator_requests_author_id_fkey(full_name)')
-      .eq('status', 'pendiente')
-      .order('created_at', { ascending: false })
-    setRequests((data ?? []) as CoordinatorRequest[])
-  }, [])
-
-  useEffect(() => { fetchChildren() }, [fetchChildren])
-  useEffect(() => { fetchRequests() }, [fetchRequests])
-
-  useEffect(() => {
-    const channel = supabase
-      .channel('coder-page-children-sync')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'children' }, () => fetchChildren())
-      .subscribe()
-    return () => { supabase.removeChannel(channel) }
-  }, [fetchChildren])
-
-  useEffect(() => {
-    const channel = supabase
-      .channel('coder-page-requests-sync')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'coordinator_requests' }, () => fetchRequests())
-      .subscribe()
-    return () => { supabase.removeChannel(channel) }
-  }, [fetchRequests])
-
-  const alerts = useMemo(
-    () =>
-      children
-        .filter(hasCategoryChanged)
-        .filter((c) => !(c.id in actions))
-        .map((c) => ({ id: c.id, name: c.full_name, to: getCategoryFromBirthDate(c.birth_date) as Category }))
-        .sort((a, b) => a.name.localeCompare(b.name)),
-    [children, actions]
-  )
-
-  const missingBirthDate = useMemo(() => children.filter((c) => !c.birth_date).length, [children])
-
-  async function resolveRequest(id: string) {
-    setResolvingId(id)
-    await supabase
-      .from('coordinator_requests')
-      .update({ status: 'resuelta', resolved_by: session?.user.id ?? null, resolved_at: new Date().toISOString() })
-      .eq('id', id)
-    setResolvingId(null)
-    setRequests((prev) => prev.filter((r) => r.id !== id))
-  }
-
-  async function graduate(a: { id: string; name: string; to: Category }) {
-    setActions((prev) => ({ ...prev, [a.id]: { status: 'thinking', name: a.name, to: a.to } }))
-    const { error } = await supabase.rpc('sync_child_category', { p_child_id: a.id, p_category: a.to })
-    if (error) {
-      setActions((prev) => { const next = { ...prev }; delete next[a.id]; return next })
-      return
-    }
-    await new Promise((r) => setTimeout(r, 550))
-    setActions((prev) => ({ ...prev, [a.id]: { status: 'done', name: a.name, to: a.to } }))
-    setTimeout(() => {
-      setActions((prev) => { const next = { ...prev }; delete next[a.id]; return next })
-    }, 2200)
-  }
-
-  function submitCommand() {
-    setCommandError(null)
-    setPendingCommand(null)
-    const parsed = parseCommand(commandText)
-    if (!parsed) {
-      setCommandError('No entendí ese comando. Toca una de las tarjetas de arriba para ver cómo escribirlo, o prueba: "cambiar categoría de <nombre> a <categoría>".')
-      return
-    }
-    const searcher = createChildSearcher(children)
-    const { exact, suggestions } = searchChildrenSplit(searcher, parsed.nameQuery)
-    const candidates = [...exact, ...suggestions].slice(0, 6)
-    if (candidates.length === 0) {
-      setCommandError(`No encontré a ningún niño parecido a "${parsed.nameQuery}".`)
-      return
-    }
-    if (parsed.type === 'rename') {
-      if (!parsed.newName) { setCommandError('Falta el nombre nuevo.'); return }
-      setPendingCommand({ type: 'rename', newName: parsed.newName, candidates })
-    } else if (parsed.type === 'birthdate') {
-      const iso = parseSpanishDate(parsed.dateText)
-      if (!iso) { setCommandError(`No entendí la fecha "${parsed.dateText}". Usa día/mes/año, ej. 15/03/2020.`); return }
-      setPendingCommand({ type: 'birthdate', isoDate: iso, displayDate: parsed.dateText, candidates })
-    } else {
-      const target = resolveCategoryLabel(parsed.targetLabel)
-      if (target === null) { setCommandError(`No reconozco la categoría "${parsed.targetLabel}".`); return }
-      if (target === 'ambiguous') { setCommandError('¿Cuál Corderitos? Especifica "0-2 años" o "2-4 años".'); return }
-      setPendingCommand({ type: 'category', target, targetLabel: CATEGORY_LABELS[target], candidates })
-    }
-  }
-
-  async function executeCommand(child: ChildRow) {
-    if (!pendingCommand) return
-    const cmd = pendingCommand
-    setPendingCommand(null)
-    setCommandResult({ status: 'thinking', message: '' })
-    const { error } =
-      cmd.type === 'rename'
-        ? await supabase.from('children').update({ full_name: cmd.newName }).eq('id', child.id)
-        : cmd.type === 'birthdate'
-        ? await supabase.from('children').update({ birth_date: cmd.isoDate }).eq('id', child.id)
-        : await supabase.rpc('sync_child_category', { p_child_id: child.id, p_category: cmd.target })
-    if (error) {
-      setCommandResult(null)
-      setCommandError('No se pudo guardar. Intenta de nuevo.')
-      return
-    }
-    await new Promise((r) => setTimeout(r, 500))
-    setCommandResult({
-      status: 'done',
-      message:
-        cmd.type === 'rename'
-          ? `Listo — ahora se llama "${cmd.newName}".`
-          : cmd.type === 'birthdate'
-          ? `Listo — la fecha de nacimiento de ${child.full_name} quedó en ${cmd.displayDate}.`
-          : `Listo — ${child.full_name} ahora está en ${cmd.targetLabel}.`,
-    })
-    setCommandText('')
-    setTimeout(() => setCommandResult(null), 3000)
   }
 
   const nothingPending = alerts.length === 0 && Object.keys(actions).length === 0 && missingBirthDate === 0 && requests.length === 0
@@ -221,7 +72,7 @@ export default function CoderPage() {
           ) : (
             <button
               key={cap.title}
-              onClick={() => fillTemplate(cap.template)}
+              onClick={() => fillAndFocus(cap.template)}
               className="text-left bg-white rounded-2xl border-2 border-gray-200 hover:border-indigo-300 hover:bg-indigo-50/50 transition-colors p-4 flex items-start gap-3"
             >
               <div className="w-9 h-9 rounded-xl bg-indigo-50 flex items-center justify-center shrink-0">
@@ -340,7 +191,7 @@ export default function CoderPage() {
                 </p>
                 <div className="mt-2 flex flex-wrap gap-2">
                   <button
-                    onClick={() => fillTemplate('cambiar fecha de nacimiento de ')}
+                    onClick={() => fillAndFocus('cambiar fecha de nacimiento de ')}
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-amber-700 bg-amber-100 hover:bg-amber-200 rounded-lg transition-colors"
                   >
                     <CalendarDays size={13} />

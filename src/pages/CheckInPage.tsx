@@ -8,7 +8,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { getCategoryFromBirthDate, getEffectiveCategory, hasCategoryChanged, getAgeLabel, requiresBadge, requiresPager } from '../lib/categoryUtils'
 import { createChildSearcher, searchChildrenSplit } from '../lib/fuzzySearch'
-import { CATEGORY_LABELS, CATEGORY_COLORS, NEXT_CATEGORY, isCorderitos, type Category, type TeamColor } from '../types/domain'
+import { CATEGORY_LABELS, CATEGORY_COLORS, NEXT_CATEGORY, isCorderitos, type Category, type TeamColor, type ParentRow } from '../types/domain'
 import { CategoryBadge } from '../components/ui/CategoryBadge'
 import { ChildContacts } from '../components/ui/ChildContacts'
 import { CoordinatorRequestBox } from '../components/ui/CoordinatorRequestBox'
@@ -759,10 +759,19 @@ export default function CheckInPage() {
   // Refreshes whichever list(s) are currently on screen so a newly-added
   // family shows up immediately — otherwise it only appears after manually
   // leaving and re-entering the category or re-typing the search.
-  async function handleFamilySaved() {
+  async function handleFamilySaved(parent: ParentRow) {
     setShowNewFamily(false)
     if (searchParams.get('nueva') !== null) setSearchParams({})
-    if (activeCategory) {
+    // Domingo en la mañana no hay tiempo de guardar la familia y luego ir a
+    // buscar al niño de nuevo para ponerle gafete — el primer niño de la
+    // familia recién guardada queda directo en su categoría, seleccionado
+    // y listo para el paso de gafete/biper (lo que ChildCard ya muestra
+    // cuando isSelected es true).
+    const firstChild = parent.children[0]
+    if (firstChild?.category) {
+      await openCategory(firstChild.category)
+      setSelectedId(firstChild.id)
+    } else if (activeCategory) {
       openCategory(activeCategory)
     }
     // El padrón (allChildren) alimenta la búsqueda global y difusa, así que
@@ -1185,27 +1194,30 @@ export default function CheckInPage() {
         O selecciona el grupo
       </p>
 
-      {/* ── Category tiles: even grid, no category shown bigger than the rest ── */}
-      <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
-        {TILES.map(({ category, icon: Icon, ages, cardBg, iconBg, iconColor, bar, barBg, textColor }, i) => {
+      {/* ── Category tiles: bento layout — Saltamontes big in the middle up
+          top (flanked by Hormiguitas/Exploradores), the two Corderitos
+          groups paired below as one long row — instead of five identical
+          tiles wasting the extra width on a wide screen. ── */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {TILES.map(({ category, icon: Icon, ages, cardBg, iconBg, iconColor, bar, barBg, textColor }) => {
           const count = todayCounts[category] ?? 0
-          const isTrailingOdd = TILES.length % 2 === 1 && i === TILES.length - 1
+          const big = category === 'saltamontes' || category === 'corderitos_0_2' || category === 'corderitos_2_4'
           return (
             <motion.button
               key={category}
               onClick={() => openCategory(category)}
               whileTap={{ scale: 0.97 }}
               whileHover={{ scale: 1.02 }}
-              className={`relative overflow-hidden rounded-2xl p-5 text-left shadow-md ${cardBg} ${isTrailingOdd ? 'col-span-2 lg:col-span-1' : ''}`}
+              className={`relative overflow-hidden rounded-2xl text-left shadow-md ${cardBg} ${big ? 'lg:col-span-2 p-6' : 'p-5'}`}
             >
               <div>
-                <div className={`w-12 h-12 rounded-2xl ${iconBg} flex items-center justify-center mb-4 backdrop-blur-sm`}>
-                  <Icon className={`w-6 h-6 ${iconColor}`} />
+                <div className={`rounded-2xl ${iconBg} flex items-center justify-center backdrop-blur-sm ${big ? 'w-14 h-14 mb-5' : 'w-12 h-12 mb-4'}`}>
+                  <Icon className={`${big ? 'w-7 h-7' : 'w-6 h-6'} ${iconColor}`} />
                 </div>
-                <p className={`font-bold text-sm uppercase tracking-wide ${textColor} leading-tight`}>
+                <p className={`font-bold uppercase tracking-wide ${textColor} leading-tight ${big ? 'text-base' : 'text-sm'}`}>
                   {CATEGORY_LABELS[category]}
                 </p>
-                <p className={`text-xs ${iconColor} opacity-70 mt-0.5 mb-3`}>{ages}</p>
+                <p className={`${iconColor} opacity-70 mt-0.5 mb-3 ${big ? 'text-sm' : 'text-xs'}`}>{ages}</p>
                 <div className={`h-1.5 w-full rounded-full ${barBg} mb-1.5`}>
                   <motion.div
                     initial={{ width: 0 }}

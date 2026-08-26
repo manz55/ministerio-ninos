@@ -11,6 +11,7 @@ import { uploadPhoto } from '../lib/photo'
 import { CategoryBadge } from '../components/ui/CategoryBadge'
 import { PhotoCapture, PhotoAvatar } from '../components/ui/PhotoCapture'
 import { ChildContacts } from '../components/ui/ChildContacts'
+import { QuickCheckIn } from '../components/ui/QuickCheckIn'
 import { useDebounce } from '../hooks/useDebounce'
 import { NewFamilyStep } from '../components/checkin/NewFamilyStep'
 import { CATEGORY_LABELS, GUARDIAN_RELATIONSHIP_LABELS, NEXT_CATEGORY, isCorderitos, type ParentRow, type Category, type GuardianRelationship } from '../types/domain'
@@ -241,7 +242,7 @@ function ChildEditForm({
 
 // ─── New child form ───────────────────────────────────────────────────────────
 
-function NewChildForm({ parentId, onSaved, onCancel }: { parentId: string; onSaved: () => void; onCancel: () => void }) {
+function NewChildForm({ parentId, onSaved, onCancel }: { parentId: string; onSaved: (childId: string) => void; onCancel: () => void }) {
   const [name, setName]         = useState('')
   const [birthDate, setBirthDate] = useState('')
   const [allergies, setAllergies] = useState('')
@@ -273,7 +274,7 @@ function NewChildForm({ parentId, onSaved, onCancel }: { parentId: string; onSav
       if (path) await supabase.from('children').update({ photo_url: path }).eq('id', data.id)
     }
     setSaving(false)
-    onSaved()
+    onSaved(data.id)
   }
 
   return (
@@ -385,6 +386,7 @@ function FamilyDetailPanel({
   const [savingParent, setSavingParent]     = useState(false)
   const [editingChildId, setEditingChildId] = useState<string | null>(null)
   const [addingChild, setAddingChild]       = useState(false)
+  const [justSavedChildId, setJustSavedChildId] = useState<string | null>(null)
 
   // Confirm dialogs
   const [confirmDeleteChild, setConfirmDeleteChild] = useState<ChildDetail | null>(null)
@@ -410,6 +412,7 @@ function FamilyDetailPanel({
   async function saveChild(childId: string, data: Omit<Partial<ChildDetail>, 'id' | 'parent_id' | 'attendance'>) {
     await supabase.from('children').update(data).eq('id', childId)
     setEditingChildId(null)
+    setJustSavedChildId(childId)
     onRefresh()
   }
 
@@ -579,7 +582,7 @@ function FamilyDetailPanel({
                   </div>
                   {!isEditing && (
                     <div className="flex items-center gap-1 shrink-0">
-                      <button onClick={() => { setEditingChildId(child.id); setAddingChild(false) }}
+                      <button onClick={() => { setEditingChildId(child.id); setAddingChild(false); setJustSavedChildId(null) }}
                         className="flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800 font-medium px-2 py-1 hover:bg-indigo-50 rounded-lg transition-colors">
                         <Edit2 size={11} /> Editar
                       </button>
@@ -627,6 +630,15 @@ function FamilyDetailPanel({
                     onCancel={() => setEditingChildId(null)}
                   />
                 )}
+
+                {justSavedChildId === child.id && !isEditing && (
+                  <div className="rounded-lg bg-indigo-50/60 border border-indigo-100 px-3 py-2.5 flex items-start justify-between gap-2">
+                    <QuickCheckIn childId={child.id} category={category} />
+                    <button onClick={() => setJustSavedChildId(null)} className="text-xs text-gray-400 hover:text-gray-600 shrink-0">
+                      Listo
+                    </button>
+                  </div>
+                )}
               </div>
             )
           })}
@@ -634,7 +646,7 @@ function FamilyDetailPanel({
           {addingChild ? (
             <NewChildForm
               parentId={family.id}
-              onSaved={() => { setAddingChild(false); onRefresh() }}
+              onSaved={(childId) => { setAddingChild(false); setJustSavedChildId(childId); onRefresh() }}
               onCancel={() => setAddingChild(false)}
             />
           ) : (
@@ -725,6 +737,7 @@ function RosterRow({ child, onChanged }: { child: RosterChild; onChanged: () => 
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [justSaved, setJustSaved] = useState(false)
   const category = getEffectiveCategory(child)
   const age = getAgeLabel(child.birth_date)
 
@@ -737,6 +750,7 @@ function RosterRow({ child, onChanged }: { child: RosterChild; onChanged: () => 
   async function saveChild(data: Omit<Partial<ChildDetail>, 'id' | 'parent_id' | 'attendance'>) {
     await supabase.from('children').update(data).eq('id', child.id)
     setEditing(false)
+    setJustSaved(true)
     onChanged()
   }
 
@@ -797,7 +811,7 @@ function RosterRow({ child, onChanged }: { child: RosterChild; onChanged: () => 
                   Asignar
                 </button>
               )}
-              <button onClick={() => setEditing(true)}
+              <button onClick={() => { setEditing(true); setJustSaved(false) }}
                 className="flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800 font-medium px-2 py-1 hover:bg-indigo-50 rounded-lg transition-colors">
                 <Edit2 size={11} /> Editar
               </button>
@@ -810,6 +824,14 @@ function RosterRow({ child, onChanged }: { child: RosterChild; onChanged: () => 
         </div>
         {assigning && <ParentPicker onSelect={assignParent} />}
         {editing && <ChildEditForm child={child} onSave={saveChild} onCancel={() => setEditing(false)} />}
+        {justSaved && !editing && (
+          <div className="rounded-lg bg-indigo-50/60 border border-indigo-100 px-3 py-2.5 flex items-start justify-between gap-2">
+            <QuickCheckIn childId={child.id} category={category} />
+            <button onClick={() => setJustSaved(false)} className="text-xs text-gray-400 hover:text-gray-600 shrink-0">
+              Listo
+            </button>
+          </div>
+        )}
       </div>
     </>
   )
