@@ -58,11 +58,17 @@
     text-size-adjust: 100%;
     /* Faster tap response on mobile — no 300ms delay */
     touch-action: manipulation;
+    /* html/body had no background-color of their own, so any gap the fixed
+       LivingBackground didn't cover (WebKit's rubber-band bounce ignores
+       overscroll-behavior on the root scroller) fell through to transparent
+       — which renders as black, not the intended light backdrop. */
+    background-color: #fafafc;
   }
 
   body {
     /* Prevent rubber-band scroll that reveals gray background */
     overscroll-behavior-y: none;
+    background-color: #fafafc;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
