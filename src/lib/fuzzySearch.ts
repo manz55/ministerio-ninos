@@ -6,14 +6,18 @@ export function normalizeName(s: string): string {
 }
 
 /**
- * True if any whitespace-separated word in `text` starts with `q`. Plain
+ * True if every word in `q` is a prefix of some word in `text`. Plain
  * substring matching ("jo" matches "Alejandro") reads as random noise once
  * the roster gets past a couple dozen names — word-start matching is what
  * people actually expect from a name search ("jo" -> José, Joshua, Jordan…
- * not names that merely contain "jo" somewhere in the middle).
+ * not names that merely contain "jo" somewhere in the middle). Splitting
+ * both sides into words (not just the target) is what makes a two-word
+ * query like "jordan najera" still match "Jordan Nájera" — matching the
+ * whole query string against one word at a time never would.
  */
 function matchesWordPrefix(text: string, q: string): boolean {
-  return text.split(/\s+/).some((word) => word.startsWith(q))
+  const textWords = text.split(/\s+/)
+  return q.split(/\s+/).every((qWord) => textWords.some((word) => word.startsWith(qWord)))
 }
 
 export interface SearchableChild {
