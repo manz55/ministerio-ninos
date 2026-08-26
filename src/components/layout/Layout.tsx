@@ -6,6 +6,7 @@ import { ChurchLogo } from '../ui/ChurchLogo'
 import { ChangePasswordModal } from '../ui/ChangePasswordModal'
 import { LivingBackground } from '../ui/LivingBackground'
 import { SmartAlerts } from '../ui/SmartAlerts'
+import { CoordinatorRequestButton } from '../ui/CoordinatorRequestButton'
 import { signOut } from '../../lib/auth'
 import type { Profile } from '../../types/domain'
 
@@ -43,7 +44,7 @@ export default function Layout({ isAdmin, profile }: { isAdmin: boolean; profile
             <span className="font-semibold text-gray-900 block leading-tight">Maestros de Niños</span>
             <span className="text-xs text-gray-400 leading-tight truncate block">{profile.full_name}</span>
           </div>
-          {isAdmin && <SmartAlerts />}
+          {isAdmin ? <SmartAlerts /> : <CoordinatorRequestButton authorId={profile.id} />}
           <button
             onClick={() => setShowChangePassword(true)}
             className="p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors shrink-0"

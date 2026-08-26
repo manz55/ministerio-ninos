@@ -149,6 +149,54 @@ export type Database = {
           },
         ]
       }
+      coordinator_requests: {
+        Row: {
+          author_id: string | null
+          created_at: string
+          id: string
+          message: string
+          resolved_at: string | null
+          resolved_by: string | null
+          seen_by_author: boolean
+          status: string
+        }
+        Insert: {
+          author_id?: string | null
+          created_at?: string
+          id?: string
+          message: string
+          resolved_at?: string | null
+          resolved_by?: string | null
+          seen_by_author?: boolean
+          status?: string
+        }
+        Update: {
+          author_id?: string | null
+          created_at?: string
+          id?: string
+          message?: string
+          resolved_at?: string | null
+          resolved_by?: string | null
+          seen_by_author?: boolean
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "coordinator_requests_author_id_fkey"
+            columns: ["author_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "coordinator_requests_resolved_by_fkey"
+            columns: ["resolved_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       inscripciones: {
         Row: {
           acompanantes: string | null

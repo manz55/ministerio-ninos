@@ -10,6 +10,7 @@ import { createChildSearcher, searchChildrenSplit } from '../lib/fuzzySearch'
 import { CATEGORY_LABELS, CATEGORY_COLORS, NEXT_CATEGORY, isCorderitos, type Category, type TeamColor } from '../types/domain'
 import { CategoryBadge } from '../components/ui/CategoryBadge'
 import { ChildContacts } from '../components/ui/ChildContacts'
+import { CoordinatorRequestBox } from '../components/ui/CoordinatorRequestBox'
 import { NewFamilyStep } from '../components/checkin/NewFamilyStep'
 import { useDebounce } from '../hooks/useDebounce'
 import { BalloonBackground } from '../components/ui/BalloonBackground'
@@ -561,7 +562,7 @@ function ChildCard({
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function CheckInPage() {
-  const { isAdmin } = useAuth()
+  const { isAdmin, session } = useAuth()
   const [activeCategory, setActiveCategory] = useState<Category | null>(null)
   const [todayCounts, setTodayCounts] = useState<Partial<Record<Category, number>>>({})
   const [totalToday, setTotalToday] = useState(0)
@@ -924,9 +925,12 @@ export default function CheckInPage() {
                 <UserPlus size={18} />
                 Registrar familia nueva
               </button>
-            ) : (
-              <p className="text-sm text-gray-400">¿Es familia nueva? Avísale a tu coordinador para registrarla.</p>
-            )}
+            ) : session ? (
+              <CoordinatorRequestBox
+                authorId={session.user.id}
+                defaultMessage={filter ? `Por favor agregar a este niño: ${filter}` : undefined}
+              />
+            ) : null}
           </div>
         ) : (
           <>
@@ -1098,9 +1102,12 @@ export default function CheckInPage() {
                 >
                   <UserPlus size={16} /> Registrar familia nueva
                 </button>
-              ) : (
-                <p className="text-sm text-gray-400">¿Es familia nueva? Avísale a tu coordinador para registrarla.</p>
-              )}
+              ) : session ? (
+                <CoordinatorRequestBox
+                  authorId={session.user.id}
+                  defaultMessage={debouncedGlobal ? `Por favor agregar a este niño: ${debouncedGlobal}` : undefined}
+                />
+              ) : null}
             </div>
           )}
           {globalResults.exact.length > 0 && (

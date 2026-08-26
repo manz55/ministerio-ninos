@@ -152,3 +152,18 @@ export interface ParentRow {
   created_at: string
   children: ChildRow[]
 }
+
+// A maestro can't self-serve family registration or category changes — this
+// is the free-text request they send a coordinator instead.
+export interface CoordinatorRequest {
+  id: string
+  message: string
+  status: 'pendiente' | 'resuelta'
+  author_id: string | null
+  resolved_by: string | null
+  resolved_at: string | null
+  seen_by_author: boolean
+  created_at: string
+  profiles?: { full_name: string } | null
+  resolver?: { full_name: string } | null
+}

@@ -1,12 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { formatDistanceToNow } from 'date-fns'
+import { es } from 'date-fns/locale'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Sparkles, GraduationCap, Check, FileWarning, ArrowRight, Wand2, AlertCircle, CornerDownLeft } from 'lucide-react'
+import { Sparkles, GraduationCap, Check, FileWarning, ArrowRight, Wand2, AlertCircle, CornerDownLeft, Inbox } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
+import { useAuth } from '../../lib/auth'
 import { getCategoryFromBirthDate, hasCategoryChanged } from '../../lib/categoryUtils'
 import { createChildSearcher, searchChildrenSplit } from '../../lib/fuzzySearch'
 import { parseCommand, resolveCategoryLabel } from '../../lib/coderCommands'
-import { CATEGORY_LABELS, type Category } from '../../types/domain'
+import { CATEGORY_LABELS, type Category, type CoordinatorRequest } from '../../types/domain'
 
 type ChildRow = { id: string; full_name: string; birth_date: string | null; category: Category | null }
 type ActionStatus = 'thinking' | 'done'
@@ -26,7 +29,10 @@ type PendingCommand =
 // shows up in the graduation alerts at all — nobody can compute an age with
 // no birth_date to compute it from.
 export function SmartAlerts() {
+  const { session } = useAuth()
   const [children, setChildren] = useState<ChildRow[]>([])
+  const [requests, setRequests] = useState<CoordinatorRequest[]>([])
+  const [resolvingId, setResolvingId] = useState<string | null>(null)
   const [open, setOpen] = useState(false)
   const [actions, setActions] = useState<Record<string, ActionState>>({})
   const [commandText, setCommandText] = useState('')
@@ -40,7 +46,17 @@ export function SmartAlerts() {
     setChildren((data ?? []) as ChildRow[])
   }, [])
 
+  const fetchRequests = useCallback(async () => {
+    const { data } = await supabase
+      .from('coordinator_requests')
+      .select('*, profiles!coordinator_requests_author_id_fkey(full_name)')
+      .eq('status', 'pendiente')
+      .order('created_at', { ascending: false })
+    setRequests((data ?? []) as CoordinatorRequest[])
+  }, [])
+
   useEffect(() => { fetchChildren() }, [fetchChildren])
+  useEffect(() => { fetchRequests() }, [fetchRequests])
 
   useEffect(() => {
     const channel = supabase
@@ -49,6 +65,14 @@ export function SmartAlerts() {
       .subscribe()
     return () => { supabase.removeChannel(channel) }
   }, [fetchChildren])
+
+  useEffect(() => {
+    const channel = supabase
+      .channel('smart-alerts-requests-sync')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'coordinator_requests' }, () => fetchRequests())
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
+  }, [fetchRequests])
 
   useEffect(() => {
     if (!open) return
@@ -84,7 +108,20 @@ export function SmartAlerts() {
   )
 
   const pendingCount =
-    alerts.length + Object.values(actions).filter((a) => a.status === 'thinking').length + missingBirthDate
+    alerts.length +
+    Object.values(actions).filter((a) => a.status === 'thinking').length +
+    missingBirthDate +
+    requests.length
+
+  async function resolveRequest(id: string) {
+    setResolvingId(id)
+    await supabase
+      .from('coordinator_requests')
+      .update({ status: 'resuelta', resolved_by: session?.user.id ?? null, resolved_at: new Date().toISOString() })
+      .eq('id', id)
+    setResolvingId(null)
+    setRequests((prev) => prev.filter((r) => r.id !== id))
+  }
 
   async function graduate(a: { id: string; name: string; to: Category }) {
     setActions((prev) => ({ ...prev, [a.id]: { status: 'thinking', name: a.name, to: a.to } }))
@@ -268,13 +305,33 @@ export function SmartAlerts() {
               )}
             </div>
 
-            {alerts.length === 0 && Object.keys(actions).length === 0 && missingBirthDate === 0 ? (
+            {alerts.length === 0 && Object.keys(actions).length === 0 && missingBirthDate === 0 && requests.length === 0 ? (
               <div className="px-4 py-8 text-center">
                 <p className="text-sm text-gray-400">Todo al día ✨</p>
                 <p className="text-xs text-gray-300 mt-1">No hay avisos pendientes</p>
               </div>
             ) : (
               <div className="divide-y divide-gray-50">
+                {requests.map((r) => (
+                  <div key={r.id} className="px-4 py-3 flex items-start gap-2.5 bg-indigo-50/40">
+                    <Inbox size={16} className="text-indigo-500 shrink-0 mt-0.5" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-gray-700 leading-snug">{r.message}</p>
+                      <p className="text-xs text-gray-400 mt-1">
+                        {r.profiles?.full_name ?? 'Un maestro'} ·{' '}
+                        {formatDistanceToNow(new Date(r.created_at), { addSuffix: true, locale: es })}
+                      </p>
+                      <button
+                        onClick={() => resolveRequest(r.id)}
+                        disabled={resolvingId === r.id}
+                        className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors disabled:opacity-40"
+                      >
+                        <Check size={13} />
+                        {resolvingId === r.id ? 'Marcando…' : 'Marcar como resuelta'}
+                      </button>
+                    </div>
+                  </div>
+                ))}
                 {missingBirthDate > 0 && (
                   <div className="px-4 py-3 flex items-start gap-2.5 bg-amber-50/60">
                     <FileWarning size={16} className="text-amber-500 shrink-0 mt-0.5" />
