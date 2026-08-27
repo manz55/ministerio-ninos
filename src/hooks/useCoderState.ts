@@ -35,6 +35,18 @@ export function useCoderState() {
   const [pendingCommand, setPendingCommand] = useState<PendingCommand | null>(null)
   const [commandResult, setCommandResult] = useState<{ status: 'thinking' | 'done'; message: string } | null>(null)
 
+  // ── Buscar-y-tocar: the primary flow now. Type a partial name (same
+  // fuzzy search as everywhere else in the app — no need to know a full
+  // name), pick the kid from a live list, then pick an action. Replaces
+  // having to type a whole command sentence for the common case; the text
+  // command bar below still exists for people who'd rather type it out.
+  const [pickerQuery, setPickerQuery] = useState('')
+  const [selectedChild, setSelectedChild] = useState<ChildRow | null>(null)
+  const [activeAction, setActiveAction] = useState<'category' | 'rename' | 'birthdate' | null>(null)
+  const [pickerBusy, setPickerBusy] = useState(false)
+  const [pickerError, setPickerError] = useState<string | null>(null)
+  const [pickerDone, setPickerDone] = useState<string | null>(null)
+
   const fetchChildren = useCallback(async () => {
     const { data } = await supabase.from('children').select('id, full_name, birth_date, category')
     setChildren((data ?? []) as ChildRow[])
@@ -79,6 +91,70 @@ export function useCoderState() {
   )
 
   const missingBirthDate = useMemo(() => children.filter((c) => !c.birth_date).length, [children])
+
+  const pickerSearcher = useMemo(() => createChildSearcher(children), [children])
+  const pickerResults = useMemo(() => {
+    if (pickerQuery.trim().length < 1) return { exact: [], suggestions: [] }
+    return searchChildrenSplit(pickerSearcher, pickerQuery)
+  }, [pickerSearcher, pickerQuery])
+
+  function selectChild(child: ChildRow, action?: 'category' | 'rename' | 'birthdate') {
+    setSelectedChild(child)
+    setActiveAction(action ?? null)
+    setPickerQuery('')
+    setPickerError(null)
+    setPickerDone(null)
+  }
+
+  function backToSearch() {
+    setSelectedChild(null)
+    setActiveAction(null)
+    setPickerError(null)
+  }
+
+  function backToActions() {
+    setActiveAction(null)
+    setPickerError(null)
+  }
+
+  async function submitCategory(target: Category) {
+    if (!selectedChild) return
+    setPickerBusy(true)
+    setPickerError(null)
+    const { error } = await supabase.rpc('sync_child_category', { p_child_id: selectedChild.id, p_category: target })
+    setPickerBusy(false)
+    if (error) { setPickerError('No se pudo guardar. Intenta de nuevo.'); return }
+    setPickerDone(`${selectedChild.full_name} ahora está en ${CATEGORY_LABELS[target]}.`)
+    setSelectedChild(null)
+    setActiveAction(null)
+    setTimeout(() => setPickerDone(null), 3000)
+  }
+
+  async function submitRename(newName: string) {
+    if (!selectedChild || !newName.trim()) return
+    setPickerBusy(true)
+    setPickerError(null)
+    const { error } = await supabase.from('children').update({ full_name: newName.trim() }).eq('id', selectedChild.id)
+    setPickerBusy(false)
+    if (error) { setPickerError('No se pudo guardar. Intenta de nuevo.'); return }
+    setPickerDone(`Listo — ahora se llama "${newName.trim()}".`)
+    setSelectedChild(null)
+    setActiveAction(null)
+    setTimeout(() => setPickerDone(null), 3000)
+  }
+
+  async function submitBirthdate(isoDate: string) {
+    if (!selectedChild || !isoDate) return
+    setPickerBusy(true)
+    setPickerError(null)
+    const { error } = await supabase.from('children').update({ birth_date: isoDate }).eq('id', selectedChild.id)
+    setPickerBusy(false)
+    if (error) { setPickerError('No se pudo guardar. Intenta de nuevo.'); return }
+    setPickerDone(`Listo — se guardó la fecha de nacimiento de ${selectedChild.full_name}.`)
+    setSelectedChild(null)
+    setActiveAction(null)
+    setTimeout(() => setPickerDone(null), 3000)
+  }
 
   async function resolveRequest(id: string) {
     setResolvingId(id)
@@ -176,5 +252,10 @@ export function useCoderState() {
     pendingCommand, setPendingCommand, commandResult,
     alerts, missingBirthDate,
     resolveRequest, graduate, fillTemplate, submitCommand, executeCommand,
+    // buscar-y-tocar
+    pickerQuery, setPickerQuery, pickerResults, selectedChild, activeAction,
+    pickerBusy, pickerError, pickerDone,
+    selectChild, backToSearch, backToActions, setActiveAction,
+    submitCategory, submitRename, submitBirthdate,
   }
 }
