@@ -11,6 +11,16 @@ import { CoderPicker } from '../components/ui/CoderPicker'
 import { CATEGORY_LABELS } from '../types/domain'
 import { useCoderState } from '../hooks/useCoderState'
 
+// Full example sentences, not just a fragment — "nombre apellido" is
+// literally what to type (first + last is enough, the search behind this
+// matches any word), not a placeholder to interpret. Tapping one fills the
+// input with that exact text so it's editable in place, not a blind prefix.
+const COMMAND_EXAMPLES = [
+  'cambiar categoría de Juan Pérez a Saltamontes',
+  'cambiar nombre de Juan Pérez a Juan Carlos Pérez',
+  'cambiar fecha de nacimiento de Juan Pérez a 15/03/2020',
+]
+
 // Coder's home: the buscar-y-toca picker up top (the primary way to act —
 // type a partial name, tap the kid, tap the action), maestro requests,
 // missing-data nudges, and graduation alerts below. A collapsed text
@@ -20,7 +30,7 @@ export default function CoderPage() {
   const {
     resolvingId, actions, commandText, setCommandText, commandError,
     pendingCommand, setPendingCommand, commandResult, alerts, missingBirthDate,
-    requests, resolveRequest, graduate, submitCommand, executeCommand,
+    requests, resolveRequest, graduate, fillTemplate, submitCommand, executeCommand,
   } = state
 
   const nothingElsePending = alerts.length === 0 && Object.keys(actions).length === 0 && missingBirthDate === 0
@@ -61,14 +71,29 @@ export default function CoderPage() {
           <Wand2 size={14} className="text-gray-400" />
           O escribe un comando
         </summary>
-        <div className="px-4 pb-4 space-y-2">
+        <div className="px-4 pb-4 space-y-3">
+          <div>
+            <p className="text-xs font-semibold text-gray-500 mb-1.5">Comandos que entiende — toca uno para usarlo de plantilla:</p>
+            <div className="space-y-1">
+              {COMMAND_EXAMPLES.map((example) => (
+                <button
+                  key={example}
+                  onClick={() => fillTemplate(example)}
+                  className="block w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  <code className="text-xs text-teal-700 bg-teal-50 px-1.5 py-0.5 rounded">{example}</code>
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-gray-400 mt-1.5 px-0.5">Con nombre y apellido basta — no hace falta el nombre completo.</p>
+          </div>
           <div className="relative">
             <input
               type="text"
               value={commandText}
               onChange={(e) => setCommandText(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') submitCommand() }}
-              placeholder="cambiar categoría de… / cambiar nombre de… / cambiar fecha de nacimiento de…"
+              placeholder="Escribe aquí o toca un comando de arriba…"
               className="w-full pl-3 pr-9 py-3 text-sm border-2 border-gray-200 rounded-xl focus:border-indigo-400 focus:outline-none placeholder:text-gray-300"
             />
             {commandText && (
