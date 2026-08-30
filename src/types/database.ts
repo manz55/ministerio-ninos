@@ -16,6 +16,7 @@ export type Database = {
     Tables: {
       attendance: {
         Row: {
+          assigned_teacher_id: string | null
           badge_number: number | null
           category: string
           checked_in_at: string
@@ -27,6 +28,7 @@ export type Database = {
           team_color: string
         }
         Insert: {
+          assigned_teacher_id?: string | null
           badge_number?: number | null
           category: string
           checked_in_at?: string
@@ -38,6 +40,7 @@ export type Database = {
           team_color: string
         }
         Update: {
+          assigned_teacher_id?: string | null
           badge_number?: number | null
           category?: string
           checked_in_at?: string
@@ -399,6 +402,10 @@ export type Database = {
       show_trgm: { Args: { "": string }; Returns: string[] }
       sync_child_category: {
         Args: { p_category: string; p_child_id: string }
+        Returns: undefined
+      }
+      assign_attendance_teacher: {
+        Args: { p_attendance_id: string; p_teacher_id: string | null }
         Returns: undefined
       }
     }

@@ -6,6 +6,7 @@ interface DockItem {
   icon: React.ComponentType<{ className?: string }>
   label: string
   to: string
+  badge?: number
 }
 
 interface DockProps {
@@ -66,6 +67,14 @@ export default function Dock({ items }: DockProps) {
                       isActive ? 'text-indigo-600' : 'text-gray-500',
                     ].join(' ')}
                   />
+                  {!!item.badge && (
+                    <span
+                      className="absolute -top-0.5 -right-0.5 min-w-[16px] h-[16px] px-1 rounded-full bg-rose-500 text-white text-[9px] font-bold flex items-center justify-center ring-2 ring-white"
+                      style={{ animation: 'badge-pulse 2.2s ease-in-out infinite' }}
+                    >
+                      {item.badge > 9 ? '9+' : item.badge}
+                    </span>
+                  )}
                 </div>
 
                 <span

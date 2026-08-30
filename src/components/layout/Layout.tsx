@@ -1,33 +1,33 @@
 import { useState } from 'react'
 import { Outlet, useOutletContext } from 'react-router-dom'
-import { ClipboardList, BarChart3, Users, NotebookPen, UserCog, Contact, LogOut, KeyRound } from 'lucide-react'
+import { ClipboardList, BarChart3, Users, NotebookPen, UserCog, Contact, LogOut, KeyRound, MessageSquare } from 'lucide-react'
 import Dock from '../ui/Dock'
 import { ChurchLogo } from '../ui/ChurchLogo'
 import { ChangePasswordModal } from '../ui/ChangePasswordModal'
 import { LivingBackground } from '../ui/LivingBackground'
-import { CoordinatorRequestButton } from '../ui/CoordinatorRequestButton'
-import { TeacherRequestsButton } from '../ui/TeacherRequestsButton'
+import { useMessagesBadgeCount } from '../../hooks/useMessagesBadgeCount'
 import { signOut } from '../../lib/auth'
 import type { Profile } from '../../types/domain'
 
 const CONTAINER = 'max-w-4xl lg:max-w-6xl xl:max-w-[88rem] mx-auto'
 
-const maestroNavItems = [
-  { icon: ClipboardList, label: 'Registro', to: '/registro' },
-  { icon: NotebookPen,   label: 'Notas',    to: '/notas' },
-]
-
-const adminNavItems = [
-  { icon: ClipboardList, label: 'Registro', to: '/registro' },
-  { icon: BarChart3,     label: 'Reportes', to: '/reportes' },
-  { icon: Users,         label: 'Familias', to: '/familias' },
-  { icon: Contact,       label: 'Maestros', to: '/maestros' },
-  { icon: NotebookPen,   label: 'Notas',    to: '/notas' },
-  { icon: UserCog,       label: 'Usuarios', to: '/usuarios' },
-]
-
 export default function Layout({ isAdmin, profile }: { isAdmin: boolean; profile: Profile }) {
-  const navItems = isAdmin ? adminNavItems : maestroNavItems
+  const messagesBadge = useMessagesBadgeCount(profile.id, isAdmin)
+  const navItems = isAdmin
+    ? [
+        { icon: ClipboardList,  label: 'Registro', to: '/registro' },
+        { icon: MessageSquare,  label: 'Mensajes', to: '/mensajes', badge: messagesBadge },
+        { icon: BarChart3,      label: 'Reportes', to: '/reportes' },
+        { icon: Users,          label: 'Familias', to: '/familias' },
+        { icon: Contact,        label: 'Maestros', to: '/maestros' },
+        { icon: NotebookPen,    label: 'Notas',    to: '/notas' },
+        { icon: UserCog,        label: 'Usuarios', to: '/usuarios' },
+      ]
+    : [
+        { icon: ClipboardList,  label: 'Registro', to: '/registro' },
+        { icon: MessageSquare,  label: 'Mensajes', to: '/mensajes', badge: messagesBadge },
+        { icon: NotebookPen,    label: 'Notas',    to: '/notas' },
+      ]
   const [showChangePassword, setShowChangePassword] = useState(false)
 
   return (
@@ -45,7 +45,6 @@ export default function Layout({ isAdmin, profile }: { isAdmin: boolean; profile
             <span className="font-semibold text-gray-900 block leading-tight">Maestros de Niños</span>
             <span className="text-xs text-gray-400 leading-tight truncate block">{profile.full_name}</span>
           </div>
-          {isAdmin ? <TeacherRequestsButton /> : <CoordinatorRequestButton authorId={profile.id} />}
           <button
             onClick={() => setShowChangePassword(true)}
             className="p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors shrink-0"

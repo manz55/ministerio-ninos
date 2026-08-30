@@ -37,6 +37,8 @@ type TodayRecord = {
     toilet_trained: boolean | null
     comments: string | null
   }
+  assigned_teacher_id: string | null
+  assigned_teacher: { full_name: string } | null
 }
 
 type ChildResult = {
@@ -275,6 +277,80 @@ function ObservationsPanel({
           <span className="font-semibold">Comentarios:</span> {comments}
         </div>
       )}
+    </div>
+  )
+}
+
+// Who's personally responsible for a corderito right now (e.g. taking them
+// to the bathroom) — restricted to corderitos categories only, since that's
+// the age group where one adult needs to be directly accountable.
+function AssignedTeacherControl({
+  attendanceId,
+  assignedId,
+  assignedName,
+  onChanged,
+}: {
+  attendanceId: string
+  assignedId: string | null
+  assignedName: string | null
+  onChanged: (teacherId: string | null, teacherName: string | null) => void
+}) {
+  const [teachers, setTeachers] = useState<{ id: string; full_name: string }[] | null>(null)
+  const [open, setOpen] = useState(false)
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    if (!open || teachers) return
+    supabase.from('profiles').select('id, full_name').eq('active', true).order('full_name')
+      .then(({ data }) => setTeachers((data as { id: string; full_name: string }[]) ?? []))
+  }, [open, teachers])
+
+  async function assign(teacherId: string) {
+    setSaving(true)
+    const { error } = await supabase.rpc('assign_attendance_teacher', {
+      p_attendance_id: attendanceId,
+      p_teacher_id: teacherId || null,
+    })
+    setSaving(false)
+    if (!error) {
+      onChanged(teacherId || null, teachers?.find((t) => t.id === teacherId)?.full_name ?? null)
+      setOpen(false)
+    }
+  }
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold transition-colors ${
+          assignedName
+            ? 'bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100'
+            : 'bg-gray-100 text-gray-500 border border-gray-200 hover:bg-gray-200'
+        }`}
+      >
+        🧑‍🏫 {assignedName ? `Encargado: ${assignedName}` : 'Asignar maestro (baño, etc.)'}
+      </button>
+    )
+  }
+
+  return (
+    <div className="flex items-center gap-1.5">
+      <select
+        autoFocus
+        disabled={saving || !teachers}
+        defaultValue={assignedId ?? ''}
+        onChange={(e) => assign(e.target.value)}
+        className="text-xs px-2 py-1.5 border-2 border-indigo-300 rounded-lg focus:outline-none bg-white"
+      >
+        <option value="">{teachers ? 'Sin asignar' : 'Cargando…'}</option>
+        {(teachers ?? []).map((t) => (
+          <option key={t.id} value={t.id}>{t.full_name}</option>
+        ))}
+      </select>
+      <button type="button" onClick={() => setOpen(false)} className="p-1 text-gray-300 hover:text-gray-500 rounded-lg">
+        <X size={13} />
+      </button>
     </div>
   )
 }
@@ -669,9 +745,9 @@ export default function CheckInPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [showNewFamily, setShowNewFamily] = useState(() => searchParams.get('nueva') !== null)
   // Carried over when a coordinator jumps here from a maestro's request in
-  // the header inbox (TeacherRequestsButton) — pre-fills the form with
-  // whatever structured fields that request had, instead of making the
-  // coordinator retype what they just read.
+  // the Mensajes page — pre-fills the form with whatever structured fields
+  // that request had, instead of making the coordinator retype what they
+  // just read.
   const location = useLocation()
   const newFamilyPrefill = (location.state ?? {}) as {
     childName?: string; birthDate?: string; parentName?: string; phone?: string; alerts?: string
@@ -689,7 +765,7 @@ export default function CheckInPage() {
   const fetchCounts = useCallback(async () => {
     const { data } = await supabase
       .from('attendance')
-      .select('id, category, badge_number, pager_number, checked_in_at, checked_out_at, children(full_name, allergies, medical_notes, toilet_trained, comments)')
+      .select('id, category, badge_number, pager_number, checked_in_at, checked_out_at, assigned_teacher_id, assigned_teacher:profiles(full_name), children(full_name, allergies, medical_notes, toilet_trained, comments)')
       .eq('session_date', today)
       .order('checked_in_at', { ascending: false })
     if (!data) return
@@ -1511,27 +1587,41 @@ export default function CheckInPage() {
                   )}
                 </div>
 
-                {hasObs && (
-                  <div className="mt-2">
-                    <button
-                      type="button"
-                      onClick={() => setExpandedObservationId(isExpanded ? null : rec.id)}
-                      className={`text-xs font-medium transition-colors ${
-                        hasObsAlert ? 'text-red-500 hover:text-red-700' : 'text-gray-400 hover:text-indigo-600'
-                      }`}
-                    >
-                      {isExpanded ? 'Ocultar observaciones' : '+ Ver observaciones'}
-                    </button>
-                    {isExpanded && (
-                      <div className="mt-2">
-                        <ObservationsPanel
-                          allergies={rec.children.allergies}
-                          medicalNotes={rec.children.medical_notes}
-                          toiletTrained={rec.children.toilet_trained}
-                          comments={rec.children.comments}
-                        />
-                      </div>
+                {(hasObs || isCorderitos(rec.category)) && (
+                  <div className="mt-2 flex items-center gap-2 flex-wrap">
+                    {hasObs && (
+                      <button
+                        type="button"
+                        onClick={() => setExpandedObservationId(isExpanded ? null : rec.id)}
+                        className={`text-xs font-medium transition-colors ${
+                          hasObsAlert ? 'text-red-500 hover:text-red-700' : 'text-gray-400 hover:text-indigo-600'
+                        }`}
+                      >
+                        {isExpanded ? 'Ocultar observaciones' : '+ Ver observaciones'}
+                      </button>
                     )}
+                    {isCorderitos(rec.category) && (
+                      <AssignedTeacherControl
+                        attendanceId={rec.id}
+                        assignedId={rec.assigned_teacher_id}
+                        assignedName={rec.assigned_teacher?.full_name ?? null}
+                        onChanged={(teacherId, teacherName) => {
+                          setTodayRecords((prev) => prev.map((r) => r.id === rec.id
+                            ? { ...r, assigned_teacher_id: teacherId, assigned_teacher: teacherName ? { full_name: teacherName } : null }
+                            : r))
+                        }}
+                      />
+                    )}
+                  </div>
+                )}
+                {isExpanded && hasObs && (
+                  <div className="mt-2">
+                    <ObservationsPanel
+                      allergies={rec.children.allergies}
+                      medicalNotes={rec.children.medical_notes}
+                      toiletTrained={rec.children.toilet_trained}
+                      comments={rec.children.comments}
+                    />
                   </div>
                 )}
                 </motion.div>

@@ -11,6 +11,7 @@ const NotesPage    = lazy(() => import('./pages/NotesPage'))
 const UsersPage    = lazy(() => import('./pages/UsersPage'))
 const CoderPage    = lazy(() => import('./pages/CoderPage'))
 const MaestrosPage = lazy(() => import('./pages/MaestrosPage'))
+const MessagesPage = lazy(() => import('./pages/MessagesPage'))
 
 function PageSpinner() {
   return (
@@ -47,6 +48,7 @@ function App() {
           <Route index element={<Navigate to="/registro" replace />} />
           <Route path="/registro" element={<Suspense fallback={<PageSpinner />}><CheckInPage /></Suspense>} />
           <Route path="/notas" element={<Suspense fallback={<PageSpinner />}><NotesPage /></Suspense>} />
+          <Route path="/mensajes" element={<Suspense fallback={<PageSpinner />}><MessagesPage /></Suspense>} />
           <Route
             path="/reportes"
             element={
