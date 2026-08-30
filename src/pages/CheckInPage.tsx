@@ -3,7 +3,7 @@ import { useSearchParams, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
-import { Search, CheckCircle2, UserPlus, AlertTriangle, ChevronLeft, Bug, Zap, Compass, Baby, PersonStanding, User, Pencil, LogIn, Trash2, X, Users, Lock, Check } from 'lucide-react'
+import { Search, CheckCircle2, UserPlus, AlertTriangle, ChevronLeft, Bug, Zap, Compass, Baby, PersonStanding, User, Pencil, LogIn, Trash2, X, Users, Lock, Check, FileWarning } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { getCategoryFromBirthDate, getEffectiveCategory, hasCategoryChanged, getAgeLabel, requiresBadge, requiresPager } from '../lib/categoryUtils'
@@ -253,6 +253,7 @@ function ChildCard({
   const age = getAgeLabel(child.birth_date)
   const alreadyIn = child.attendance.some((a) => a.session_date === today)
   const hasAlert = !!(child.allergies || child.medical_notes)
+  const missingBirthDate = !child.birth_date
   const needsBadge = requiresBadge(category)
   const needsPager = requiresPager(category)
 
@@ -356,18 +357,23 @@ function ChildCard({
       >
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0 space-y-1.5">
-            <div className="flex items-center gap-2">
-              <p className="font-bold text-gray-900 text-lg leading-tight">{child.full_name}</p>
+            <div className="flex items-center gap-2 min-w-0">
+              <p className="font-bold text-gray-900 text-lg leading-tight truncate">{child.full_name}</p>
               {hasAlert && <AlertTriangle size={15} className="text-red-500 shrink-0" />}
+              {missingBirthDate && (
+                <span title="Sin fecha de nacimiento" className="shrink-0">
+                  <FileWarning size={15} className="text-amber-500" />
+                </span>
+              )}
             </div>
-            <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-2 min-w-0">
               <CategoryBadge category={category} size="sm" />
               {categoryChanged && category && NEXT_CATEGORY[child.category!] === category && (
-                <span className="text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">
+                <span className="text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5 shrink-0">
                   🎉 Ya cumplió años, puede pasar a {CATEGORY_LABELS[category]}
                 </span>
               )}
-              <span className="text-sm text-gray-400">
+              <span className="text-sm text-gray-400 truncate min-w-0">
                 {age !== null ? `${age} año${age !== 1 ? 's' : ''} · ` : ''}{child.parents?.full_name ?? 'Sin responsable'}
               </span>
             </div>
