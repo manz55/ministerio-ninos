@@ -30,7 +30,13 @@ type TodayRecord = {
   pager_number: number | null
   checked_in_at: string
   checked_out_at: string | null
-  children: { full_name: string }
+  children: {
+    full_name: string
+    allergies: string | null
+    medical_notes: string | null
+    toilet_trained: boolean | null
+    comments: string | null
+  }
 }
 
 type ChildResult = {
@@ -41,12 +47,13 @@ type ChildResult = {
   allergies: string | null
   medical_notes: string | null
   toilet_trained: boolean | null
+  comments: string | null
   parent_id: string | null
   parents: { full_name: string; phone: string } | null
   attendance: { session_date: string }[]
 }
 
-const CHILD_SELECT = 'id, full_name, birth_date, category, allergies, medical_notes, toilet_trained, parent_id, parents(full_name, phone)'
+const CHILD_SELECT = 'id, full_name, birth_date, category, allergies, medical_notes, toilet_trained, comments, parent_id, parents(full_name, phone)'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -232,6 +239,46 @@ function TeamPickerScreen({ onConfirm, isAdmin }: { onConfirm: (color: TeamColor
 
 // ─── Child card ───────────────────────────────────────────────────────────────
 
+function ObservationsPanel({
+  allergies,
+  medicalNotes,
+  toiletTrained,
+  comments,
+}: {
+  allergies: string | null
+  medicalNotes: string | null
+  toiletTrained: boolean | null
+  comments: string | null
+}) {
+  return (
+    <div className="space-y-2">
+      {(allergies || medicalNotes) && (
+        <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-3">
+          <p className="text-xs font-bold text-red-700 uppercase tracking-wide mb-1">⚠ Alerta médica</p>
+          {allergies && <p className="text-sm text-red-700"><span className="font-semibold">Alergias:</span> {allergies}</p>}
+          {medicalNotes && <p className="text-sm text-red-700"><span className="font-semibold">Notas:</span> {medicalNotes}</p>}
+        </div>
+      )}
+      {toiletTrained !== null && (
+        <div
+          className={`rounded-xl border px-4 py-2.5 text-sm font-medium ${
+            toiletTrained
+              ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+              : 'bg-amber-50 border-amber-200 text-amber-700'
+          }`}
+        >
+          🚼 {toiletTrained ? 'Ya va solo al baño' : 'Aún usa pañal / no va solo al baño'}
+        </div>
+      )}
+      {comments && (
+        <div className="rounded-xl bg-gray-50 border border-gray-200 px-4 py-2.5 text-sm text-gray-600">
+          <span className="font-semibold">Comentarios:</span> {comments}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function ChildCard({
   child,
   teamColor,
@@ -263,7 +310,9 @@ function ChildCard({
   const [error, setError] = useState<string | null>(null)
   const [showStamp, setShowStamp] = useState(false)
   const [showContacts, setShowContacts] = useState(false)
+  const [showObservations, setShowObservations] = useState(false)
   const badgeRef = useRef<HTMLInputElement>(null)
+  const hasObservations = !!(child.allergies || child.medical_notes || child.comments || child.toilet_trained !== null)
 
   useEffect(() => {
     if (isSelected && needsBadge) {
@@ -390,6 +439,32 @@ function ChildCard({
           )}
         </div>
       </button>
+
+      {/* ── Observaciones: alergias, notas médicas, baño, comentarios ── */}
+      {hasObservations && (
+        <div className="px-5 pb-3 -mt-1">
+          <button
+            type="button"
+            onClick={() => setShowObservations((v) => !v)}
+            className={`flex items-center gap-1 text-xs font-medium transition-colors ${
+              hasAlert ? 'text-red-500 hover:text-red-700' : 'text-gray-400 hover:text-indigo-600'
+            }`}
+          >
+            {hasAlert && <AlertTriangle size={12} className="shrink-0" />}
+            {showObservations ? 'Ocultar observaciones' : '+ Ver observaciones'}
+          </button>
+          {showObservations && (
+            <div className="mt-2">
+              <ObservationsPanel
+                allergies={child.allergies}
+                medicalNotes={child.medical_notes}
+                toiletTrained={child.toilet_trained}
+                comments={child.comments}
+              />
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ── Otros contactos autorizados ── */}
       <div className="px-5 pb-3 -mt-1">
@@ -577,6 +652,7 @@ export default function CheckInPage() {
   const [totalToday, setTotalToday] = useState(0)
   const [todayRecords, setTodayRecords] = useState<TodayRecord[]>([])
   const [confirmDeleteRecordId, setConfirmDeleteRecordId] = useState<string | null>(null)
+  const [expandedObservationId, setExpandedObservationId] = useState<string | null>(null)
   const [deleteRecordError, setDeleteRecordError] = useState<string | null>(null)
   const [editingBadgeRecordId, setEditingBadgeRecordId] = useState<string | null>(null)
   const [badgeEditValue, setBadgeEditValue] = useState('')
@@ -598,7 +674,7 @@ export default function CheckInPage() {
   // coordinator retype what they just read.
   const location = useLocation()
   const newFamilyPrefill = (location.state ?? {}) as {
-    childName?: string; birthDate?: string; parentName?: string; phone?: string
+    childName?: string; birthDate?: string; parentName?: string; phone?: string; alerts?: string
   }
 
   // ── Búsqueda global ──
@@ -613,7 +689,7 @@ export default function CheckInPage() {
   const fetchCounts = useCallback(async () => {
     const { data } = await supabase
       .from('attendance')
-      .select('id, category, badge_number, pager_number, checked_in_at, checked_out_at, children(full_name)')
+      .select('id, category, badge_number, pager_number, checked_in_at, checked_out_at, children(full_name, allergies, medical_notes, toilet_trained, comments)')
       .eq('session_date', today)
       .order('checked_in_at', { ascending: false })
     if (!data) return
@@ -891,6 +967,7 @@ export default function CheckInPage() {
         prefillPhone={newFamilyPrefill.phone}
         prefillChildName={newFamilyPrefill.childName}
         prefillChildBirthDate={newFamilyPrefill.birthDate}
+        prefillChildComments={newFamilyPrefill.alerts}
         onSaved={handleFamilySaved}
         onCancel={() => { setShowNewFamily(false); if (searchParams.get('nueva') !== null) setSearchParams({}) }}
       />
@@ -1318,18 +1395,26 @@ export default function CheckInPage() {
           <div className="space-y-1.5">
             {todayRecords.map((rec) => {
               const isConfirming = confirmDeleteRecordId === rec.id
+              const hasObs = !!(
+                rec.children.allergies || rec.children.medical_notes ||
+                rec.children.toilet_trained !== null || rec.children.comments
+              )
+              const hasObsAlert = !!(rec.children.allergies || rec.children.medical_notes)
+              const isExpanded = expandedObservationId === rec.id
               return (
                 <motion.div
                   key={rec.id}
                   initial={{ opacity: 0, y: 6 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className={`flex items-center gap-3 rounded-2xl border px-4 py-3 shadow-sm transition-colors ${
+                  className={`rounded-2xl border px-4 py-3 shadow-sm transition-colors ${
                     isConfirming ? 'bg-red-50 border-red-200' : 'bg-white border-gray-100'
                   }`}
                 >
+                <div className="flex items-center gap-3">
                   <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-gray-800 text-sm leading-tight truncate">
+                    <p className="font-semibold text-gray-800 text-sm leading-tight truncate flex items-center gap-1.5">
                       {rec.children.full_name}
+                      {hasObsAlert && <AlertTriangle size={13} className="text-red-500 shrink-0" />}
                     </p>
                     <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                       <span className={`inline-flex items-center rounded-full border font-semibold text-xs px-2 py-0.5 ${CATEGORY_COLORS[rec.category]}`}>
@@ -1424,6 +1509,31 @@ export default function CheckInPage() {
                       )}
                     </div>
                   )}
+                </div>
+
+                {hasObs && (
+                  <div className="mt-2">
+                    <button
+                      type="button"
+                      onClick={() => setExpandedObservationId(isExpanded ? null : rec.id)}
+                      className={`text-xs font-medium transition-colors ${
+                        hasObsAlert ? 'text-red-500 hover:text-red-700' : 'text-gray-400 hover:text-indigo-600'
+                      }`}
+                    >
+                      {isExpanded ? 'Ocultar observaciones' : '+ Ver observaciones'}
+                    </button>
+                    {isExpanded && (
+                      <div className="mt-2">
+                        <ObservationsPanel
+                          allergies={rec.children.allergies}
+                          medicalNotes={rec.children.medical_notes}
+                          toiletTrained={rec.children.toilet_trained}
+                          comments={rec.children.comments}
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
                 </motion.div>
               )
             })}

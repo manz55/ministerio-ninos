@@ -7,6 +7,7 @@ import { Inbox, Check, UserPlus, Search } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../lib/auth'
 import type { CoordinatorRequest } from '../../types/domain'
+import { useAnchoredDropdown } from '../../hooks/useAnchoredDropdown'
 
 // Pulls the "Nombre del niño: …" style lines CoordinatorRequestBox folds
 // into the message back out into fields, so "Agregar familia nueva" can
@@ -23,7 +24,8 @@ function parseChildFields(message: string) {
     const parsed = parse(birthDateText, 'd MMM yyyy', new Date(), { locale: es })
     if (isValid(parsed)) birthDate = format(parsed, 'yyyy-MM-dd')
   }
-  return { childName, parentName, phone, birthDate }
+  const alerts = line('Alertas/comentarios')
+  return { childName, parentName, phone, birthDate, alerts }
 }
 
 // Admin-facing inbox for maestro requests (mostly "agregar a este niño
@@ -37,6 +39,7 @@ export function TeacherRequestsButton() {
   const [requests, setRequests] = useState<CoordinatorRequest[]>([])
   const [resolvingId, setResolvingId] = useState<string | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+  const pos = useAnchoredDropdown(open, containerRef, 320)
 
   const fetchRequests = useCallback(async () => {
     const { data } = await supabase
@@ -110,13 +113,14 @@ export function TeacherRequestsButton() {
       </button>
 
       <AnimatePresence>
-        {open && (
+        {open && pos && (
           <motion.div
             initial={{ opacity: 0, y: -8, scale: 0.97 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -8, scale: 0.97 }}
             transition={{ duration: 0.15 }}
-            className="absolute right-0 top-full mt-2 w-[min(320px,calc(100vw-2rem))] max-h-[70vh] overflow-y-auto rounded-2xl border border-gray-200 bg-white/95 backdrop-blur-xl shadow-xl shadow-black/10 z-50"
+            style={{ position: 'fixed', top: pos.top, right: pos.right, width: pos.width }}
+            className="max-h-[70vh] overflow-y-auto rounded-2xl border border-gray-200 bg-white/95 backdrop-blur-xl shadow-xl shadow-black/10 z-50"
           >
             <div className="px-4 py-3 border-b border-gray-100">
               <p className="text-sm font-bold text-gray-900 leading-tight">Solicitudes de maestros</p>

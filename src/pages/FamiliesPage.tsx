@@ -114,6 +114,18 @@ function ChildEditForm({
   const previewCategory = birthDate ? getCategoryFromBirthDate(birthDate) : null
   const previewAge = getAgeLabel(birthDate)
 
+  // Category normally follows birth date, but a coordinator can override it by
+  // hand (e.g. a child who's aged past what the category allows but stays put
+  // for another reason) — only re-sync to the computed category when the
+  // birth date itself changes, so a manual override made afterward sticks.
+  useEffect(() => {
+    if (birthDate) {
+      const computed = getCategoryFromBirthDate(birthDate)
+      if (computed) setManualCategory(computed)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [birthDate])
+
   async function handleSave() {
     if (!name.trim()) { setError('El nombre es requerido'); return }
     setSaving(true)
@@ -125,7 +137,7 @@ function ChildEditForm({
     await onSave({
       full_name: name.trim(),
       birth_date: birthDate || null,
-      category: birthDate ? getCategoryFromBirthDate(birthDate) : (manualCategory || null),
+      category: manualCategory || null,
       allergies: allergies.trim() || null,
       medical_notes: notes.trim() || null,
       guardian_relationship: relationship || null,
@@ -152,7 +164,7 @@ function ChildEditForm({
             onChange={(e) => setBirthDate(e.target.value)}
             className="flex-1 px-3 py-2.5 border-2 border-gray-200 rounded-lg focus:border-indigo-500 focus:outline-none text-sm" />
           <div className="flex items-center gap-1.5 shrink-0">
-            <CategoryBadge category={previewCategory ?? child.category} size="sm" />
+            <CategoryBadge category={manualCategory || previewCategory || child.category} size="sm" />
             {previewAge !== null && <span className="text-xs text-gray-400">{previewAge} a.</span>}
           </div>
         </div>
@@ -160,19 +172,19 @@ function ChildEditForm({
           <p className="text-xs text-gray-400 mt-1">Sin fecha de nacimiento — elige la clase a mano abajo.</p>
         )}
       </div>
-      {!birthDate && (
-        <div>
-          <label className="block text-xs font-medium text-gray-500 mb-1">Categoría (manual, sin fecha de nacimiento)</label>
-          <select value={manualCategory} onChange={(e) => setManualCategory(e.target.value as Category | '')}
-            className="w-full px-3 py-2.5 border-2 border-gray-200 rounded-lg focus:border-indigo-500 focus:outline-none text-sm bg-white">
-            <option value="">Sin categoría</option>
-            {Object.entries(CATEGORY_LABELS).map(([value, label]) => (
-              <option key={value} value={value}>{label}</option>
-            ))}
-          </select>
-        </div>
-      )}
-      {isCorderitos(previewCategory ?? child.category) && (
+      <div>
+        <label className="block text-xs font-medium text-gray-500 mb-1">
+          Categoría {birthDate ? '(cámbiala a mano si hace falta)' : '(manual, sin fecha de nacimiento)'}
+        </label>
+        <select value={manualCategory} onChange={(e) => setManualCategory(e.target.value as Category | '')}
+          className="w-full px-3 py-2.5 border-2 border-gray-200 rounded-lg focus:border-indigo-500 focus:outline-none text-sm bg-white">
+          <option value="">Sin categoría</option>
+          {Object.entries(CATEGORY_LABELS).map(([value, label]) => (
+            <option key={value} value={value}>{label}</option>
+          ))}
+        </select>
+      </div>
+      {isCorderitos(manualCategory || previewCategory || child.category) && (
         <div>
           <label className="block text-xs font-medium text-gray-500 mb-1">¿Ya va solo al baño?</label>
           <div className="grid grid-cols-3 gap-2">

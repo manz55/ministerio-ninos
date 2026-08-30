@@ -26,6 +26,7 @@ interface Props {
   prefillPhone?: string
   prefillChildName?: string
   prefillChildBirthDate?: string
+  prefillChildComments?: string
   existingChildren?: (SearchableChild & { id: string })[]
   onSaved: (parent: ParentRow) => void
   onCancel: () => void
@@ -43,6 +44,7 @@ export function NewFamilyStep({
   prefillPhone = '',
   prefillChildName = '',
   prefillChildBirthDate = '',
+  prefillChildComments = '',
   existingChildren = [],
   onSaved,
   onCancel,
@@ -51,7 +53,7 @@ export function NewFamilyStep({
   const [parentPhone, setParentPhone] = useState(prefillPhone)
   const [parentPhotoBlob, setParentPhotoBlob] = useState<Blob | null>(null)
   const [children, setChildren] = useState<ChildDraft[]>([
-    { ...newChild('0'), full_name: prefillChildName, birth_date: prefillChildBirthDate },
+    { ...newChild('0'), full_name: prefillChildName, birth_date: prefillChildBirthDate, comments: prefillChildComments },
   ])
   const [saving, setSaving] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})

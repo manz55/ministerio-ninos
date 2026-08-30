@@ -26,6 +26,7 @@ export function CoordinatorRequestBox({
   const [birthDate, setBirthDate] = useState('')
   const [parentName, setParentName] = useState('')
   const [phone, setPhone] = useState('')
+  const [alerts, setAlerts] = useState('')
   const [sending, setSending] = useState(false)
   const [sent, setSent] = useState(false)
 
@@ -39,6 +40,7 @@ export function CoordinatorRequestBox({
       birthDate && `Fecha de nacimiento: ${format(new Date(`${birthDate}T00:00:00`), 'd MMM yyyy', { locale: es })}`,
       parentName.trim() && `Padre/madre: ${parentName.trim()}`,
       phone.trim() && `Teléfono: ${phone.trim()}`,
+      alerts.trim() && `Alertas/comentarios: ${alerts.trim()}`,
     ].filter(Boolean).join('\n')
     const fullMessage = [message.trim(), childBlock].filter(Boolean).join('\n\n')
     const { error } = await supabase
@@ -99,6 +101,13 @@ export function CoordinatorRequestBox({
           onChange={(e) => setPhone(e.target.value)}
           placeholder="Teléfono del papá o mamá"
           className="w-full px-3 py-2 text-sm border-2 border-gray-200 rounded-xl focus:border-indigo-400 focus:outline-none placeholder:text-gray-300"
+        />
+        <textarea
+          value={alerts}
+          onChange={(e) => setAlerts(e.target.value)}
+          rows={2}
+          placeholder="Alergias, alertas médicas o comentarios del niño (opcional)"
+          className="w-full px-3 py-2 text-sm border-2 border-gray-200 rounded-xl focus:border-indigo-400 focus:outline-none resize-none placeholder:text-gray-300"
         />
       </div>
 

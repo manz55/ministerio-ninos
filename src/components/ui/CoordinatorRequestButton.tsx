@@ -6,6 +6,7 @@ import { MessageSquarePlus, Check, Clock } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import type { CoordinatorRequest } from '../../types/domain'
 import { CoordinatorRequestBox } from './CoordinatorRequestBox'
+import { useAnchoredDropdown } from '../../hooks/useAnchoredDropdown'
 
 // Header entry point for maestros — CoordinatorRequestBox also appears
 // inline under an empty search result (pre-filled with the searched name),
@@ -18,6 +19,7 @@ export function CoordinatorRequestButton({ authorId }: { authorId: string }) {
   const [open, setOpen] = useState(false)
   const [requests, setRequests] = useState<CoordinatorRequest[]>([])
   const containerRef = useRef<HTMLDivElement>(null)
+  const pos = useAnchoredDropdown(open, containerRef, 320)
 
   const fetchRequests = useCallback(async () => {
     const { data } = await supabase
@@ -88,13 +90,14 @@ export function CoordinatorRequestButton({ authorId }: { authorId: string }) {
       </button>
 
       <AnimatePresence>
-        {open && (
+        {open && pos && (
           <motion.div
             initial={{ opacity: 0, y: -8, scale: 0.97 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -8, scale: 0.97 }}
             transition={{ duration: 0.15 }}
-            className="absolute right-0 top-full mt-2 w-[min(320px,calc(100vw-2rem))] max-h-[70vh] overflow-y-auto rounded-2xl border border-gray-200 bg-white/95 backdrop-blur-xl shadow-xl shadow-black/10 z-50"
+            style={{ position: 'fixed', top: pos.top, right: pos.right, width: pos.width }}
+            className="max-h-[70vh] overflow-y-auto rounded-2xl border border-gray-200 bg-white/95 backdrop-blur-xl shadow-xl shadow-black/10 z-50"
           >
             <div className="p-4 border-b border-gray-100">
               <CoordinatorRequestBox authorId={authorId} onSent={fetchRequests} />
