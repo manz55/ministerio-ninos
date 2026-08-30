@@ -4,7 +4,17 @@ import { supabase } from './supabase'
 import type { Profile } from '../types/domain'
 
 export async function signIn(email: string, password: string) {
-  return supabase.auth.signInWithPassword({ email, password })
+  const result = await supabase.auth.signInWithPassword({ email, password })
+  // Equipo/coordinador de hoy vive en localStorage por dispositivo, no por
+  // usuario — sin esto, si un maestro entra después de otro en la misma
+  // tablet el mismo día, hereda el equipo que el anterior ya había elegido
+  // en vez de que se le pregunte. Cada login real empieza de cero; recargar
+  // la página a media sesión no pasa por aquí, así que no la interrumpe.
+  if (!result.error) {
+    localStorage.removeItem('ministerio_team_session')
+    localStorage.removeItem('ministerio_coordinator_session')
+  }
+  return result
 }
 
 export async function signOut() {
