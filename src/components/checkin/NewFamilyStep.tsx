@@ -1,9 +1,10 @@
-import { useState } from 'react'
-import { ChevronLeft, Plus, Trash2 } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { ChevronLeft, Plus, Trash2, AlertTriangle } from 'lucide-react'
 import { differenceInYears } from 'date-fns'
 import { supabase } from '../../lib/supabase'
 import { getCategoryFromBirthDate } from '../../lib/categoryUtils'
 import { uploadPhoto } from '../../lib/photo'
+import { createChildSearcher, searchChildrenSplit, type SearchableChild } from '../../lib/fuzzySearch'
 import { CategoryBadge } from '../ui/CategoryBadge'
 import { PhotoCapture } from '../ui/PhotoCapture'
 import { GUARDIAN_RELATIONSHIP_LABELS, isCorderitos, type Category, type GuardianRelationship, type ParentRow, type ChildRow } from '../../types/domain'
@@ -22,6 +23,10 @@ interface ChildDraft {
 
 interface Props {
   prefillName?: string
+  prefillPhone?: string
+  prefillChildName?: string
+  prefillChildBirthDate?: string
+  existingChildren?: (SearchableChild & { id: string })[]
   onSaved: (parent: ParentRow) => void
   onCancel: () => void
 }
@@ -33,13 +38,34 @@ function newChild(key: string): ChildDraft {
   }
 }
 
-export function NewFamilyStep({ prefillName = '', onSaved, onCancel }: Props) {
+export function NewFamilyStep({
+  prefillName = '',
+  prefillPhone = '',
+  prefillChildName = '',
+  prefillChildBirthDate = '',
+  existingChildren = [],
+  onSaved,
+  onCancel,
+}: Props) {
   const [parentName, setParentName] = useState(prefillName)
-  const [parentPhone, setParentPhone] = useState('')
+  const [parentPhone, setParentPhone] = useState(prefillPhone)
   const [parentPhotoBlob, setParentPhotoBlob] = useState<Blob | null>(null)
-  const [children, setChildren] = useState<ChildDraft[]>([newChild('0')])
+  const [children, setChildren] = useState<ChildDraft[]>([
+    { ...newChild('0'), full_name: prefillChildName, birth_date: prefillChildBirthDate },
+  ])
   const [saving, setSaving] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
+
+  // Catches the common case that pulled Coder permissions from maestros in
+  // the first place: someone re-registers a child who's already in the
+  // system (often under a different guardian) instead of the request
+  // reaching an admin who'd have spotted the existing record.
+  const duplicateSearcher = useMemo(() => createChildSearcher(existingChildren), [existingChildren])
+  function findPossibleDuplicates(name: string) {
+    if (name.trim().length < 4) return []
+    const { exact, suggestions } = searchChildrenSplit(duplicateSearcher, name.trim())
+    return [...exact, ...suggestions].slice(0, 3)
+  }
 
   // ── Child helpers ───────────────────────────────────────────────────────────
   function updateChild<K extends keyof ChildDraft>(key: string, field: K, value: ChildDraft[K]) {
@@ -218,6 +244,7 @@ export function NewFamilyStep({ prefillName = '', onSaved, onCancel }: Props) {
           const hasDate = !!child.birth_date
           const age = hasDate ? differenceInYears(new Date(), new Date(child.birth_date)) : null
           const category = hasDate ? getCategoryFromBirthDate(child.birth_date) : null
+          const duplicates = findPossibleDuplicates(child.full_name)
 
           return (
             <div key={child.key} className="bg-white rounded-xl border-2 border-gray-200 p-5 space-y-4">
@@ -255,6 +282,20 @@ export function NewFamilyStep({ prefillName = '', onSaved, onCancel }: Props) {
                 />
                 {errors[`name_${i}`] && (
                   <p className="text-xs text-red-600 mt-1">{errors[`name_${i}`]}</p>
+                )}
+                {duplicates.length > 0 && (
+                  <div className="mt-2 rounded-xl border-2 border-amber-200 bg-amber-50 px-3.5 py-2.5 space-y-1">
+                    <p className="text-xs font-semibold text-amber-800 flex items-center gap-1.5">
+                      <AlertTriangle size={13} className="shrink-0" />
+                      Ya hay alguien con nombre parecido — revisa que no sea el mismo niño
+                    </p>
+                    {duplicates.map((m) => (
+                      <p key={m.id} className="text-xs text-amber-700 pl-[19px]">
+                        <span className="font-semibold">{m.full_name}</span>
+                        {m.parents?.full_name ? <> · hijo/a de {m.parents.full_name}</> : null}
+                      </p>
+                    ))}
+                  </div>
                 )}
               </div>
 

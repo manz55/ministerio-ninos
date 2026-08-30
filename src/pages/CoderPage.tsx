@@ -3,7 +3,7 @@ import { formatDistanceToNow } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
-  GraduationCap, Check, FileWarning, ArrowRight, Wand2, AlertCircle, CornerDownLeft,
+  GraduationCap, Check, FileWarning, ArrowRight, Keyboard, AlertCircle, CornerDownLeft,
   Inbox, UserPlus, CalendarDays, MessageSquare,
 } from 'lucide-react'
 import { CoderIcon } from '../components/ui/CoderIcon'
@@ -11,14 +11,12 @@ import { CoderPicker } from '../components/ui/CoderPicker'
 import { CATEGORY_LABELS } from '../types/domain'
 import { useCoderState } from '../hooks/useCoderState'
 
-// Full example sentences, not just a fragment — "nombre apellido" is
-// literally what to type (first + last is enough, the search behind this
-// matches any word), not a placeholder to interpret. Tapping one fills the
-// input with that exact text so it's editable in place, not a blind prefix.
+// [escribe el nombre] marks the part to replace — tapping an example fills
+// the input with it so it's editable in place, not sent as-is.
 const COMMAND_EXAMPLES = [
-  'cambiar categoría de Juan Pérez a Saltamontes',
-  'cambiar nombre de Juan Pérez a Juan Carlos Pérez',
-  'cambiar fecha de nacimiento de Juan Pérez a 15/03/2020',
+  'cambiar categoría de [escribe el nombre] a Saltamontes',
+  'cambiar nombre de [escribe el nombre] a [escribe el nuevo nombre]',
+  'cambiar fecha de nacimiento de [escribe el nombre] a 15/03/2020',
 ]
 
 // Coder's home: the buscar-y-toca picker up top (the primary way to act —
@@ -68,12 +66,12 @@ export default function CoderPage() {
       {/* ── Comando por texto: alternativa para quien prefiera escribirlo ── */}
       <details className="bg-white rounded-2xl border-2 border-gray-200 overflow-hidden">
         <summary className="px-4 py-3 text-sm font-semibold text-gray-600 cursor-pointer select-none flex items-center gap-2">
-          <Wand2 size={14} className="text-gray-400" />
+          <Keyboard size={14} className="text-gray-400" />
           O escribe un comando
         </summary>
         <div className="px-4 pb-4 space-y-3">
           <div>
-            <p className="text-xs font-semibold text-gray-500 mb-1.5">Comandos que entiende — toca uno para usarlo de plantilla:</p>
+            <p className="text-xs font-semibold text-gray-500 mb-1.5">Toca un ejemplo y reemplaza [escribe el nombre] por el nombre real:</p>
             <div className="space-y-1">
               {COMMAND_EXAMPLES.map((example) => (
                 <button

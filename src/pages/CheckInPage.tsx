@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo, startTransition } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useSearchParams, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -586,6 +586,14 @@ export default function CheckInPage() {
   const [editingCoordinator, setEditingCoordinator] = useState(false)
   const [searchParams, setSearchParams] = useSearchParams()
   const [showNewFamily, setShowNewFamily] = useState(() => searchParams.get('nueva') !== null)
+  // Carried over when a coordinator jumps here from a maestro's request in
+  // the header inbox (TeacherRequestsButton) — pre-fills the form with
+  // whatever structured fields that request had, instead of making the
+  // coordinator retype what they just read.
+  const location = useLocation()
+  const newFamilyPrefill = (location.state ?? {}) as {
+    childName?: string; birthDate?: string; parentName?: string; phone?: string
+  }
 
   // ── Búsqueda global ──
   const [globalSearch, setGlobalSearch] = useState('')
@@ -872,6 +880,11 @@ export default function CheckInPage() {
   if (showNewFamily) {
     return (
       <NewFamilyStep
+        existingChildren={allChildren}
+        prefillName={newFamilyPrefill.parentName}
+        prefillPhone={newFamilyPrefill.phone}
+        prefillChildName={newFamilyPrefill.childName}
+        prefillChildBirthDate={newFamilyPrefill.birthDate}
         onSaved={handleFamilySaved}
         onCancel={() => { setShowNewFamily(false); if (searchParams.get('nueva') !== null) setSearchParams({}) }}
       />

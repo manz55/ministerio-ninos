@@ -94,7 +94,7 @@ export function CoordinatorRequestButton({ authorId }: { authorId: string }) {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -8, scale: 0.97 }}
             transition={{ duration: 0.15 }}
-            className="absolute right-0 top-full mt-2 w-[320px] max-h-[70vh] overflow-y-auto rounded-2xl border border-gray-200 bg-white/95 backdrop-blur-xl shadow-xl shadow-black/10 z-50"
+            className="absolute right-0 top-full mt-2 w-[min(320px,calc(100vw-2rem))] max-h-[70vh] overflow-y-auto rounded-2xl border border-gray-200 bg-white/95 backdrop-blur-xl shadow-xl shadow-black/10 z-50"
           >
             <div className="p-4 border-b border-gray-100">
               <CoordinatorRequestBox authorId={authorId} onSent={fetchRequests} />
@@ -110,7 +110,7 @@ export function CoordinatorRequestButton({ authorId }: { authorId: string }) {
                       <Clock size={15} className="text-amber-400 shrink-0 mt-0.5" />
                     )}
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm text-gray-700 leading-snug">{r.message}</p>
+                      <p className="text-sm text-gray-700 leading-snug whitespace-pre-line">{r.message}</p>
                       <p className="text-xs mt-1">
                         {r.status === 'resuelta' ? (
                           <span className="text-emerald-600 font-medium">
