@@ -153,6 +153,26 @@ export interface ParentRow {
   children: ChildRow[]
 }
 
+// Admin-only directory of teachers/volunteers — separate from `profiles`
+// (which only exists for login/role) since not everyone here necessarily
+// has an app account, and this tracks church-membership info profiles
+// doesn't (discipulador, baptism status, DPI…).
+export interface Maestro {
+  id: string
+  nombre: string
+  apellido: string
+  discipulador: string | null
+  fecha_nacimiento: string | null
+  dpi: string | null
+  celular: string | null
+  tiempo_asistencia: string | null
+  bautizado_aguas: boolean | null
+  bautizado_espiritu: boolean | null
+  profesion: string | null
+  photo_url: string | null
+  created_at: string
+}
+
 // A maestro can't self-serve family registration or category changes — this
 // is the free-text request they send a coordinator instead.
 export interface CoordinatorRequest {

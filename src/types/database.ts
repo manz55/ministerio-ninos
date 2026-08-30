@@ -245,6 +245,54 @@ export type Database = {
         }
         Relationships: []
       }
+      maestros: {
+        Row: {
+          apellido: string
+          bautizado_aguas: boolean | null
+          bautizado_espiritu: boolean | null
+          celular: string | null
+          created_at: string
+          discipulador: string | null
+          dpi: string | null
+          fecha_nacimiento: string | null
+          id: string
+          nombre: string
+          photo_url: string | null
+          profesion: string | null
+          tiempo_asistencia: string | null
+        }
+        Insert: {
+          apellido: string
+          bautizado_aguas?: boolean | null
+          bautizado_espiritu?: boolean | null
+          celular?: string | null
+          created_at?: string
+          discipulador?: string | null
+          dpi?: string | null
+          fecha_nacimiento?: string | null
+          id?: string
+          nombre: string
+          photo_url?: string | null
+          profesion?: string | null
+          tiempo_asistencia?: string | null
+        }
+        Update: {
+          apellido?: string
+          bautizado_aguas?: boolean | null
+          bautizado_espiritu?: boolean | null
+          celular?: string | null
+          created_at?: string
+          discipulador?: string | null
+          dpi?: string | null
+          fecha_nacimiento?: string | null
+          id?: string
+          nombre?: string
+          photo_url?: string | null
+          profesion?: string | null
+          tiempo_asistencia?: string | null
+        }
+        Relationships: []
+      }
       parents: {
         Row: {
           created_at: string

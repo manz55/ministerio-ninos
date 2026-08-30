@@ -10,6 +10,7 @@ const FamiliesPage = lazy(() => import('./pages/FamiliesPage'))
 const NotesPage    = lazy(() => import('./pages/NotesPage'))
 const UsersPage    = lazy(() => import('./pages/UsersPage'))
 const CoderPage    = lazy(() => import('./pages/CoderPage'))
+const MaestrosPage = lazy(() => import('./pages/MaestrosPage'))
 
 function PageSpinner() {
   return (
@@ -75,6 +76,14 @@ function App() {
             element={
               <RequireAdmin isAdmin={isAdmin}>
                 <Suspense fallback={<PageSpinner />}><CoderPage /></Suspense>
+              </RequireAdmin>
+            }
+          />
+          <Route
+            path="/maestros"
+            element={
+              <RequireAdmin isAdmin={isAdmin}>
+                <Suspense fallback={<PageSpinner />}><MaestrosPage /></Suspense>
               </RequireAdmin>
             }
           />

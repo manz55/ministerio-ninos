@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Outlet, useOutletContext } from 'react-router-dom'
-import { ClipboardList, BarChart3, Users, NotebookPen, UserCog, LogOut, KeyRound } from 'lucide-react'
+import { ClipboardList, BarChart3, Users, NotebookPen, UserCog, Contact, LogOut, KeyRound } from 'lucide-react'
 import Dock from '../ui/Dock'
 import { ChurchLogo } from '../ui/ChurchLogo'
 import { ChangePasswordModal } from '../ui/ChangePasswordModal'
@@ -21,6 +21,7 @@ const adminNavItems = [
   { icon: ClipboardList, label: 'Registro', to: '/registro' },
   { icon: BarChart3,     label: 'Reportes', to: '/reportes' },
   { icon: Users,         label: 'Familias', to: '/familias' },
+  { icon: Contact,       label: 'Maestros', to: '/maestros' },
   { icon: NotebookPen,   label: 'Notas',    to: '/notas' },
   { icon: UserCog,       label: 'Usuarios', to: '/usuarios' },
 ]
