@@ -12,7 +12,9 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
-    console.error('[ErrorBoundary]', error, info.componentStack)
+    // Only in dev — a production console should stay empty for anyone
+    // poking at DevTools, not print internal errors or stack traces.
+    if (import.meta.env.DEV) console.error('[ErrorBoundary]', error, info.componentStack)
   }
 
   render() {
@@ -24,7 +26,7 @@ export class ErrorBoundary extends Component<Props, State> {
           </div>
           <div className="space-y-2">
             <h1 className="text-xl font-black text-gray-900">Algo salió mal</h1>
-            <p className="text-sm text-gray-500 max-w-xs">{this.state.error.message}</p>
+            <p className="text-sm text-gray-500 max-w-xs">Intenta recargar la página. Si sigue pasando, avísale al administrador.</p>
           </div>
           <button
             onClick={() => { this.setState({ error: null }); window.location.reload() }}

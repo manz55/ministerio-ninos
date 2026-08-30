@@ -1,32 +1,8 @@
 @import "tailwindcss";
 
-/* ── Background float animations (GPU-only, no JS) ─────────────────────────── */
-@keyframes float-0 {
-  0%,100% { transform: translate(-4px,-8px) rotate(-3deg); }
-  50%     { transform: translate( 4px, 8px) rotate( 3deg); }
-}
-@keyframes float-1 {
-  0%,100% { transform: translate( 3px,-6px) rotate( 4deg); }
-  50%     { transform: translate(-4px, 7px) rotate(-4deg); }
-}
-@keyframes float-2 {
-  0%,100% { transform: translate(-5px,-5px) rotate(-5deg); }
-  50%     { transform: translate( 5px, 6px) rotate( 5deg); }
-}
-@keyframes float-3 {
-  0%,100% { transform: translate( 4px,-7px) rotate( 3deg); }
-  50%     { transform: translate(-3px, 8px) rotate(-3deg); }
-}
 @keyframes bg-appear {
   from { opacity: 0; transform: scale(0.4); }
   to   { opacity: 1; transform: scale(1);   }
-}
-@keyframes shake {
-  0%, 100% { transform: translateX(0);    }
-  20%       { transform: translateX(-9px); }
-  40%       { transform: translateX( 9px); }
-  60%       { transform: translateX(-6px); }
-  80%       { transform: translateX( 6px); }
 }
 
 /* ── Ambient "living" background (app shell) ────────────────────────────── */
@@ -71,6 +47,10 @@
     background-color: #fafafc;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    /* Safety net against any element that overflows viewport width on
+       narrow phones — a horizontal scrollbar on the page body means
+       something clipped off-screen instead of wrapping. */
+    overflow-x: hidden;
   }
 
   /* Prevent iOS auto-zoom on input focus (requires font-size >= 16px).

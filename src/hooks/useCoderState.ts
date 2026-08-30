@@ -15,16 +15,12 @@ export type PendingCommand =
   | { type: 'category'; target: Category; targetLabel: string; candidates: ChildRow[] }
   | { type: 'birthdate'; isoDate: string; displayDate: string; candidates: ChildRow[] }
 
-// Shared behind both CoderPage (the full Dock tab) and the mini header
-// popover, so the command bar and the requests inbox behave identically in
-// both places — same alerts, same live sync, same confirm-before-write
-// safety, just presented at two different sizes.
+// Backs CoderPage (reachable at /coder, currently unlinked from the Dock/
+// header while Coder is paused pending the coordinators' meeting).
 export function useCoderState() {
   const { session } = useAuth()
-  // CoderHeaderLink and CoderPage can both be mounted at once (the header
-  // link lives in Layout, always on screen) — each needs its own realtime
-  // channel name, or the second `.channel(sameName)` collides with the
-  // first's subscription instead of opening an independent one.
+  // Namespaced per instance so a remount doesn't collide with a channel
+  // still tearing down from the previous one.
   const instanceId = useId()
   const [children, setChildren] = useState<ChildRow[]>([])
   const [requests, setRequests] = useState<CoordinatorRequest[]>([])
