@@ -200,6 +200,41 @@ export type Database = {
           },
         ]
       }
+      deletion_log: {
+        Row: {
+          deleted_at: string
+          deleted_by: string | null
+          id: string
+          record_data: Json
+          record_id: string
+          table_name: string
+        }
+        Insert: {
+          deleted_at?: string
+          deleted_by?: string | null
+          id?: string
+          record_data: Json
+          record_id: string
+          table_name: string
+        }
+        Update: {
+          deleted_at?: string
+          deleted_by?: string | null
+          id?: string
+          record_data?: Json
+          record_id?: string
+          table_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "deletion_log_deleted_by_fkey"
+            columns: ["deleted_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       inscripciones: {
         Row: {
           acompanantes: string | null
