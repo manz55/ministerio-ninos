@@ -288,16 +288,19 @@ function AssignedTeacherControl({
   attendanceId,
   assignedId,
   assignedName,
+  canChange,
   onChanged,
 }: {
   attendanceId: string
   assignedId: string | null
   assignedName: string | null
+  canChange: boolean
   onChanged: (teacherId: string | null, teacherName: string | null) => void
 }) {
   const [teachers, setTeachers] = useState<{ id: string; full_name: string }[] | null>(null)
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     if (!open || teachers) return
@@ -307,14 +310,17 @@ function AssignedTeacherControl({
 
   async function assign(teacherId: string) {
     setSaving(true)
-    const { error } = await supabase.rpc('assign_attendance_teacher', {
+    setError(null)
+    const { error: err } = await supabase.rpc('assign_attendance_teacher', {
       p_attendance_id: attendanceId,
       p_teacher_id: teacherId || null,
     })
     setSaving(false)
-    if (!error) {
+    if (!err) {
       onChanged(teacherId || null, teachers?.find((t) => t.id === teacherId)?.full_name ?? null)
       setOpen(false)
+    } else {
+      setError('Solo el maestro asignado o un coordinador puede cambiarlo.')
     }
   }
 
@@ -322,35 +328,40 @@ function AssignedTeacherControl({
     return (
       <button
         type="button"
-        onClick={() => setOpen(true)}
+        onClick={() => canChange && setOpen(true)}
+        disabled={!canChange}
+        title={!canChange ? 'Solo el maestro asignado o un coordinador puede cambiarlo' : undefined}
         className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold transition-colors ${
           assignedName
-            ? 'bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100'
+            ? `bg-indigo-50 text-indigo-700 border border-indigo-200 ${canChange ? 'hover:bg-indigo-100' : 'cursor-default'}`
             : 'bg-gray-100 text-gray-500 border border-gray-200 hover:bg-gray-200'
         }`}
       >
-        🧑‍🏫 {assignedName ? `Encargado: ${assignedName}` : 'Asignar maestro (baño, etc.)'}
+        {!canChange && '🔒 '}🧑‍🏫 {assignedName ? `Encargado: ${assignedName}` : 'Asignar maestro (baño, etc.)'}
       </button>
     )
   }
 
   return (
-    <div className="flex items-center gap-1.5">
-      <select
-        autoFocus
-        disabled={saving || !teachers}
-        defaultValue={assignedId ?? ''}
-        onChange={(e) => assign(e.target.value)}
-        className="text-xs px-2 py-1.5 border-2 border-indigo-300 rounded-lg focus:outline-none bg-white"
-      >
-        <option value="">{teachers ? 'Sin asignar' : 'Cargando…'}</option>
-        {(teachers ?? []).map((t) => (
-          <option key={t.id} value={t.id}>{t.full_name}</option>
-        ))}
-      </select>
-      <button type="button" onClick={() => setOpen(false)} className="p-1 text-gray-300 hover:text-gray-500 rounded-lg">
-        <X size={13} />
-      </button>
+    <div className="flex flex-col gap-1">
+      <div className="flex items-center gap-1.5">
+        <select
+          autoFocus
+          disabled={saving || !teachers}
+          defaultValue={assignedId ?? ''}
+          onChange={(e) => assign(e.target.value)}
+          className="text-xs px-2 py-1.5 border-2 border-indigo-300 rounded-lg focus:outline-none bg-white"
+        >
+          <option value="">{teachers ? 'Sin asignar' : 'Cargando…'}</option>
+          {(teachers ?? []).map((t) => (
+            <option key={t.id} value={t.id}>{t.full_name}</option>
+          ))}
+        </select>
+        <button type="button" onClick={() => setOpen(false)} className="p-1 text-gray-300 hover:text-gray-500 rounded-lg">
+          <X size={13} />
+        </button>
+      </div>
+      {error && <p className="text-[11px] text-red-600">{error}</p>}
     </div>
   )
 }
@@ -1605,6 +1616,7 @@ export default function CheckInPage() {
                         attendanceId={rec.id}
                         assignedId={rec.assigned_teacher_id}
                         assignedName={rec.assigned_teacher?.full_name ?? null}
+                        canChange={!rec.assigned_teacher_id || rec.assigned_teacher_id === session?.user.id || isAdmin}
                         onChanged={(teacherId, teacherName) => {
                           setTodayRecords((prev) => prev.map((r) => r.id === rec.id
                             ? { ...r, assigned_teacher_id: teacherId, assigned_teacher: teacherName ? { full_name: teacherName } : null }
