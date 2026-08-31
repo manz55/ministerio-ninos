@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { supabase } from './supabase'
 import type { Profile } from '../types/domain'
@@ -30,10 +30,17 @@ export function useAuth() {
   const [profile, setProfile] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
 
+  // Tracks whose profile is currently loaded so a silent token refresh
+  // (fires roughly every 50 min while the app stays open, same user) doesn't
+  // re-query `profiles` for no reason — only an actual change of user
+  // (sign-in/out, switching accounts) should trigger a reload.
+  const loadedForUserId = useRef<string | null>(null)
+
   useEffect(() => {
     let cancelled = false
 
     async function loadProfile(userId: string) {
+      loadedForUserId.current = userId
       const { data } = await supabase.from('profiles').select('*').eq('id', userId).single()
       if (cancelled) return
       setProfile(data as Profile | null)
@@ -50,8 +57,9 @@ export function useAuth() {
     const { data: sub } = supabase.auth.onAuthStateChange((_event, newSession) => {
       setSession(newSession)
       if (newSession) {
-        loadProfile(newSession.user.id)
+        if (newSession.user.id !== loadedForUserId.current) loadProfile(newSession.user.id)
       } else {
+        loadedForUserId.current = null
         setProfile(null)
         setLoading(false)
       }
