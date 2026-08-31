@@ -11,7 +11,7 @@ export function ChangePasswordModal({ onClose }: { onClose: () => void }) {
   const [done, setDone] = useState(false)
 
   async function handleSave() {
-    if (password.length < 6) { setError('Mínimo 6 caracteres.'); return }
+    if (password.length < 8) { setError('Mínimo 8 caracteres.'); return }
     if (password !== confirm) { setError('Las contraseñas no coinciden.'); return }
     setSaving(true)
     setError(null)

@@ -42,8 +42,8 @@ function NewUserForm({ onCreated, onCancel }: { onCreated: () => void; onCancel:
   const [error, setError] = useState<string | null>(null)
 
   async function handleSave() {
-    if (!fullName.trim() || !email.trim() || password.length < 6) {
-      setError('Nombre, correo y contraseña (mín. 6 caracteres) son requeridos.')
+    if (!fullName.trim() || !email.trim() || password.length < 8) {
+      setError('Nombre, correo y contraseña (mín. 8 caracteres) son requeridos.')
       return
     }
     setSaving(true)
@@ -71,7 +71,7 @@ function NewUserForm({ onCreated, onCancel }: { onCreated: () => void; onCancel:
       <div>
         <label className="block text-xs font-medium text-gray-500 mb-1">Contraseña temporal</label>
         <input type="text" value={password} onChange={(e) => setPassword(e.target.value)}
-          placeholder="Mínimo 6 caracteres"
+          placeholder="Mínimo 8 caracteres"
           className="w-full px-3 py-2.5 border-2 border-gray-200 rounded-lg focus:border-indigo-500 focus:outline-none text-sm bg-white" />
       </div>
       <div>
