@@ -11,7 +11,7 @@ import { CATEGORY_LABELS, CATEGORY_COLORS, ACTIVE_CATEGORIES, NEXT_CATEGORY, typ
 import { hasCategoryChanged, getCategoryFromBirthDate } from '../lib/categoryUtils'
 import { DatePicker } from '../components/ui/DatePicker'
 import { AnimatedBlobBackground } from '../components/ui/AnimatedBlobBackground'
-import { fetchAttendanceRange, exportRangeCSV, exportRangePDF, MAX_RANGE_ROWS } from '../lib/exportUtils'
+import { fetchAttendanceRange, exportRangeCSV, exportRangePDF, MAX_RANGE_ROWS, toCSV } from '../lib/exportUtils'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -319,10 +319,7 @@ export default function ReportsPage() {
       CATEGORY_LABELS[r.category as Category] ?? r.category,
       r.badge_number ?? 'Sin gafete',
     ])
-    downloadCSV(
-      [...meta, headers, ...rows].map((row) => row.map(String).join(',')).join('\n'),
-      `asistencia-${selectedStr}.csv`
-    )
+    downloadCSV(toCSV([...meta, headers, ...rows]), `asistencia-${selectedStr}.csv`)
   }
 
   async function deleteRecord(id: string) {
@@ -363,7 +360,7 @@ export default function ReportsPage() {
   function exportHistoryCSV() {
     const headers = ['Semana inicio', 'Semana fin', 'Total', 'Corderitos 0-2', 'Corderitos 2-4', 'Hormiguitas', 'Saltamontes', 'Exploradores']
     const rows = weekHistory.map((r) => [r.week_start, r.week_end, r.total, r.corderitos_0_2, r.corderitos_2_4, r.hormiguitas, r.saltamontes, r.exploradores])
-    downloadCSV([headers, ...rows].map((row) => row.map(String).join(',')).join('\n'), 'historial-asistencia.csv')
+    downloadCSV(toCSV([headers, ...rows]), 'historial-asistencia.csv')
   }
 
   // ── Counts ────────────────────────────────────────────────────────────────────

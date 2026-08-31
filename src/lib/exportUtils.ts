@@ -37,6 +37,18 @@ function downloadBlob(blob: Blob, filename: string) {
   URL.revokeObjectURL(url)
 }
 
+// A name or comment containing a comma or quote (rare, but real — an
+// allergy note like "maní, huevo" is exactly the kind of text that ends up
+// here) would otherwise shift every column after it.
+export function csvEscape(value: unknown): string {
+  const s = String(value ?? '')
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
+}
+
+export function toCSV(rows: unknown[][]): string {
+  return rows.map((row) => row.map(csvEscape).join(',')).join('\n')
+}
+
 export function exportRangeCSV(rows: RangeAttendanceRow[], from: string, to: string) {
   const headers = ['Fecha', 'Nombre niño', 'Padre/Madre', 'Categoría', 'Equipo', 'Gafete', 'Hora de entrada']
   const body = rows.map((r) => [
@@ -48,8 +60,7 @@ export function exportRangeCSV(rows: RangeAttendanceRow[], from: string, to: str
     r.badge_number ?? '',
     format(new Date(r.checked_in_at), 'HH:mm'),
   ])
-  const csv = [headers, ...body].map((row) => row.map(String).join(',')).join('\n')
-  downloadBlob(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' }), `asistencia-${from}-a-${to}.csv`)
+  downloadBlob(new Blob(['﻿' + toCSV([headers, ...body])], { type: 'text/csv;charset=utf-8;' }), `asistencia-${from}-a-${to}.csv`)
 }
 
 export function exportRangePDF(rows: RangeAttendanceRow[], from: string, to: string) {

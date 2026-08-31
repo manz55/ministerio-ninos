@@ -17,3 +17,17 @@ export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
     fetch: (input, init) => fetch(input, { ...init, cache: 'no-store' }),
   },
 })
+
+// supabase-js's auto token refresh is a setTimeout, which stops firing once
+// the tab is backgrounded/locked — exactly what happens to a phone during a
+// multi-hour Sunday service. The access token then quietly expires and every
+// request starts failing until the maestro logs in again, with no error
+// explaining why. This is Supabase's own documented fix: force a refresh
+// check whenever the tab becomes visible again, instead of relying only on
+// the background timer.
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') supabase.auth.startAutoRefresh()
+    else supabase.auth.stopAutoRefresh()
+  })
+}

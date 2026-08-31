@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
@@ -7,6 +7,7 @@ import {
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { getCategoryFromBirthDate, getEffectiveCategory, hasCategoryChanged, getAgeLabel } from '../lib/categoryUtils'
+import { createChildSearcher, searchChildrenSplit } from '../lib/fuzzySearch'
 import { uploadPhoto } from '../lib/photo'
 import { CategoryBadge } from '../components/ui/CategoryBadge'
 import { PhotoCapture, PhotoAvatar } from '../components/ui/PhotoCapture'
@@ -923,11 +924,8 @@ function RosterPanel({ onClose, initialFilter }: { onClose: () => void; initialF
 
 export default function FamiliesPage() {
   const [query, setQuery]           = useState('')
-  const [results, setResults]       = useState<FamilyDetail[]>([])
   const [allFamilies, setAllFamilies] = useState<FamilyDetail[]>([])
-  const [loading, setLoading]       = useState(false)
-  const [loadingAll, setLoadingAll] = useState(false)
-  const [searched, setSearched]     = useState(false)
+  const [loadingAll, setLoadingAll] = useState(true)
   const [showAll, setShowAll]       = useState(false)
   const [selected, setSelected]     = useState<FamilyDetail | null>(null)
   const [showNewFamily, setShowNewFamily] = useState(false)
@@ -937,28 +935,13 @@ export default function FamiliesPage() {
   const [totalFamilies, setTotalFamilies] = useState<number | null>(null)
 
   const debouncedQuery = useDebounce(query.trim(), 350)
+  const searched = debouncedQuery.length >= 2
 
   // Total count
   useEffect(() => {
     supabase.from('parents').select('id', { count: 'exact', head: true })
       .then(({ count }) => setTotalFamilies(count))
   }, [])
-
-  // Search
-  useEffect(() => {
-    if (debouncedQuery.length < 2) { setResults([]); setSearched(false); return }
-    let cancelled = false
-    setLoading(true)
-    supabase
-      .from('parents')
-      .select('*, children(*, attendance(count))')
-      .or(`full_name.ilike.%${debouncedQuery}%,phone.ilike.%${debouncedQuery}%`)
-      .limit(20)
-      .then(({ data }) => {
-        if (!cancelled) { setResults((data as FamilyDetail[]) ?? []); setSearched(true); setLoading(false) }
-      })
-    return () => { cancelled = true }
-  }, [debouncedQuery])
 
   // Load all families
   const loadAllFamilies = useCallback(async () => {
@@ -970,8 +953,37 @@ export default function FamiliesPage() {
       .limit(200)
     setAllFamilies((data as FamilyDetail[]) ?? [])
     setLoadingAll(false)
-    setShowAll(true)
   }, [])
+
+  // Loaded once up front, not just behind "Ver todas" — the search box needs
+  // it now too.
+  useEffect(() => { loadAllFamilies() }, [loadAllFamilies])
+
+  // Search by child name, parent name, or phone — all accent/typo-tolerant
+  // via the same fuzzy searcher Registro uses. The previous version only ran
+  // a raw `ilike` against the parent's own name/phone, so typing a child's
+  // name (the far more common case — nobody remembers "quién es el papá de
+  // Samuel Morales" off the top of their head) silently found nothing even
+  // when the family was right there.
+  const searchIndex = useMemo(() => allFamilies.flatMap((f): { full_name: string; parents: { full_name: string } | null; familyId: string }[] =>
+    f.children.length > 0
+      ? f.children.map((c) => ({ full_name: c.full_name, parents: { full_name: f.full_name }, familyId: f.id }))
+      : [{ full_name: f.full_name, parents: null, familyId: f.id }]
+  ), [allFamilies])
+  const searcher = useMemo(() => createChildSearcher(searchIndex), [searchIndex])
+
+  const results = useMemo(() => {
+    if (!searched) return []
+    const { exact, suggestions } = searchChildrenSplit(searcher, debouncedQuery)
+    const matchedIds = new Set([...exact, ...suggestions].map((c) => c.familyId))
+    const qDigits = debouncedQuery.replace(/\D/g, '')
+    if (qDigits.length >= 3) {
+      for (const f of allFamilies) {
+        if (f.phone?.replace(/\D/g, '').includes(qDigits)) matchedIds.add(f.id)
+      }
+    }
+    return allFamilies.filter((f) => matchedIds.has(f.id))
+  }, [searched, debouncedQuery, searcher, allFamilies])
 
   const fetchFamily = useCallback(async (id: string): Promise<FamilyDetail | null> => {
     const { data } = await supabase
@@ -987,7 +999,6 @@ export default function FamiliesPage() {
     const updated = await fetchFamily(selected.id)
     if (updated) {
       setSelected(updated)
-      setResults((prev) => prev.map((f) => f.id === updated.id ? updated : f))
       setAllFamilies((prev) => prev.map((f) => f.id === updated.id ? updated : f))
     }
   }
@@ -995,7 +1006,6 @@ export default function FamiliesPage() {
   function handleDeleted() {
     const id = selected?.id
     setSelected(null)
-    setResults((prev) => prev.filter((f) => f.id !== id))
     setAllFamilies((prev) => prev.filter((f) => f.id !== id))
     setTotalFamilies((n) => (n !== null ? n - 1 : n))
   }
@@ -1003,7 +1013,11 @@ export default function FamiliesPage() {
   async function handleNewFamilySaved(parent: ParentRow) {
     setShowNewFamily(false)
     const family = await fetchFamily(parent.id)
-    if (family) setSelected(family)
+    if (family) {
+      setSelected(family)
+      // So it's findable by search immediately, without waiting on a reload.
+      setAllFamilies((prev) => [...prev, family].sort((a, b) => a.full_name.localeCompare(b.full_name)))
+    }
     setTotalFamilies((n) => (n !== null ? n + 1 : n))
   }
 
@@ -1031,7 +1045,7 @@ export default function FamiliesPage() {
     )
   }
 
-  const displayList = debouncedQuery.length >= 2 ? results : showAll ? allFamilies : []
+  const displayList = searched ? results : showAll ? allFamilies : []
 
   return (
     <>
@@ -1072,7 +1086,7 @@ export default function FamiliesPage() {
           className="w-full pl-11 pr-4 py-3.5 text-base border-2 border-gray-200 rounded-xl focus:border-indigo-500 focus:outline-none bg-white"
         />
         {query && (
-          <button onClick={() => { setQuery(''); setSearched(false) }}
+          <button onClick={() => setQuery('')}
             className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
             <X size={16} />
           </button>
@@ -1080,14 +1094,14 @@ export default function FamiliesPage() {
       </div>
 
       {/* Ver todas */}
-      {!showAll && debouncedQuery.length < 2 && (
+      {!showAll && !searched && (
         <button
-          onClick={loadAllFamilies}
+          onClick={() => setShowAll(true)}
           disabled={loadingAll}
           className="w-full flex items-center justify-center gap-2 py-3 text-sm font-medium text-gray-600 bg-white border-2 border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
         >
           <Users size={15} />
-          {loadingAll ? 'Cargando…' : `Ver todas las familias (${totalFamilies ?? '…'})`}
+          {loadingAll ? 'Cargando…' : `Ver todas las familias (${totalFamilies ?? allFamilies.length})`}
         </button>
       )}
 
@@ -1100,16 +1114,16 @@ export default function FamiliesPage() {
         </div>
       )}
 
-      {loading && <p className="text-center text-gray-400 py-6">Buscando…</p>}
+      {loadingAll && (searched || showAll) && <p className="text-center text-gray-400 py-6">Cargando…</p>}
 
-      {!loading && searched && results.length === 0 && (
+      {!loadingAll && searched && results.length === 0 && (
         <div className="text-center py-10 text-gray-400 bg-white rounded-2xl border border-gray-200">
           <Search size={36} className="mx-auto opacity-30 mb-2" />
           <p>Sin resultados para «{debouncedQuery}»</p>
         </div>
       )}
 
-      {displayList.length > 0 && (
+      {!loadingAll && displayList.length > 0 && (
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -1121,7 +1135,7 @@ export default function FamiliesPage() {
         </motion.div>
       )}
 
-      {!searched && !showAll && !loading && (
+      {!searched && !showAll && !loadingAll && (
         <div className="text-center py-10 text-gray-400 space-y-1">
           <Search size={36} className="mx-auto opacity-30 mb-2" />
           <p>Escribe 2+ caracteres para buscar</p>

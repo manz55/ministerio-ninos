@@ -1566,7 +1566,7 @@ export default function CheckInPage() {
                             <X size={13} />
                           </button>
                         </span>
-                      ) : rec.badge_number ? (
+                      ) : rec.badge_number && isAdmin ? (
                         <button
                           onClick={() => startBadgeEdit(rec)}
                           className="flex items-center gap-1 pl-2 pr-1.5 py-0.5 text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-full hover:bg-indigo-100 hover:border-indigo-300 active:scale-95 transition-all"
@@ -1575,6 +1575,13 @@ export default function CheckInPage() {
                           #{rec.badge_number}
                           <Pencil size={10} className="text-indigo-400" />
                         </button>
+                      ) : rec.badge_number ? (
+                        <span
+                          className="flex items-center gap-1 pl-2 pr-1.5 py-0.5 text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-full"
+                          title="Solo un coordinador puede cambiar el gafete"
+                        >
+                          #{rec.badge_number}
+                        </span>
                       ) : null}
                       {rec.pager_number && (
                         <span className="text-xs text-gray-400 font-medium">
