@@ -1,7 +1,5 @@
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
-import jsPDF from 'jspdf'
-import autoTable from 'jspdf-autotable'
 import { supabase } from './supabase'
 import { CATEGORY_LABELS, TEAM_COLOR_LABELS, type Category, type TeamColor } from '../types/domain'
 
@@ -86,7 +84,15 @@ export function exportRangeCSV(rows: RangeAttendanceRow[], from: string, to: str
   downloadBlob(new Blob(['﻿' + toCSV([headers, ...body])], { type: 'text/csv;charset=utf-8;' }), `asistencia-${from}-a-${to}.csv`)
 }
 
-export function exportRangePDF(rows: RangeAttendanceRow[], from: string, to: string, staffing: DailyStaffing = {}) {
+// jspdf/jspdf-autotable (and the html2canvas they pull in) are only needed
+// once someone actually clicks "PDF" — loading them dynamically here keeps
+// them out of ReportsPage's initial bundle instead of always paying for
+// ~200KB nobody may ever use.
+export async function exportRangePDF(rows: RangeAttendanceRow[], from: string, to: string, staffing: DailyStaffing = {}) {
+  const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([
+    import('jspdf'),
+    import('jspdf-autotable'),
+  ])
   const doc = new jsPDF()
   doc.setFontSize(14)
   doc.text('Reporte de asistencia — Ministerio de Niños', 14, 16)

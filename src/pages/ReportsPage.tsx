@@ -207,13 +207,14 @@ export default function ReportsPage() {
       fetchAttendanceRange(rangeFrom, rangeTo),
       fetchDailyStaffing(rangeFrom, rangeTo),
     ])
-    setRangeBusy(null)
-    if (rows.length === 0) { setRangeError('No hay registros en ese rango.'); return }
+    if (rows.length === 0) { setRangeBusy(null); setRangeError('No hay registros en ese rango.'); return }
     if (total > MAX_RANGE_ROWS) {
       setRangeError(`El rango tiene ${total} registros — se exportaron los primeros ${MAX_RANGE_ROWS}. Prueba un rango más corto para un reporte completo.`)
     }
-    if (kind === 'csv') exportRangeCSV(rows, rangeFrom, rangeTo, staffing)
-    else exportRangePDF(rows, rangeFrom, rangeTo, staffing)
+    // PDF stays "busy" through the export call since the PDF libraries load
+    // on demand (first click downloads them) — CSV needs no extra library.
+    if (kind === 'csv') { exportRangeCSV(rows, rangeFrom, rangeTo, staffing); setRangeBusy(null) }
+    else { await exportRangePDF(rows, rangeFrom, rangeTo, staffing); setRangeBusy(null) }
   }
 
   const selectedStr    = format(selectedDate, 'yyyy-MM-dd')
