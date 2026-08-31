@@ -146,7 +146,7 @@ function UserRow({ user, isSelf, onChanged }: { user: Profile; isSelf: boolean; 
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
             <div className="flex items-center gap-1.5">
-              {user.is_owner ? <Crown size={13} className="text-amber-500 shrink-0" /> : user.role === 'admin' ? <Shield size={13} className="text-indigo-500 shrink-0" /> : <User size={13} className="text-gray-400 shrink-0" />}
+              {user.role === 'admin' ? <Shield size={13} className="text-indigo-500 shrink-0" /> : <User size={13} className="text-gray-400 shrink-0" />}
               <p className="font-bold text-gray-900 truncate">{user.full_name}</p>
               {isSelf && <span className="text-[10px] text-gray-400">(tú)</span>}
             </div>
@@ -161,7 +161,13 @@ function UserRow({ user, isSelf, onChanged }: { user: Profile; isSelf: boolean; 
 
         {error && <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>}
 
-        {!isSelf && !user.is_owner && (
+        {/* Shown on every non-self row, including the owner's — nothing here
+            should visually mark that account as different. The edge function
+            (admin-users) unconditionally rejects any change to is_owner=true
+            accounts regardless of who calls it, so the real protection lives
+            server-side; someone who deliberately tries anyway just gets a
+            rejection message, same as any other blocked action. */}
+        {!isSelf && (
           <div className="flex items-center gap-1.5 pt-1">
             <button onClick={toggleRole} disabled={busy}
               className="flex-1 flex items-center justify-center gap-1 py-1.5 text-xs font-medium text-indigo-600 bg-indigo-50 rounded-lg hover:bg-indigo-100 disabled:opacity-50 transition-colors">
