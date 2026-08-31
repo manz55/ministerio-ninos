@@ -200,6 +200,35 @@ export type Database = {
           },
         ]
       }
+      daily_coordinator: {
+        Row: {
+          name: string
+          session_date: string
+          set_by: string | null
+          updated_at: string
+        }
+        Insert: {
+          name: string
+          session_date: string
+          set_by?: string | null
+          updated_at?: string
+        }
+        Update: {
+          name?: string
+          session_date?: string
+          set_by?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "daily_coordinator_set_by_fkey"
+            columns: ["set_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       deletion_log: {
         Row: {
           deleted_at: string
@@ -441,6 +470,10 @@ export type Database = {
       }
       assign_attendance_teacher: {
         Args: { p_attendance_id: string; p_teacher_id: string | null }
+        Returns: undefined
+      }
+      set_daily_coordinator: {
+        Args: { p_session_date: string; p_name: string }
         Returns: undefined
       }
     }

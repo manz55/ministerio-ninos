@@ -60,7 +60,6 @@ const CHILD_SELECT = 'id, full_name, birth_date, category, allergies, medical_no
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const TEAM_KEY        = 'ministerio_team_session'
-const COORDINATOR_KEY = 'ministerio_coordinator_session'
 const today = format(new Date(), 'yyyy-MM-dd')
 
 function getStoredTeamForToday(): TeamColor | null {
@@ -72,21 +71,8 @@ function getStoredTeamForToday(): TeamColor | null {
   } catch { return null }
 }
 
-function getStoredCoordinatorForToday(): string {
-  try {
-    const raw = localStorage.getItem(COORDINATOR_KEY)
-    if (!raw) return ''
-    const { name, date } = JSON.parse(raw)
-    return date === today ? (name ?? '') : ''
-  } catch { return '' }
-}
-
 function persistTeam(color: TeamColor) {
   localStorage.setItem(TEAM_KEY, JSON.stringify({ color, date: today }))
-}
-
-function persistCoordinator(name: string) {
-  localStorage.setItem(COORDINATOR_KEY, JSON.stringify({ name, date: today }))
 }
 
 const TEAM_META: Record<TeamColor, { label: string; bg: string; dot: string; text: string; cardBg: string; cardText: string }> = {
@@ -155,8 +141,17 @@ const TILES = [
 
 // ─── Team picker screen ───────────────────────────────────────────────────────
 
-function TeamPickerScreen({ onConfirm, isAdmin }: { onConfirm: (color: TeamColor, coordinator: string) => void; isAdmin: boolean }) {
-  const [coordinator, setCoordinator] = useState(getStoredCoordinatorForToday)
+function TeamPickerScreen({
+  onConfirm,
+  isAdmin,
+  initialCoordinator,
+}: {
+  onConfirm: (color: TeamColor, coordinator: string) => void
+  isAdmin: boolean
+  initialCoordinator: string
+}) {
+  const [coordinator, setCoordinator] = useState(initialCoordinator)
+  useEffect(() => setCoordinator(initialCoordinator), [initialCoordinator])
   const coordinatorLocked = !isAdmin && coordinator.trim().length > 0
 
   const TEAMS: { color: TeamColor; hover: string }[] = [
@@ -751,8 +746,9 @@ export default function CheckInPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [teamColor, setTeamColor]         = useState<TeamColor>(getStoredTeamForToday() ?? 'rojo')
   const [teamConfirmed, setTeamConfirmed]   = useState(() => getStoredTeamForToday() !== null)
-  const [coordinatorName, setCoordinatorName] = useState(getStoredCoordinatorForToday)
+  const [coordinatorName, setCoordinatorName] = useState('')
   const [editingCoordinator, setEditingCoordinator] = useState(false)
+  const [coordinatorError, setCoordinatorError] = useState<string | null>(null)
   const [searchParams, setSearchParams] = useSearchParams()
   const [showNewFamily, setShowNewFamily] = useState(() => searchParams.get('nueva') !== null)
   // Carried over when a coordinator jumps here from a maestro's request in
@@ -822,6 +818,30 @@ export default function CheckInPage() {
       .subscribe()
     return () => { supabase.removeChannel(channel) }
   }, [fetchCounts])
+
+  // "¿Quién está de encargado hoy?" used to live in localStorage — per
+  // device, not shared — so it could show something different (or nothing)
+  // on every phone. Now it's one row per day, fetched once and kept live
+  // via realtime so a coordinator's edit reaches every open session.
+  useEffect(() => {
+    supabase.from('daily_coordinator').select('name').eq('session_date', today).maybeSingle()
+      .then(({ data }) => { if (data?.name) setCoordinatorName(data.name) })
+  }, [])
+
+  useEffect(() => {
+    const channel = supabase
+      .channel('daily-coordinator-sync')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'daily_coordinator', filter: `session_date=eq.${today}` },
+        (payload) => {
+          const row = payload.new as { name?: string } | undefined
+          if (row?.name) setCoordinatorName(row.name)
+        }
+      )
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
+  }, [])
 
   // Carga el padrón completo una sola vez (no solo al abrir "Ver padrón
   // completo") porque también alimenta la búsqueda global difusa de abajo —
@@ -956,12 +976,18 @@ export default function CheckInPage() {
     fetchRoster()
   }
 
-  function confirmTeam(color: TeamColor, coordinator: string) {
+  async function confirmTeam(color: TeamColor, coordinator: string) {
     setTeamColor(color)
-    setCoordinatorName(coordinator)
     setTeamConfirmed(true)
     persistTeam(color)
-    persistCoordinator(coordinator)
+    // Only actually write it if it's new/changed — re-submitting the same
+    // already-set name (the normal case once it's locked for non-admins)
+    // would otherwise hit the RPC's "only a coordinator can change it"
+    // rejection for no reason.
+    if (coordinator && coordinator !== coordinatorName) {
+      const { error } = await supabase.rpc('set_daily_coordinator', { p_session_date: today, p_name: coordinator })
+      if (!error) setCoordinatorName(coordinator)
+    }
   }
 
   async function deleteAttendanceRecord(id: string) {
@@ -1017,10 +1043,13 @@ export default function CheckInPage() {
     setEditingBadgeRecordId(null)
   }
 
-  function saveCoordinator(name: string) {
-    setCoordinatorName(name)
-    persistCoordinator(name)
+  async function saveCoordinator(name: string) {
     setEditingCoordinator(false)
+    if (!name || name === coordinatorName) return
+    setCoordinatorError(null)
+    const { error } = await supabase.rpc('set_daily_coordinator', { p_session_date: today, p_name: name })
+    if (!error) setCoordinatorName(name)
+    else setCoordinatorError('Solo un coordinador puede cambiar quién está de encargado.')
   }
 
   const categorySearcher = useMemo(() => createChildSearcher(children), [children])
@@ -1043,7 +1072,7 @@ export default function CheckInPage() {
 
   // Team must be confirmed before anything else each day
   if (!teamConfirmed) {
-    return <TeamPickerScreen onConfirm={confirmTeam} isAdmin={isAdmin} />
+    return <TeamPickerScreen onConfirm={confirmTeam} isAdmin={isAdmin} initialCoordinator={coordinatorName} />
   }
 
   if (showNewFamily) {
@@ -1250,6 +1279,7 @@ export default function CheckInPage() {
                 </button>
               )}
             </div>
+            {coordinatorError && <p className="text-[11px] text-red-600 mt-1">{coordinatorError}</p>}
           </div>
 
           {/* Team indicator */}
