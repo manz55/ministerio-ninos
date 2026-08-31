@@ -187,3 +187,13 @@ export interface CoordinatorRequest {
   profiles?: { full_name: string } | null
   resolver?: { full_name: string } | null
 }
+
+export interface DeletionLogEntry {
+  id: string
+  table_name: 'parents' | 'children'
+  record_id: string
+  record_data: { full_name?: string; [key: string]: unknown }
+  deleted_by: string | null
+  deleted_at: string
+  deleter?: { full_name: string } | null
+}

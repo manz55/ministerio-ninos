@@ -1,10 +1,12 @@
 import { useEffect, useState, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { UserPlus, Shield, User, Trash2, Power, Check } from 'lucide-react'
+import { formatDistanceToNow } from 'date-fns'
+import { es } from 'date-fns/locale'
+import { UserPlus, Shield, User, Trash2, Power, Check, History, Users as UsersIcon, Baby } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { createUser, updateUserRole, setUserActive, deleteUser } from '../lib/adminUsers'
 import { useAuth } from '../lib/auth'
-import type { Profile, UserRole } from '../types/domain'
+import type { Profile, UserRole, DeletionLogEntry } from '../types/domain'
 
 function ConfirmDialog({
   message, onConfirm, onCancel,
@@ -180,6 +182,71 @@ function UserRow({ user, isSelf, onChanged }: { user: Profile; isSelf: boolean; 
   )
 }
 
+// Every delete on parents/children gets captured by a DB trigger (see
+// migration add_deletion_audit_log) — this just surfaces it, so "¿se borró
+// algo?" has a real answer instead of everyone guessing from memory.
+function DeletionLogSection() {
+  const [entries, setEntries] = useState<DeletionLogEntry[]>([])
+  const [loading, setLoading] = useState(true)
+  const [open, setOpen] = useState(false)
+
+  useEffect(() => {
+    if (!open) return
+    supabase
+      .from('deletion_log')
+      .select('*, deleter:profiles(full_name)')
+      .order('deleted_at', { ascending: false })
+      .limit(100)
+      .then(({ data }) => {
+        setEntries((data as DeletionLogEntry[]) ?? [])
+        setLoading(false)
+      })
+  }, [open])
+
+  return (
+    <div className="pt-2">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="flex items-center gap-1.5 text-sm font-semibold text-gray-500 hover:text-gray-700 transition-colors"
+      >
+        <History size={15} />
+        {open ? 'Ocultar bitácora de eliminaciones' : 'Ver bitácora de eliminaciones'}
+      </button>
+
+      {open && (
+        <div className="mt-3 space-y-2">
+          {loading && <p className="text-center text-gray-400 py-6 text-sm">Cargando…</p>}
+          {!loading && entries.length === 0 && (
+            <p className="text-center text-gray-400 py-6 text-sm bg-white rounded-2xl border border-gray-200">
+              No se ha borrado ninguna familia o niño desde que existe esta bitácora.
+            </p>
+          )}
+          {!loading && entries.map((e) => (
+            <div key={e.id} className="bg-white rounded-xl border border-gray-200 px-4 py-3 flex items-start gap-2.5">
+              {e.table_name === 'parents' ? (
+                <UsersIcon size={14} className="text-rose-400 shrink-0 mt-0.5" />
+              ) : (
+                <Baby size={14} className="text-rose-400 shrink-0 mt-0.5" />
+              )}
+              <div className="flex-1 min-w-0">
+                <p className="text-sm text-gray-700">
+                  <span className="font-semibold">{e.record_data.full_name ?? 'Registro sin nombre'}</span>
+                  {' '}
+                  <span className="text-gray-400">({e.table_name === 'parents' ? 'familia' : 'niño'})</span>
+                </p>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  Borrado por {e.deleter?.full_name ?? 'alguien fuera de la app (SQL directo)'} ·{' '}
+                  {formatDistanceToNow(new Date(e.deleted_at), { addSuffix: true, locale: es })}
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function UsersPage() {
   const { profile: currentProfile } = useAuth()
   const [users, setUsers] = useState<Profile[]>([])
@@ -225,6 +292,8 @@ export default function UsersPage() {
           ))}
         </div>
       )}
+
+      <DeletionLogSection />
     </div>
   )
 }
