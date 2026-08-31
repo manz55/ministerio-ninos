@@ -416,14 +416,19 @@ function FamilyDetailPanel({
       const path = await uploadPhoto(`parents/${family.id}.jpg`, parentPhotoBlob)
       if (path) update.photo_url = path
     }
-    await supabase.from('parents').update(update).eq('id', family.id)
+    // .select('id') forces PostgREST to report which rows were actually
+    // updated — without it, an update silently blocked by RLS (0 rows
+    // affected) still returns no error, and the UI would act like it saved.
+    const { data, error } = await supabase.from('parents').update(update).eq('id', family.id).select('id')
     setSavingParent(false)
+    if (error || !data || data.length === 0) { setDeleteError('No se pudo guardar. Intenta de nuevo.'); return }
     setEditingParent(false)
     onRefresh()
   }
 
   async function saveChild(childId: string, data: Omit<Partial<ChildDetail>, 'id' | 'parent_id' | 'attendance'>) {
-    await supabase.from('children').update(data).eq('id', childId)
+    const { data: updated, error } = await supabase.from('children').update(data).eq('id', childId).select('id')
+    if (error || !updated || updated.length === 0) { setDeleteError('No se pudo guardar. Intenta de nuevo.'); return }
     setEditingChildId(null)
     setJustSavedChildId(childId)
     onRefresh()
@@ -431,12 +436,15 @@ function FamilyDetailPanel({
 
   async function deleteChild(child: ChildDetail) {
     setDeleteError(null)
-    // First delete attendance records for this child
-    await supabase.from('attendance').delete().eq('child_id', child.id)
-    // .select() forces PostgREST to report which rows were actually deleted —
-    // without it, a DELETE silently blocked by RLS (0 rows affected) still
-    // returns no error, and the record would reappear on the next refetch.
-    const { data, error } = await supabase.from('children').delete().eq('id', child.id).select('id')
+    const { data: { user } } = await supabase.auth.getUser()
+    const now = new Date().toISOString()
+    // Marcar (no borrar): la papelera guarda el registro hasta que alguien lo
+    // restaure o el dueño lo purgue de verdad.
+    await supabase.from('attendance').update({ deleted_at: now, deleted_by: user?.id }).eq('child_id', child.id)
+    // .select() fuerza a PostgREST a reportar qué filas se marcaron de
+    // verdad — sin esto, un update bloqueado por RLS (0 filas afectadas)
+    // igual no da error, y el niño seguiría apareciendo como si nada.
+    const { data, error } = await supabase.from('children').update({ deleted_at: now, deleted_by: user?.id }).eq('id', child.id).select('id')
     if (error || !data || data.length === 0) { setDeleteError('Error al eliminar. Intenta de nuevo.'); return }
     setConfirmDeleteChild(null)
     onRefresh()
@@ -444,14 +452,15 @@ function FamilyDetailPanel({
 
   async function deleteFamily() {
     setDeleteError(null)
-    // Delete attendance for all children
+    const { data: { user } } = await supabase.auth.getUser()
+    const now = new Date().toISOString()
+    // Marcar asistencia y niños de la familia
     for (const child of family.children) {
-      await supabase.from('attendance').delete().eq('child_id', child.id)
+      await supabase.from('attendance').update({ deleted_at: now, deleted_by: user?.id }).eq('child_id', child.id)
     }
-    // Delete children
-    await supabase.from('children').delete().eq('parent_id', family.id)
-    // Delete parent
-    const { data, error } = await supabase.from('parents').delete().eq('id', family.id).select('id')
+    await supabase.from('children').update({ deleted_at: now, deleted_by: user?.id }).eq('parent_id', family.id)
+    // Marcar al padre/madre
+    const { data, error } = await supabase.from('parents').update({ deleted_at: now, deleted_by: user?.id }).eq('id', family.id).select('id')
     if (error || !data || data.length === 0) { setDeleteError('Error al eliminar la familia. Intenta de nuevo.'); return }
     setConfirmDeleteFamily(false)
     onDeleted()
@@ -465,7 +474,7 @@ function FamilyDetailPanel({
         {confirmDeleteChild && (
           <ConfirmDialog
             message={`¿Eliminar a ${confirmDeleteChild.full_name}?`}
-            subtext={`Se eliminarán también sus ${confirmDeleteChild.attendance?.[0]?.count ?? 0} registro(s) de asistencia. Esta acción no se puede deshacer.`}
+            subtext={`Se marcarán también sus ${confirmDeleteChild.attendance?.[0]?.count ?? 0} registro(s) de asistencia. Quedará en la papelera por si hay que restaurarlo.`}
             destructive
             onConfirm={() => deleteChild(confirmDeleteChild)}
             onCancel={() => setConfirmDeleteChild(null)}
@@ -474,7 +483,7 @@ function FamilyDetailPanel({
         {confirmDeleteFamily && (
           <ConfirmDialog
             message={`¿Eliminar la familia "${family.full_name}"?`}
-            subtext={`Se eliminarán ${family.children.length} niño(s) y todos sus registros de asistencia (${totalVisits} en total). Esta acción no se puede deshacer.`}
+            subtext={`Se marcarán ${family.children.length} niño(s) y todos sus registros de asistencia (${totalVisits} en total). Quedará en la papelera por si hay que restaurarlo.`}
             destructive
             onConfirm={deleteFamily}
             onCancel={() => setConfirmDeleteFamily(false)}
@@ -755,13 +764,15 @@ function RosterRow({ child, onChanged }: { child: RosterChild; onChanged: () => 
   const age = getAgeLabel(child.birth_date)
 
   async function assignParent(parent: { id: string; full_name: string }) {
-    await supabase.from('children').update({ parent_id: parent.id }).eq('id', child.id)
+    const { data, error } = await supabase.from('children').update({ parent_id: parent.id }).eq('id', child.id).select('id')
+    if (error || !data || data.length === 0) { setDeleteError('No se pudo asignar. Intenta de nuevo.'); return }
     setAssigning(false)
     onChanged()
   }
 
   async function saveChild(data: Omit<Partial<ChildDetail>, 'id' | 'parent_id' | 'attendance'>) {
-    await supabase.from('children').update(data).eq('id', child.id)
+    const { data: updated, error } = await supabase.from('children').update(data).eq('id', child.id).select('id')
+    if (error || !updated || updated.length === 0) { setDeleteError('No se pudo guardar. Intenta de nuevo.'); return }
     setEditing(false)
     setJustSaved(true)
     onChanged()
@@ -770,11 +781,15 @@ function RosterRow({ child, onChanged }: { child: RosterChild; onChanged: () => 
   async function handleDelete() {
     setDeleting(true)
     setDeleteError(null)
-    await supabase.from('attendance').delete().eq('child_id', child.id)
-    // .select() forces PostgREST to report which rows were actually deleted —
-    // without it, a DELETE silently blocked by RLS (0 rows affected) still
-    // comes back with no error, and the UI would wrongly act like it worked.
-    const { data, error } = await supabase.from('children').delete().eq('id', child.id).select('id')
+    const { data: { user } } = await supabase.auth.getUser()
+    const now = new Date().toISOString()
+    // Marcar (no borrar): la papelera guarda el registro hasta que alguien lo
+    // restaure o el dueño lo purgue de verdad.
+    await supabase.from('attendance').update({ deleted_at: now, deleted_by: user?.id }).eq('child_id', child.id)
+    // .select() fuerza a PostgREST a reportar qué filas se marcaron de
+    // verdad — sin esto, un update bloqueado por RLS (0 filas afectadas)
+    // igual no da error, y la UI actuaría como si hubiera funcionado.
+    const { data, error } = await supabase.from('children').update({ deleted_at: now, deleted_by: user?.id }).eq('id', child.id).select('id')
     setDeleting(false)
     if (error || !data || data.length === 0) {
       setDeleteError('No se pudo eliminar. Intenta de nuevo.')
@@ -790,7 +805,7 @@ function RosterRow({ child, onChanged }: { child: RosterChild; onChanged: () => 
         {confirmDelete && (
           <ConfirmDialog
             message={`¿Eliminar a ${child.full_name}?`}
-            subtext="Se eliminarán también sus registros de asistencia. Esta acción no se puede deshacer."
+            subtext="Se marcarán también sus registros de asistencia. Quedará en la papelera por si hay que restaurarlo."
             destructive
             onConfirm={handleDelete}
             onCancel={() => setConfirmDelete(false)}
@@ -860,6 +875,7 @@ function RosterPanel({ onClose, initialFilter }: { onClose: () => void; initialF
     const { data } = await supabase
       .from('children')
       .select('*, parents(id, full_name, phone), attendance(count)')
+      .is('deleted_at', null)
       .order('full_name')
     setChildren((data as RosterChild[]) ?? [])
     setLoading(false)
@@ -943,14 +959,18 @@ export default function FamiliesPage() {
       .then(({ count }) => setTotalFamilies(count))
   }, [])
 
-  // Load all families
+  // Load all families. No .limit() here on purpose — a hard cap silently
+  // truncates the list once the church has more families than the cap, and
+  // both "Ver todas" and search run entirely over this array, so anything
+  // past the cutoff would become invisible everywhere.
   const loadAllFamilies = useCallback(async () => {
     setLoadingAll(true)
     const { data } = await supabase
       .from('parents')
       .select('*, children(*, attendance(count))')
+      .is('deleted_at', null)
+      .is('children.deleted_at', null)
       .order('full_name')
-      .limit(200)
     setAllFamilies((data as FamilyDetail[]) ?? [])
     setLoadingAll(false)
   }, [])
@@ -989,6 +1009,7 @@ export default function FamiliesPage() {
     const { data } = await supabase
       .from('parents')
       .select('*, children(*, attendance(count))')
+      .is('children.deleted_at', null)
       .eq('id', id)
       .single()
     return data as FamilyDetail | null
@@ -1022,7 +1043,10 @@ export default function FamiliesPage() {
   }
 
   if (showNewFamily) {
-    return <NewFamilyStep onSaved={handleNewFamilySaved} onCancel={() => setShowNewFamily(false)} />
+    // So the "ya existe alguien con nombre parecido" duplicate warning works
+    // here too, not just when starting a new family from Registro.
+    const existingChildren = allFamilies.flatMap((f) => f.children.map((c) => ({ id: c.id, full_name: c.full_name })))
+    return <NewFamilyStep existingChildren={existingChildren} onSaved={handleNewFamilySaved} onCancel={() => setShowNewFamily(false)} />
   }
 
   if (showRoster) {

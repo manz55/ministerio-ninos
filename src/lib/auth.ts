@@ -63,5 +63,11 @@ export function useAuth() {
     }
   }, [])
 
-  return { session, profile, loading, isAdmin: !!profile && profile.role === 'admin' && profile.active }
+  return {
+    session,
+    profile,
+    loading,
+    isAdmin: !!profile && profile.role === 'admin' && profile.active,
+    isOwner: !!profile && profile.is_owner && profile.active,
+  }
 }

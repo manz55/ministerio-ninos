@@ -14,6 +14,41 @@ export type Database = {
   }
   public: {
     Tables: {
+      activity_log: {
+        Row: {
+          created_at: string
+          event_type: string
+          id: string
+          record_id: string | null
+          table_name: string | null
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          event_type: string
+          id?: string
+          record_id?: string | null
+          table_name?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          event_type?: string
+          id?: string
+          record_id?: string | null
+          table_name?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "activity_log_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       attendance: {
         Row: {
           assigned_teacher_id: string | null
@@ -22,6 +57,8 @@ export type Database = {
           checked_in_at: string
           checked_out_at: string | null
           child_id: string
+          deleted_at: string | null
+          deleted_by: string | null
           id: string
           pager_number: number | null
           session_date: string
@@ -34,6 +71,8 @@ export type Database = {
           checked_in_at?: string
           checked_out_at?: string | null
           child_id: string
+          deleted_at?: string | null
+          deleted_by?: string | null
           id?: string
           pager_number?: number | null
           session_date?: string
@@ -46,6 +85,8 @@ export type Database = {
           checked_in_at?: string
           checked_out_at?: string | null
           child_id?: string
+          deleted_at?: string | null
+          deleted_by?: string | null
           id?: string
           pager_number?: number | null
           session_date?: string
@@ -53,10 +94,24 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "attendance_assigned_teacher_id_fkey"
+            columns: ["assigned_teacher_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "attendance_child_id_fkey"
             columns: ["child_id"]
             isOneToOne: false
             referencedRelation: "children"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "attendance_deleted_by_fkey"
+            columns: ["deleted_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -106,6 +161,8 @@ export type Database = {
           category: string | null
           comments: string | null
           created_at: string
+          deleted_at: string | null
+          deleted_by: string | null
           full_name: string
           guardian_relationship: string | null
           id: string
@@ -120,6 +177,8 @@ export type Database = {
           category?: string | null
           comments?: string | null
           created_at?: string
+          deleted_at?: string | null
+          deleted_by?: string | null
           full_name: string
           guardian_relationship?: string | null
           id?: string
@@ -134,6 +193,8 @@ export type Database = {
           category?: string | null
           comments?: string | null
           created_at?: string
+          deleted_at?: string | null
+          deleted_by?: string | null
           full_name?: string
           guardian_relationship?: string | null
           id?: string
@@ -143,6 +204,13 @@ export type Database = {
           toilet_trained?: boolean | null
         }
         Relationships: [
+          {
+            foreignKeyName: "children_deleted_by_fkey"
+            columns: ["deleted_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "children_parent_id_fkey"
             columns: ["parent_id"]
@@ -194,6 +262,35 @@ export type Database = {
           {
             foreignKeyName: "coordinator_requests_resolved_by_fkey"
             columns: ["resolved_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      daily_computer_operator: {
+        Row: {
+          name: string
+          session_date: string
+          set_by: string | null
+          updated_at: string
+        }
+        Insert: {
+          name: string
+          session_date: string
+          set_by?: string | null
+          updated_at?: string
+        }
+        Update: {
+          name?: string
+          session_date?: string
+          set_by?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "daily_computer_operator_set_by_fkey"
+            columns: ["set_by"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -363,6 +460,8 @@ export type Database = {
       parents: {
         Row: {
           created_at: string
+          deleted_at: string | null
+          deleted_by: string | null
           full_name: string
           id: string
           phone: string | null
@@ -370,6 +469,8 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          deleted_at?: string | null
+          deleted_by?: string | null
           full_name: string
           id?: string
           phone?: string | null
@@ -377,12 +478,22 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          deleted_at?: string | null
+          deleted_by?: string | null
           full_name?: string
           id?: string
           phone?: string | null
           photo_url?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "parents_deleted_by_fkey"
+            columns: ["deleted_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       profiles: {
         Row: {
@@ -391,6 +502,7 @@ export type Database = {
           email: string | null
           full_name: string
           id: string
+          is_owner: boolean
           role: string
         }
         Insert: {
@@ -399,6 +511,7 @@ export type Database = {
           email?: string | null
           full_name: string
           id: string
+          is_owner?: boolean
           role?: string
         }
         Update: {
@@ -407,6 +520,7 @@ export type Database = {
           email?: string | null
           full_name?: string
           id?: string
+          is_owner?: boolean
           role?: string
         }
         Relationships: []
@@ -461,19 +575,24 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      is_admin: { Args: never; Returns: boolean }
-      show_limit: { Args: never; Returns: number }
-      show_trgm: { Args: { "": string }; Returns: string[] }
-      sync_child_category: {
-        Args: { p_category: string; p_child_id: string }
-        Returns: undefined
-      }
       assign_attendance_teacher: {
         Args: { p_attendance_id: string; p_teacher_id: string | null }
         Returns: undefined
       }
+      is_admin: { Args: never; Returns: boolean }
+      is_owner: { Args: never; Returns: boolean }
+      set_daily_computer_operator: {
+        Args: { p_name: string; p_session_date: string }
+        Returns: undefined
+      }
       set_daily_coordinator: {
-        Args: { p_session_date: string; p_name: string }
+        Args: { p_name: string; p_session_date: string }
+        Returns: undefined
+      }
+      show_limit: { Args: never; Returns: number }
+      show_trgm: { Args: { "": string }; Returns: string[] }
+      sync_child_category: {
+        Args: { p_category: string; p_child_id: string }
         Returns: undefined
       }
     }

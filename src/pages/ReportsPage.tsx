@@ -4,14 +4,14 @@ import { es } from 'date-fns/locale'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Users, RefreshCw, Download, AlertTriangle, FileText, PartyPopper, Check, Pencil,
-  Bug, Zap, Compass, Baby, PersonStanding, TrendingUp, ChevronDown, ChevronUp, User, Trash2, X, CalendarRange,
+  Bug, Zap, Compass, Baby, PersonStanding, TrendingUp, ChevronDown, ChevronUp, User, Trash2, X, CalendarRange, Monitor,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { CATEGORY_LABELS, CATEGORY_COLORS, ACTIVE_CATEGORIES, NEXT_CATEGORY, type Category } from '../types/domain'
 import { hasCategoryChanged, getCategoryFromBirthDate } from '../lib/categoryUtils'
 import { DatePicker } from '../components/ui/DatePicker'
 import { AnimatedBlobBackground } from '../components/ui/AnimatedBlobBackground'
-import { fetchAttendanceRange, exportRangeCSV, exportRangePDF, MAX_RANGE_ROWS, toCSV } from '../lib/exportUtils'
+import { fetchAttendanceRange, fetchDailyStaffing, exportRangeCSV, exportRangePDF, MAX_RANGE_ROWS, toCSV } from '../lib/exportUtils'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -203,26 +203,33 @@ export default function ReportsPage() {
     if (!rangeFrom || !rangeTo || rangeFrom > rangeTo) { setRangeError('Selecciona un rango de fechas válido.'); return }
     setRangeError(null)
     setRangeBusy(kind)
-    const { rows, total } = await fetchAttendanceRange(rangeFrom, rangeTo)
+    const [{ rows, total }, staffing] = await Promise.all([
+      fetchAttendanceRange(rangeFrom, rangeTo),
+      fetchDailyStaffing(rangeFrom, rangeTo),
+    ])
     setRangeBusy(null)
     if (rows.length === 0) { setRangeError('No hay registros en ese rango.'); return }
     if (total > MAX_RANGE_ROWS) {
       setRangeError(`El rango tiene ${total} registros — se exportaron los primeros ${MAX_RANGE_ROWS}. Prueba un rango más corto para un reporte completo.`)
     }
-    if (kind === 'csv') exportRangeCSV(rows, rangeFrom, rangeTo)
-    else exportRangePDF(rows, rangeFrom, rangeTo)
+    if (kind === 'csv') exportRangeCSV(rows, rangeFrom, rangeTo, staffing)
+    else exportRangePDF(rows, rangeFrom, rangeTo, staffing)
   }
 
   const selectedStr    = format(selectedDate, 'yyyy-MM-dd')
   const isToday        = selectedStr === todayStr
   const [coordinatorName, setCoordinatorName] = useState('')
+  const [computerOperatorName, setComputerOperatorName] = useState('')
 
-  // "¿Quién está de encargado hoy?" now lives in daily_coordinator (see
-  // CheckInPage) instead of localStorage — read it here per selected date.
+  // "¿Quién está de encargado hoy?" / "¿Quién está en la computadora hoy?"
+  // live in daily_coordinator / daily_computer_operator (see CheckInPage)
+  // instead of localStorage — read them here per selected date.
   useEffect(() => {
     let cancelled = false
     supabase.from('daily_coordinator').select('name').eq('session_date', selectedStr).maybeSingle()
       .then(({ data }) => { if (!cancelled) setCoordinatorName(data?.name ?? '') })
+    supabase.from('daily_computer_operator').select('name').eq('session_date', selectedStr).maybeSingle()
+      .then(({ data }) => { if (!cancelled) setComputerOperatorName(data?.name ?? '') })
     return () => { cancelled = true }
   }, [selectedStr])
 
@@ -234,6 +241,7 @@ export default function ReportsPage() {
       .from('attendance')
       .select('id, category, badge_number, checked_in_at, checked_out_at, children(full_name, parents(full_name))')
       .eq('session_date', dateStr)
+      .is('deleted_at', null)
       .order('checked_in_at', { ascending: true })
     setLiveRecords((data as LiveRecord[]) ?? [])
     setLastRefresh(new Date())
@@ -243,6 +251,7 @@ export default function ReportsPage() {
     const { data } = await supabase
       .from('children')
       .select('id, full_name, birth_date, category, allergies, medical_notes, parents(full_name, phone)')
+      .is('deleted_at', null)
       .order('full_name')
     const roster = (data ?? []) as unknown as RosterChild[]
     setMedicalChildren(
@@ -258,6 +267,7 @@ export default function ReportsPage() {
       .from('attendance')
       .select('session_date, category')
       .gte('session_date', since)
+      .is('deleted_at', null)
       .order('session_date', { ascending: false })
 
     const byWeek: Record<string, { start: string; end: string; counts: CategoryCount }> = {}
@@ -309,6 +319,7 @@ export default function ReportsPage() {
     const meta = [
       ['Fecha', format(selectedDate, "EEEE d 'de' MMMM yyyy", { locale: es })],
       ['Encargado', coordinatorName || 'Sin registrar'],
+      ['Encargado de computadora', computerOperatorName || 'Sin registrar'],
       ['Total', String(total)],
       [],
     ]
@@ -324,7 +335,12 @@ export default function ReportsPage() {
 
   async function deleteRecord(id: string) {
     setDeleting(true)
-    const { data, error } = await supabase.from('attendance').delete().eq('id', id).select('id')
+    const { data: { user } } = await supabase.auth.getUser()
+    // Marcar (no borrar): queda en la papelera (Usuarios) hasta que alguien
+    // lo restaure o el dueño lo purgue de verdad.
+    const { data, error } = await supabase.from('attendance')
+      .update({ deleted_at: new Date().toISOString(), deleted_by: user?.id })
+      .eq('id', id).select('id')
     setDeleting(false)
     if (error || !data || data.length === 0) return
     setLiveRecords((prev) => prev.filter((r) => r.id !== id))
@@ -421,11 +437,21 @@ export default function ReportsPage() {
           disableSundays={false}
         />
 
-        {/* Coordinator chip */}
-        {coordinatorName && (
-          <div className="flex items-center gap-1.5 w-fit px-3 py-1.5 bg-white border border-gray-200 rounded-full shadow-sm">
-            <User size={12} className="text-indigo-500" />
-            <span className="text-xs font-medium text-gray-700">{coordinatorName}</span>
+        {/* Coordinator / computer operator chips */}
+        {(coordinatorName || computerOperatorName) && (
+          <div className="flex items-center gap-2 flex-wrap">
+            {coordinatorName && (
+              <div className="flex items-center gap-1.5 w-fit px-3 py-1.5 bg-white border border-gray-200 rounded-full shadow-sm">
+                <User size={12} className="text-indigo-500" />
+                <span className="text-xs font-medium text-gray-700">{coordinatorName}</span>
+              </div>
+            )}
+            {computerOperatorName && (
+              <div className="flex items-center gap-1.5 w-fit px-3 py-1.5 bg-white border border-gray-200 rounded-full shadow-sm">
+                <Monitor size={12} className="text-indigo-500" />
+                <span className="text-xs font-medium text-gray-700">{computerOperatorName}</span>
+              </div>
+            )}
           </div>
         )}
       </div>

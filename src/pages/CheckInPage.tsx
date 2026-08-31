@@ -3,7 +3,7 @@ import { useSearchParams, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
-import { Search, CheckCircle2, UserPlus, AlertTriangle, ChevronLeft, Bug, Zap, Compass, Baby, PersonStanding, User, Pencil, LogIn, Trash2, X, Users, Lock, Check, FileWarning } from 'lucide-react'
+import { Search, CheckCircle2, UserPlus, AlertTriangle, ChevronLeft, Bug, Zap, Compass, Baby, PersonStanding, User, Pencil, LogIn, Trash2, X, Users, Lock, Check, FileWarning, Monitor } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { getCategoryFromBirthDate, getEffectiveCategory, hasCategoryChanged, getAgeLabel, requiresBadge, requiresPager } from '../lib/categoryUtils'
@@ -749,6 +749,9 @@ export default function CheckInPage() {
   const [coordinatorName, setCoordinatorName] = useState('')
   const [editingCoordinator, setEditingCoordinator] = useState(false)
   const [coordinatorError, setCoordinatorError] = useState<string | null>(null)
+  const [computerOperatorName, setComputerOperatorName] = useState('')
+  const [editingComputerOperator, setEditingComputerOperator] = useState(false)
+  const [computerOperatorError, setComputerOperatorError] = useState<string | null>(null)
   const [searchParams, setSearchParams] = useSearchParams()
   const [showNewFamily, setShowNewFamily] = useState(() => searchParams.get('nueva') !== null)
   // Carried over when a coordinator jumps here from a maestro's request in
@@ -774,6 +777,7 @@ export default function CheckInPage() {
       .from('attendance')
       .select('id, category, badge_number, pager_number, checked_in_at, checked_out_at, assigned_teacher_id, assigned_teacher:profiles(full_name), children(full_name, allergies, medical_notes, toilet_trained, comments)')
       .eq('session_date', today)
+      .is('deleted_at', null)
       .order('checked_in_at', { ascending: false })
     if (!data) return
     const counts: Partial<Record<Category, number>> = {}
@@ -826,6 +830,8 @@ export default function CheckInPage() {
   useEffect(() => {
     supabase.from('daily_coordinator').select('name').eq('session_date', today).maybeSingle()
       .then(({ data }) => { if (data?.name) setCoordinatorName(data.name) })
+    supabase.from('daily_computer_operator').select('name').eq('session_date', today).maybeSingle()
+      .then(({ data }) => { if (data?.name) setComputerOperatorName(data.name) })
   }, [])
 
   useEffect(() => {
@@ -840,7 +846,18 @@ export default function CheckInPage() {
         }
       )
       .subscribe()
-    return () => { supabase.removeChannel(channel) }
+    const operatorChannel = supabase
+      .channel('daily-computer-operator-sync')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'daily_computer_operator', filter: `session_date=eq.${today}` },
+        (payload) => {
+          const row = payload.new as { name?: string } | undefined
+          if (row?.name) setComputerOperatorName(row.name)
+        }
+      )
+      .subscribe()
+    return () => { supabase.removeChannel(channel); supabase.removeChannel(operatorChannel) }
   }, [])
 
   // Carga el padrón completo una sola vez (no solo al abrir "Ver padrón
@@ -854,11 +871,13 @@ export default function CheckInPage() {
       supabase
         .from('children')
         .select(CHILD_SELECT)
+        .is('deleted_at', null)
         .order('full_name'),
       supabase
         .from('attendance')
         .select('child_id')
-        .eq('session_date', today),
+        .eq('session_date', today)
+        .is('deleted_at', null),
     ])
     const attSet = new Set((todayAtt ?? []).map((a) => a.child_id))
     const mapped = ((all ?? []) as Omit<ChildResult, 'attendance'>[]).map((c) => ({
@@ -908,11 +927,13 @@ export default function CheckInPage() {
       supabase
         .from('children')
         .select(CHILD_SELECT)
+        .is('deleted_at', null)
         .order('full_name'),
       supabase
         .from('attendance')
         .select('child_id')
-        .eq('session_date', today),
+        .eq('session_date', today)
+        .is('deleted_at', null),
     ])
 
     // Otra categoría fue seleccionada (o se volvió al home) mientras esta consulta estaba en vuelo
@@ -994,11 +1015,17 @@ export default function CheckInPage() {
     setDeleteRecordError(null)
     // Capture the record before any state update to avoid closure staleness
     const rec = todayRecords.find((r) => r.id === id)
-    // .select() forces PostgREST to report which rows were actually deleted —
-    // without it, a DELETE silently blocked by RLS (only admins may delete
-    // attendance) still returns no error, and the record would falsely look
-    // deleted here while reappearing on the next reload/refetch.
-    const { data, error } = await supabase.from('attendance').delete().eq('id', id).select('id')
+    const { data: { user } } = await supabase.auth.getUser()
+    // Marcar (no borrar): queda en la papelera (Usuarios) hasta que alguien
+    // lo restaure o el dueño lo purgue de verdad.
+    // .select() forces PostgREST to report which rows were actually
+    // marked — without it, an update silently blocked by RLS (only
+    // coordinators may do this) still returns no error, and the record
+    // would falsely look deleted here while reappearing on the next
+    // reload/refetch.
+    const { data, error } = await supabase.from('attendance')
+      .update({ deleted_at: new Date().toISOString(), deleted_by: user?.id })
+      .eq('id', id).select('id')
     if (error || !data || data.length === 0) {
       setDeleteRecordError('No se pudo borrar el registro. Intenta de nuevo.')
       return
@@ -1050,6 +1077,15 @@ export default function CheckInPage() {
     const { error } = await supabase.rpc('set_daily_coordinator', { p_session_date: today, p_name: name })
     if (!error) setCoordinatorName(name)
     else setCoordinatorError('Solo un coordinador puede cambiar quién está de encargado.')
+  }
+
+  async function saveComputerOperator(name: string) {
+    setEditingComputerOperator(false)
+    if (!name || name === computerOperatorName) return
+    setComputerOperatorError(null)
+    const { error } = await supabase.rpc('set_daily_computer_operator', { p_session_date: today, p_name: name })
+    if (!error) setComputerOperatorName(name)
+    else setComputerOperatorError('Solo un coordinador puede cambiar quién está en la computadora.')
   }
 
   const categorySearcher = useMemo(() => createChildSearcher(children), [children])
@@ -1280,6 +1316,43 @@ export default function CheckInPage() {
               )}
             </div>
             {coordinatorError && <p className="text-[11px] text-red-600 mt-1">{coordinatorError}</p>}
+
+            {/* Computer operator — inline editable, same pattern as coordinator */}
+            <div className="flex items-center gap-1.5 mt-1">
+              <Monitor size={12} className="text-indigo-400 shrink-0" />
+              {editingComputerOperator ? (
+                <input
+                  autoFocus
+                  type="text"
+                  defaultValue={computerOperatorName}
+                  onBlur={(e) => saveComputerOperator(e.target.value.trim())}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') saveComputerOperator((e.target as HTMLInputElement).value.trim())
+                    if (e.key === 'Escape') setEditingComputerOperator(false)
+                  }}
+                  placeholder="Tu nombre…"
+                  className="text-sm border-b-2 border-indigo-400 focus:outline-none font-medium text-gray-700 bg-transparent w-36"
+                />
+              ) : !isAdmin && computerOperatorName ? (
+                <span className="flex items-center gap-1.5 text-sm text-gray-700 font-semibold">
+                  {computerOperatorName}
+                  <span title="Solo un coordinador puede cambiar esto">
+                    <Lock size={11} className="text-gray-300" />
+                  </span>
+                </span>
+              ) : (
+                <button
+                  onClick={() => setEditingComputerOperator(true)}
+                  className="flex items-center gap-1 text-sm text-gray-500 hover:text-indigo-600 transition-colors group"
+                >
+                  <span className={computerOperatorName ? 'font-semibold text-gray-700' : 'italic text-gray-300'}>
+                    {computerOperatorName || 'Agregar encargado de compu…'}
+                  </span>
+                  <Pencil size={11} className="opacity-0 group-hover:opacity-50 transition-opacity" />
+                </button>
+              )}
+            </div>
+            {computerOperatorError && <p className="text-[11px] text-red-600 mt-1">{computerOperatorError}</p>}
           </div>
 
           {/* Team indicator */}

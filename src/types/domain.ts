@@ -60,6 +60,7 @@ export interface Profile {
   email: string | null
   role: UserRole
   active: boolean
+  is_owner: boolean
   created_at: string
 }
 
@@ -196,4 +197,27 @@ export interface DeletionLogEntry {
   deleted_by: string | null
   deleted_at: string
   deleter?: { full_name: string } | null
+}
+
+// A soft-deleted (flagged, not yet purged) row — any coordinator can flag
+// and restore; only the owner can permanently purge (see ActivityLogEntry).
+export interface TrashedRecord {
+  id: string
+  table_name: 'parents' | 'children' | 'attendance'
+  full_name: string | null
+  deleted_at: string
+  deleter?: { full_name: string } | null
+}
+
+// Owner-only: who logged in and who created/edited what. Populated entirely
+// by DB triggers (log_activity / log_login), never written from the client.
+export interface ActivityLogEntry {
+  id: string
+  user_id: string | null
+  event_type: 'login' | 'insert' | 'update'
+  table_name: 'children' | 'parents' | 'attendance' | null
+  record_id: string | null
+  created_at: string
+  actor?: { full_name: string } | null
+  record_full_name?: string | null
 }

@@ -23,11 +23,32 @@ export async function fetchAttendanceRange(from: string, to: string) {
     .select('session_date, category, team_color, badge_number, checked_in_at, children(full_name, parents(full_name))', { count: 'exact' })
     .gte('session_date', from)
     .lte('session_date', to)
+    .is('deleted_at', null)
     .order('session_date', { ascending: true })
     .order('checked_in_at', { ascending: true })
     .limit(MAX_RANGE_ROWS)
 
   return { rows: (data as unknown as RangeAttendanceRow[]) ?? [], total: count ?? 0 }
+}
+
+// Who was "encargado" / "encargado de computadora" on each day of the range
+// — both can change day to day, so a single header meta-row (like the
+// single-day export uses) wouldn't be accurate across a multi-day range.
+export type DailyStaffing = Record<string, { coordinator: string; computerOperator: string }>
+
+export async function fetchDailyStaffing(from: string, to: string): Promise<DailyStaffing> {
+  const [coordinators, operators] = await Promise.all([
+    supabase.from('daily_coordinator').select('session_date, name').gte('session_date', from).lte('session_date', to),
+    supabase.from('daily_computer_operator').select('session_date, name').gte('session_date', from).lte('session_date', to),
+  ])
+  const staffing: DailyStaffing = {}
+  for (const row of coordinators.data ?? []) {
+    staffing[row.session_date] = { ...(staffing[row.session_date] ?? { coordinator: '', computerOperator: '' }), coordinator: row.name }
+  }
+  for (const row of operators.data ?? []) {
+    staffing[row.session_date] = { ...(staffing[row.session_date] ?? { coordinator: '', computerOperator: '' }), computerOperator: row.name }
+  }
+  return staffing
 }
 
 function downloadBlob(blob: Blob, filename: string) {
@@ -49,8 +70,8 @@ export function toCSV(rows: unknown[][]): string {
   return rows.map((row) => row.map(csvEscape).join(',')).join('\n')
 }
 
-export function exportRangeCSV(rows: RangeAttendanceRow[], from: string, to: string) {
-  const headers = ['Fecha', 'Nombre niño', 'Padre/Madre', 'Categoría', 'Equipo', 'Gafete', 'Hora de entrada']
+export function exportRangeCSV(rows: RangeAttendanceRow[], from: string, to: string, staffing: DailyStaffing = {}) {
+  const headers = ['Fecha', 'Nombre niño', 'Padre/Madre', 'Categoría', 'Equipo', 'Gafete', 'Hora de entrada', 'Encargado', 'Encargado de computadora']
   const body = rows.map((r) => [
     r.session_date,
     r.children?.full_name ?? '',
@@ -59,11 +80,13 @@ export function exportRangeCSV(rows: RangeAttendanceRow[], from: string, to: str
     TEAM_COLOR_LABELS[r.team_color] ?? r.team_color,
     r.badge_number ?? '',
     format(new Date(r.checked_in_at), 'HH:mm'),
+    staffing[r.session_date]?.coordinator ?? '',
+    staffing[r.session_date]?.computerOperator ?? '',
   ])
   downloadBlob(new Blob(['﻿' + toCSV([headers, ...body])], { type: 'text/csv;charset=utf-8;' }), `asistencia-${from}-a-${to}.csv`)
 }
 
-export function exportRangePDF(rows: RangeAttendanceRow[], from: string, to: string) {
+export function exportRangePDF(rows: RangeAttendanceRow[], from: string, to: string, staffing: DailyStaffing = {}) {
   const doc = new jsPDF()
   doc.setFontSize(14)
   doc.text('Reporte de asistencia — Ministerio de Niños', 14, 16)
@@ -76,7 +99,7 @@ export function exportRangePDF(rows: RangeAttendanceRow[], from: string, to: str
 
   autoTable(doc, {
     startY: 28,
-    head: [['Fecha', 'Niño', 'Padre/Madre', 'Categoría', 'Equipo', 'Gafete']],
+    head: [['Fecha', 'Niño', 'Padre/Madre', 'Categoría', 'Equipo', 'Gafete', 'Encargado', 'Encargado de compu']],
     body: rows.map((r) => [
       r.session_date,
       r.children?.full_name ?? '',
@@ -84,6 +107,8 @@ export function exportRangePDF(rows: RangeAttendanceRow[], from: string, to: str
       CATEGORY_LABELS[r.category] ?? r.category,
       TEAM_COLOR_LABELS[r.team_color] ?? r.team_color,
       r.badge_number ? String(r.badge_number) : '—',
+      staffing[r.session_date]?.coordinator || '—',
+      staffing[r.session_date]?.computerOperator || '—',
     ]),
     styles: { fontSize: 8 },
     headStyles: { fillColor: [79, 70, 229] },
