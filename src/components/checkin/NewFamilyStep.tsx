@@ -58,9 +58,8 @@ export function NewFamilyStep({
   const [saving, setSaving] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
 
-  // Catches the common case that pulled Coder permissions from maestros in
-  // the first place: someone re-registers a child who's already in the
-  // system (often under a different guardian) instead of the request
+  // Catches the common case of someone re-registering a child who's already
+  // in the system (often under a different guardian) instead of the request
   // reaching an admin who'd have spotted the existing record.
   const duplicateSearcher = useMemo(() => createChildSearcher(existingChildren), [existingChildren])
   function findPossibleDuplicates(name: string) {
