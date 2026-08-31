@@ -190,9 +190,9 @@ export interface CoordinatorRequest {
 
 export interface DeletionLogEntry {
   id: string
-  table_name: 'parents' | 'children'
+  table_name: 'parents' | 'children' | 'attendance'
   record_id: string
-  record_data: { full_name?: string; [key: string]: unknown }
+  record_data: { full_name?: string; child_id?: string; [key: string]: unknown }
   deleted_by: string | null
   deleted_at: string
   deleter?: { full_name: string } | null

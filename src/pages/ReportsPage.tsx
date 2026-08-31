@@ -58,18 +58,6 @@ type RosterChild = {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const todayStr = format(new Date(), 'yyyy-MM-dd')
-const COORDINATOR_KEY = 'ministerio_coordinator_session'
-
-function getStoredCoordinatorForDate(dateStr: string): string {
-  try {
-    const raw = localStorage.getItem(COORDINATOR_KEY)
-    if (!raw) return ''
-    const { name, date } = JSON.parse(raw) as { name: string; date: string }
-    return date === dateStr ? name : ''
-  } catch {
-    return ''
-  }
-}
 
 function emptyCount(): CategoryCount {
   return { corderitos_0_2: 0, corderitos_2_4: 0, hormiguitas: 0, saltamontes: 0, exploradores: 0 }
@@ -227,7 +215,16 @@ export default function ReportsPage() {
 
   const selectedStr    = format(selectedDate, 'yyyy-MM-dd')
   const isToday        = selectedStr === todayStr
-  const coordinatorName = getStoredCoordinatorForDate(selectedStr)
+  const [coordinatorName, setCoordinatorName] = useState('')
+
+  // "¿Quién está de encargado hoy?" now lives in daily_coordinator (see
+  // CheckInPage) instead of localStorage — read it here per selected date.
+  useEffect(() => {
+    let cancelled = false
+    supabase.from('daily_coordinator').select('name').eq('session_date', selectedStr).maybeSingle()
+      .then(({ data }) => { if (!cancelled) setCoordinatorName(data?.name ?? '') })
+    return () => { cancelled = true }
+  }, [selectedStr])
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 

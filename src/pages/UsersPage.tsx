@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { formatDistanceToNow } from 'date-fns'
 import { es } from 'date-fns/locale'
-import { UserPlus, Shield, User, Trash2, Power, Check, History, Users as UsersIcon, Baby } from 'lucide-react'
+import { UserPlus, Shield, User, Trash2, Power, Check, History, Users as UsersIcon, Baby, LogIn } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { createUser, updateUserRole, setUserActive, deleteUser } from '../lib/adminUsers'
 import { useAuth } from '../lib/auth'
@@ -192,15 +192,33 @@ function DeletionLogSection() {
 
   useEffect(() => {
     if (!open) return
-    supabase
-      .from('deletion_log')
-      .select('*, deleter:profiles(full_name)')
-      .order('deleted_at', { ascending: false })
-      .limit(100)
-      .then(({ data }) => {
-        setEntries((data as DeletionLogEntry[]) ?? [])
-        setLoading(false)
-      })
+    let cancelled = false
+    ;(async () => {
+      const { data } = await supabase
+        .from('deletion_log')
+        .select('*, deleter:profiles(full_name)')
+        .order('deleted_at', { ascending: false })
+        .limit(100)
+      const rows = (data as DeletionLogEntry[]) ?? []
+      // Attendance rows don't carry a name in record_data (just child_id,
+      // category, badge…) — look the child's name up so the entry is
+      // actually identifiable instead of showing "Registro sin nombre".
+      const childIds = [...new Set(
+        rows.filter((r) => r.table_name === 'attendance' && r.record_data.child_id)
+          .map((r) => String(r.record_data.child_id))
+      )]
+      let names: Record<string, string> = {}
+      if (childIds.length > 0) {
+        const { data: kids } = await supabase.from('children').select('id, full_name').in('id', childIds)
+        names = Object.fromEntries((kids ?? []).map((k) => [k.id, k.full_name]))
+      }
+      if (cancelled) return
+      setEntries(rows.map((r) => r.table_name === 'attendance'
+        ? { ...r, record_data: { ...r.record_data, full_name: names[String(r.record_data.child_id)] } }
+        : r))
+      setLoading(false)
+    })()
+    return () => { cancelled = true }
   }, [open])
 
   return (
@@ -225,14 +243,18 @@ function DeletionLogSection() {
             <div key={e.id} className="bg-white rounded-xl border border-gray-200 px-4 py-3 flex items-start gap-2.5">
               {e.table_name === 'parents' ? (
                 <UsersIcon size={14} className="text-rose-400 shrink-0 mt-0.5" />
+              ) : e.table_name === 'attendance' ? (
+                <LogIn size={14} className="text-rose-400 shrink-0 mt-0.5" />
               ) : (
                 <Baby size={14} className="text-rose-400 shrink-0 mt-0.5" />
               )}
               <div className="flex-1 min-w-0">
                 <p className="text-sm text-gray-700">
-                  <span className="font-semibold">{e.record_data.full_name ?? 'Registro sin nombre'}</span>
+                  <span className="font-semibold">{e.record_data.full_name ?? 'Niño ya no está en el sistema'}</span>
                   {' '}
-                  <span className="text-gray-400">({e.table_name === 'parents' ? 'familia' : 'niño'})</span>
+                  <span className="text-gray-400">
+                    ({e.table_name === 'parents' ? 'familia' : e.table_name === 'attendance' ? 'asistencia de hoy' : 'niño'})
+                  </span>
                 </p>
                 <p className="text-xs text-gray-400 mt-0.5">
                   Borrado por {e.deleter?.full_name ?? 'alguien fuera de la app (SQL directo)'} ·{' '}
