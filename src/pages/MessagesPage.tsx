@@ -31,8 +31,10 @@ function parseChildFields(message: string) {
 
 function AdminInbox() {
   const navigate = useNavigate()
+  const { isOwner } = useAuth()
   const [requests, setRequests] = useState<CoordinatorRequest[]>([])
   const [loading, setLoading] = useState(true)
+  const [resolvingId, setResolvingId] = useState<string | null>(null)
 
   const fetchRequests = useCallback(async () => {
     const { data } = await supabase
@@ -54,11 +56,19 @@ function AdminInbox() {
     return () => { supabase.removeChannel(channel) }
   }, [fetchRequests])
 
-  // There's no manual "marcar como resuelta" — a request only resolves when
-  // a coordinator actually adds the child (either path below), so it can't
-  // be dismissed without doing the work. requestId rides along in nav state
-  // and CheckInPage/FamiliesPage resolve it themselves once the child is
-  // really saved.
+  // A normal coordinator has no way to dismiss a request without actually
+  // adding the child (either path below resolves it automatically once the
+  // save really happens). The owner alone can also resolve one manually —
+  // enforced server-side too (RLS rejects a non-owner update that doesn't
+  // self-attribute) — and deliberately leaves resolved_by null, so it shows
+  // as "Resuelta" with no name to whoever sent it, not "por Joshua Zet".
+  async function resolveRequest(id: string) {
+    setResolvingId(id)
+    await supabase.from('coordinator_requests')
+      .update({ status: 'resuelta', resolved_by: null, resolved_at: new Date().toISOString() })
+      .eq('id', id)
+    setResolvingId(null)
+  }
   function goToNewFamily(r: CoordinatorRequest) {
     navigate('/registro?nueva=1', { state: { ...parseChildFields(r.message), requestId: r.id } })
   }
@@ -107,6 +117,16 @@ function AdminInbox() {
                 <Search size={13} />
                 Buscar en Familias
               </button>
+              {isOwner && (
+                <button
+                  onClick={() => resolveRequest(r.id)}
+                  disabled={resolvingId === r.id}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors disabled:opacity-40"
+                >
+                  <Check size={13} />
+                  {resolvingId === r.id ? 'Marcando…' : 'Marcar como resuelta'}
+                </button>
+              )}
             </div>
           </div>
         </div>
