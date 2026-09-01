@@ -8,7 +8,7 @@ import {
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { getCategoryFromBirthDate, getEffectiveCategory, hasCategoryChanged, getAgeLabel } from '../lib/categoryUtils'
-import { createChildSearcher, searchChildrenSplit, findBySurname } from '../lib/fuzzySearch'
+import { createChildSearcher, searchChildrenSplit, findBySurname, normalizeName } from '../lib/fuzzySearch'
 import { uploadPhoto } from '../lib/photo'
 import { CategoryBadge } from '../components/ui/CategoryBadge'
 import { PhotoCapture, PhotoAvatar } from '../components/ui/PhotoCapture'
@@ -16,7 +16,7 @@ import { ChildContacts } from '../components/ui/ChildContacts'
 import { QuickCheckIn } from '../components/ui/QuickCheckIn'
 import { useDebounce } from '../hooks/useDebounce'
 import { NewFamilyStep } from '../components/checkin/NewFamilyStep'
-import { CATEGORY_LABELS, GUARDIAN_RELATIONSHIP_LABELS, NEXT_CATEGORY, isCorderitos, type ParentRow, type Category, type GuardianRelationship } from '../types/domain'
+import { CATEGORY_LABELS, GUARDIAN_RELATIONSHIP_LABELS, NEXT_CATEGORY, isCorderitos, type ParentRow, type Category, type GuardianRelationship, type ChildPrefill } from '../types/domain'
 import { BackgroundRadialViolet } from '../components/ui/BackgroundRadialViolet'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -256,14 +256,14 @@ function ChildEditForm({
 
 // ─── New child form ───────────────────────────────────────────────────────────
 
-function NewChildForm({ parentId, onSaved, onCancel }: { parentId: string; onSaved: (childId: string) => void; onCancel: () => void }) {
-  const [name, setName]         = useState('')
-  const [birthDate, setBirthDate] = useState('')
-  const [allergies, setAllergies] = useState('')
-  const [notes, setNotes]       = useState('')
-  const [relationship, setRelationship] = useState<GuardianRelationship | ''>('')
-  const [comments, setComments] = useState('')
-  const [toiletTrained, setToiletTrained] = useState<boolean | null>(null)
+function NewChildForm({ parentId, prefill, onSaved, onCancel }: { parentId: string; prefill?: ChildPrefill; onSaved: (childId: string) => void; onCancel: () => void }) {
+  const [name, setName]         = useState(prefill?.full_name ?? '')
+  const [birthDate, setBirthDate] = useState(prefill?.birth_date ?? '')
+  const [allergies, setAllergies] = useState(prefill?.allergies ?? '')
+  const [notes, setNotes]       = useState(prefill?.medical_notes ?? '')
+  const [relationship, setRelationship] = useState<GuardianRelationship | ''>(prefill?.guardian_relationship ?? '')
+  const [comments, setComments] = useState(prefill?.comments ?? '')
+  const [toiletTrained, setToiletTrained] = useState<boolean | null>(prefill?.toilet_trained ?? null)
   const [photoBlob, setPhotoBlob] = useState<Blob | null>(null)
   const [saving, setSaving]     = useState(false)
   const [error, setError]       = useState<string | null>(null)
@@ -388,12 +388,17 @@ function FamilyDetailPanel({
   onRefresh,
   onDeleted,
   onChildAdded,
+  initialChildPrefill,
 }: {
   family: FamilyDetail
   onClose: () => void
   onRefresh: () => void
   onDeleted: () => void
   onChildAdded?: () => void
+  /** Set when we arrived here via "Agregar a esta familia" from a same-surname
+   * suggestion — opens straight into the add-child form, already filled in,
+   * instead of making the coordinator click through and retype the name. */
+  initialChildPrefill?: ChildPrefill | null
 }) {
   const [editingParent, setEditingParent]   = useState(false)
   const [parentName, setParentName]         = useState(family.full_name)
@@ -401,7 +406,11 @@ function FamilyDetailPanel({
   const [parentPhotoBlob, setParentPhotoBlob] = useState<Blob | null>(null)
   const [savingParent, setSavingParent]     = useState(false)
   const [editingChildId, setEditingChildId] = useState<string | null>(null)
-  const [addingChild, setAddingChild]       = useState(false)
+  const [addingChild, setAddingChild]       = useState(!!initialChildPrefill)
+  // Local copy so it only ever fills the form once — otherwise closing and
+  // reopening "Agregar niño" later in the same visit would keep re-showing
+  // the first suggestion's data instead of starting blank.
+  const [childPrefill, setChildPrefill]     = useState(initialChildPrefill ?? null)
   const [justSavedChildId, setJustSavedChildId] = useState<string | null>(null)
 
   // Confirm dialogs
@@ -671,8 +680,9 @@ function FamilyDetailPanel({
           {addingChild ? (
             <NewChildForm
               parentId={family.id}
-              onSaved={(childId) => { setAddingChild(false); setJustSavedChildId(childId); onRefresh(); onChildAdded?.() }}
-              onCancel={() => setAddingChild(false)}
+              prefill={childPrefill ?? undefined}
+              onSaved={(childId) => { setAddingChild(false); setChildPrefill(null); setJustSavedChildId(childId); onRefresh(); onChildAdded?.() }}
+              onCancel={() => { setAddingChild(false); setChildPrefill(null) }}
             />
           ) : (
             <button
@@ -868,10 +878,17 @@ function RosterRow({ child, onChanged }: { child: RosterChild; onChanged: () => 
   )
 }
 
-function RosterPanel({ onClose, initialFilter }: { onClose: () => void; initialFilter?: RosterFilter }) {
+function RosterPanel({ onClose, initialFilter, onLinkToFamily }: {
+  onClose: () => void
+  initialFilter?: RosterFilter
+  onLinkToFamily?: (parentId: string, prefill: ChildPrefill) => void
+}) {
   const [children, setChildren] = useState<RosterChild[]>([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<RosterFilter>(initialFilter ?? 'todos')
+  const [query, setQuery] = useState('')
+  const debouncedQuery = useDebounce(query.trim(), 350)
+  const searched = debouncedQuery.length >= 2
 
   const fetchAll = useCallback(async () => {
     setLoading(true)
@@ -886,12 +903,37 @@ function RosterPanel({ onClose, initialFilter }: { onClose: () => void; initialF
 
   useEffect(() => { fetchAll() }, [fetchAll])
 
-  const filtered = children.filter((c) => {
+  const pillFiltered = children.filter((c) => {
     if (filter === 'sin_responsable') return !c.parent_id
     if (filter === 'sin_categoria') return getEffectiveCategory(c) === null
     if (filter === 'sin_fecha_nacimiento') return !c.birth_date
     return true
   })
+
+  // Search narrows whatever the active filter pill already shows — same
+  // fuzzy/accent-tolerant matcher Familias itself uses.
+  const searcher = useMemo(() => createChildSearcher(children), [children])
+  const filtered = useMemo(() => {
+    if (!searched) return pillFiltered
+    const { exact, suggestions } = searchChildrenSplit(searcher, debouncedQuery)
+    const matchedIds = new Set([...exact, ...suggestions].map((c) => c.id))
+    return pillFiltered.filter((c) => matchedIds.has(c.id))
+  }, [searched, debouncedQuery, searcher, pillFiltered])
+
+  // Same "podría ser la misma familia" signal Familias' own search has —
+  // checked against the full roster regardless of which pill is active,
+  // since the point is finding a family a narrow filter might be hiding.
+  const sameSurnameFamilies = useMemo(() => {
+    if (!searched || filtered.length > 0) return []
+    const byFamily = new Map<string, { familyId: string; parentName: string; children: string[] }>()
+    for (const { item } of findBySurname(children, debouncedQuery)) {
+      if (!item.parents?.id) continue
+      const entry = byFamily.get(item.parents.id) ?? { familyId: item.parents.id, parentName: item.parents.full_name, children: [] }
+      entry.children.push(item.full_name)
+      byFamily.set(item.parents.id, entry)
+    }
+    return [...byFamily.values()].slice(0, 3)
+  }, [searched, filtered.length, children, debouncedQuery])
 
   const counts = {
     todos: children.length,
@@ -907,10 +949,52 @@ function RosterPanel({ onClose, initialFilter }: { onClose: () => void; initialF
           <ChevronLeft size={18} />
         </button>
         <div>
-          <h3 className="text-lg font-bold text-gray-900">Roster completo</h3>
-          <p className="text-xs text-gray-400">Todos los niños, con filtros para casos incompletos</p>
+          <h3 className="text-lg font-bold text-gray-900">Buscar por niño</h3>
+          <p className="text-xs text-gray-400">Busca directo, o usa los filtros para casos incompletos</p>
         </div>
       </div>
+
+      <div className="relative">
+        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+        <input
+          type="text"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Buscar niño por nombre…"
+          className="w-full pl-11 pr-4 py-3 text-base border-2 border-gray-200 rounded-xl focus:border-indigo-500 focus:outline-none bg-white"
+        />
+        {query && (
+          <button onClick={() => setQuery('')}
+            className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+            <X size={16} />
+          </button>
+        )}
+      </div>
+
+      {searched && sameSurnameFamilies.length > 0 && (
+        <div className="rounded-2xl border-2 border-indigo-200 bg-indigo-50 px-4 py-3.5 space-y-2.5">
+          <p className="text-sm font-semibold text-indigo-800 flex items-center gap-1.5">
+            <Users size={15} className="shrink-0" />
+            Ya tenemos familia(s) con este apellido — ¿es un hermano/a nuevo?
+          </p>
+          {sameSurnameFamilies.map((f) => (
+            <div key={f.familyId} className="flex items-center justify-between gap-3 bg-white rounded-xl border border-indigo-100 px-3.5 py-2.5">
+              <p className="text-sm text-gray-700 min-w-0">
+                <span className="font-semibold">{f.children.join(', ')}</span>
+                {f.parentName && <span className="text-gray-400"> · hijo/a de {f.parentName}</span>}
+              </p>
+              {onLinkToFamily && (
+                <button
+                  onClick={() => onLinkToFamily(f.familyId, { full_name: query.trim() })}
+                  className="shrink-0 text-xs font-semibold text-indigo-600 hover:text-indigo-800 transition-colors"
+                >
+                  Agregar a esta familia →
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
 
       <div className="flex gap-1.5 flex-wrap">
         {([
@@ -959,6 +1043,14 @@ export default function FamiliesPage() {
       .update({ status: 'resuelta', resolved_by: session?.user.id ?? null, resolved_at: new Date().toISOString() })
       .eq('id', id)
   }, [session])
+  // The fuller version of the same Mensajes handoff — when the request had
+  // a birth date/allergies/etc, not just a name, use all of it once the
+  // coordinator confirms it's an existing family.
+  const mensajesPrefill = (location.state as { prefill?: ChildPrefill } | null)?.prefill
+
+  // Set right before opening a family via a same-surname suggestion, so
+  // FamilyDetailPanel opens straight into a pre-filled add-child form.
+  const [childPrefillForSelected, setChildPrefillForSelected] = useState<ChildPrefill | null>(null)
 
   const [searchParams, setSearchParams] = useSearchParams()
   // Lets Mensajes deep-link here with the child's name already typed in
@@ -1098,9 +1190,9 @@ export default function FamiliesPage() {
     return (
       <NewFamilyStep
         existingChildren={existingChildren}
-        onLinkToFamily={(parentId) => {
+        onLinkToFamily={(parentId, prefill) => {
           const family = allFamilies.find((f) => f.id === parentId)
-          if (family) { setShowNewFamily(false); setSelected(family) }
+          if (family) { setChildPrefillForSelected(prefill); setShowNewFamily(false); setSelected(family) }
         }}
         onSaved={handleNewFamilySaved}
         onCancel={() => setShowNewFamily(false)}
@@ -1113,6 +1205,10 @@ export default function FamiliesPage() {
       <RosterPanel
         initialFilter={rosterParam ?? undefined}
         onClose={() => { setShowRoster(false); setSearchParams({}) }}
+        onLinkToFamily={(parentId, prefill) => {
+          const family = allFamilies.find((f) => f.id === parentId)
+          if (family) { setChildPrefillForSelected(prefill); setShowRoster(false); setSearchParams({}); setSelected(family) }
+        }}
       />
     )
   }
@@ -1121,10 +1217,11 @@ export default function FamiliesPage() {
     return (
       <FamilyDetailPanel
         family={selected}
-        onClose={() => setSelected(null)}
+        onClose={() => { setSelected(null); setChildPrefillForSelected(null) }}
         onRefresh={handleRefresh}
         onDeleted={handleDeleted}
         onChildAdded={resolveArmedRequest}
+        initialChildPrefill={childPrefillForSelected}
       />
     )
   }
@@ -1148,7 +1245,7 @@ export default function FamiliesPage() {
             onClick={() => setShowRoster(true)}
             className="flex items-center gap-2 px-3.5 py-2.5 text-sm font-semibold text-gray-600 bg-white border-2 border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
           >
-            Roster por niño
+            Buscar por niño
           </button>
           <button
             onClick={() => setShowNewFamily(true)}
@@ -1215,11 +1312,20 @@ export default function FamiliesPage() {
               <button
                 onClick={() => {
                   const family = allFamilies.find((fam) => fam.id === f.familyId)
-                  if (family) setSelected(family)
+                  if (!family) return
+                  // Reuse the richer Mensajes data (birth date, alertas…) only
+                  // if the search box still says the same name it arrived
+                  // with — otherwise the coordinator has since searched for
+                  // someone else and only the typed name applies.
+                  const prefill: ChildPrefill = mensajesPrefill && normalizeName(mensajesPrefill.full_name) === normalizeName(debouncedQuery)
+                    ? mensajesPrefill
+                    : { full_name: query.trim() }
+                  setChildPrefillForSelected(prefill)
+                  setSelected(family)
                 }}
                 className="shrink-0 text-xs font-semibold text-indigo-600 hover:text-indigo-800 transition-colors"
               >
-                Ver familia →
+                Agregar a esta familia →
               </button>
             </div>
           ))}

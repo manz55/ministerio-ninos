@@ -66,10 +66,13 @@ function AdminInbox() {
   // Pre-fills the search box with the child's name (when the request has
   // one — most do, since they usually come from the empty-search box) so
   // Familias' "ya tenemos familia(s) con este apellido" suggestion runs
-  // immediately instead of the coordinator retyping the name from memory.
+  // immediately instead of the coordinator retyping the name from memory —
+  // and carries the rest of the parsed fields too, so clicking "Agregar a
+  // esta familia" there pre-fills birth date/alertas as well, not just name.
   function goSearchFamilies(r: CoordinatorRequest) {
-    const { childName } = parseChildFields(r.message)
-    navigate(childName ? `/familias?buscar=${encodeURIComponent(childName)}` : '/familias', { state: { requestId: r.id } })
+    const { childName, birthDate, alerts } = parseChildFields(r.message)
+    const prefill = childName ? { full_name: childName, birth_date: birthDate ?? null, comments: alerts ?? null } : undefined
+    navigate(childName ? `/familias?buscar=${encodeURIComponent(childName)}` : '/familias', { state: { requestId: r.id, prefill } })
   }
 
   if (loading) return <p className="text-center text-gray-400 py-8">Cargando…</p>

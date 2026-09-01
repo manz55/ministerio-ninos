@@ -7,7 +7,7 @@ import { uploadPhoto } from '../../lib/photo'
 import { createChildSearcher, searchChildrenSplit, findBySurname, type SearchableChild } from '../../lib/fuzzySearch'
 import { CategoryBadge } from '../ui/CategoryBadge'
 import { PhotoCapture } from '../ui/PhotoCapture'
-import { GUARDIAN_RELATIONSHIP_LABELS, isCorderitos, type Category, type GuardianRelationship, type ParentRow, type ChildRow } from '../../types/domain'
+import { GUARDIAN_RELATIONSHIP_LABELS, isCorderitos, type Category, type GuardianRelationship, type ParentRow, type ChildRow, type ChildPrefill } from '../../types/domain'
 
 interface ChildDraft {
   key: string
@@ -30,7 +30,7 @@ interface Props {
   existingChildren?: (SearchableChild & { id: string })[]
   /** When provided (Familias has a family list to jump to; Registro doesn't), renders a
    * "usar esta familia" action on the same-surname suggestion instead of just informing. */
-  onLinkToFamily?: (parentId: string) => void
+  onLinkToFamily?: (parentId: string, prefill: ChildPrefill) => void
   onSaved: (parent: ParentRow) => void
   onCancel: () => void
 }
@@ -337,10 +337,18 @@ export function NewFamilyStep({
                         {onLinkToFamily && f.parentId && (
                           <button
                             type="button"
-                            onClick={() => onLinkToFamily(f.parentId!)}
+                            onClick={() => onLinkToFamily(f.parentId!, {
+                              full_name: child.full_name.trim(),
+                              birth_date: child.birth_date || null,
+                              allergies: child.allergies.trim() || null,
+                              medical_notes: child.medical_notes.trim() || null,
+                              comments: child.comments.trim() || null,
+                              guardian_relationship: child.guardian_relationship || null,
+                              toilet_trained: child.toilet_trained,
+                            })}
                             className="shrink-0 text-xs font-semibold text-indigo-700 underline hover:text-indigo-900 transition-colors"
                           >
-                            Usar esta familia →
+                            Agregar a esta familia →
                           </button>
                         )}
                       </div>

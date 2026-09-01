@@ -72,6 +72,21 @@ export const CATEGORY_COLORS: Record<Category, string> = {
   exploradores: 'bg-blue-100 text-blue-800 border-blue-200',
 }
 
+// Carries a child's already-known details across the "turns out this family
+// already exists" hop (from a NewFamilyStep draft, a Mensajes request, or a
+// plain search box) into whatever form actually adds the child — so the
+// coordinator confirms instead of retyping what they, or a maestro, already
+// entered once.
+export interface ChildPrefill {
+  full_name: string
+  birth_date?: string | null
+  allergies?: string | null
+  medical_notes?: string | null
+  comments?: string | null
+  guardian_relationship?: GuardianRelationship | null
+  toilet_trained?: boolean | null
+}
+
 export interface Parent {
   id: string
   full_name: string
