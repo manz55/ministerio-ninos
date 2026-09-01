@@ -1043,10 +1043,25 @@ export default function FamiliesPage() {
   }
 
   if (showNewFamily) {
-    // So the "ya existe alguien con nombre parecido" duplicate warning works
-    // here too, not just when starting a new family from Registro.
-    const existingChildren = allFamilies.flatMap((f) => f.children.map((c) => ({ id: c.id, full_name: c.full_name })))
-    return <NewFamilyStep existingChildren={existingChildren} onSaved={handleNewFamilySaved} onCancel={() => setShowNewFamily(false)} />
+    // So the "ya existe alguien con nombre parecido" duplicate warning (and
+    // the same-surname "podría ser la misma familia" suggestion) work here
+    // too, not just when starting a new family from Registro. Includes the
+    // parent so both features can show "hijo/a de X" and jump straight to
+    // that family instead of registering a duplicate one.
+    const existingChildren = allFamilies.flatMap((f) =>
+      f.children.map((c) => ({ id: c.id, full_name: c.full_name, parents: { id: f.id, full_name: f.full_name } }))
+    )
+    return (
+      <NewFamilyStep
+        existingChildren={existingChildren}
+        onLinkToFamily={(parentId) => {
+          const family = allFamilies.find((f) => f.id === parentId)
+          if (family) { setShowNewFamily(false); setSelected(family) }
+        }}
+        onSaved={handleNewFamilySaved}
+        onCancel={() => setShowNewFamily(false)}
+      />
+    )
   }
 
   if (showRoster) {

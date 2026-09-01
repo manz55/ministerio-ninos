@@ -22,7 +22,7 @@ function matchesWordPrefix(text: string, q: string): boolean {
 
 export interface SearchableChild {
   full_name: string
-  parents?: { full_name: string } | null
+  parents?: { id?: string; full_name: string } | null
 }
 
 type Indexed<T> = T & { _searchName: string; _searchParentName: string; _searchWords: string[] }
@@ -96,4 +96,47 @@ export function searchChildrenSplit<T extends SearchableChild>(
   const exactSet = new Set<Indexed<T>>(exact)
   const suggestions = searcher.fuse.search(q).map((r) => r.item).filter((item) => !exactSet.has(item))
   return { exact, suggestions }
+}
+
+/**
+ * Trailing 1-2 words of a name as a coarse Guatemalan-style "apellido"
+ * signal — "Joshua Emanuel Zet Ramos" → ["zet ramos", "ramos"], most
+ * specific first. Deliberately loose (only a suggestion, never auto-merges
+ * anything) — the real case this exists for: dad registers a family under
+ * his own name/phone, and weeks later mom brings a sibling and a maestro
+ * who's never seen the family has no way to know it's the same one.
+ */
+export function surnameCandidates(fullName: string): string[] {
+  const words = normalizeName(fullName).split(/\s+/).filter(Boolean)
+  if (words.length < 2) return []
+  const candidates = [words.slice(-1).join(' ')]
+  if (words.length >= 3) candidates.unshift(words.slice(-2).join(' '))
+  return candidates
+}
+
+export interface SurnameMatch<T> {
+  item: T
+  matchedSurname: string
+}
+
+/** Existing children whose own name ends in the same apellido as `fullName`. */
+export function findBySurname<T extends SearchableChild>(children: T[], fullName: string): SurnameMatch<T>[] {
+  const words = normalizeName(fullName).split(/\s+/).filter(Boolean)
+  if (words.length < 2) return []
+  const candidates: string[][] = []
+  if (words.length >= 3) candidates.push(words.slice(-2))
+  candidates.push(words.slice(-1))
+
+  const results: SurnameMatch<T>[] = []
+  for (const c of children) {
+    const nameWords = normalizeName(c.full_name).split(/\s+/).filter(Boolean)
+    for (const cand of candidates) {
+      const tail = nameWords.slice(-cand.length)
+      if (tail.length === cand.length && tail.every((w, i) => w === cand[i])) {
+        results.push({ item: c, matchedSurname: cand.join(' ') })
+        break
+      }
+    }
+  }
+  return results
 }

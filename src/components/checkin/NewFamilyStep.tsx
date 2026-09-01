@@ -1,10 +1,10 @@
 import { useMemo, useState } from 'react'
-import { ChevronLeft, Plus, Trash2, AlertTriangle } from 'lucide-react'
+import { ChevronLeft, Plus, Trash2, AlertTriangle, Users } from 'lucide-react'
 import { differenceInYears } from 'date-fns'
 import { supabase } from '../../lib/supabase'
 import { getCategoryFromBirthDate } from '../../lib/categoryUtils'
 import { uploadPhoto } from '../../lib/photo'
-import { createChildSearcher, searchChildrenSplit, type SearchableChild } from '../../lib/fuzzySearch'
+import { createChildSearcher, searchChildrenSplit, findBySurname, type SearchableChild } from '../../lib/fuzzySearch'
 import { CategoryBadge } from '../ui/CategoryBadge'
 import { PhotoCapture } from '../ui/PhotoCapture'
 import { GUARDIAN_RELATIONSHIP_LABELS, isCorderitos, type Category, type GuardianRelationship, type ParentRow, type ChildRow } from '../../types/domain'
@@ -28,6 +28,9 @@ interface Props {
   prefillChildBirthDate?: string
   prefillChildComments?: string
   existingChildren?: (SearchableChild & { id: string })[]
+  /** When provided (Familias has a family list to jump to; Registro doesn't), renders a
+   * "usar esta familia" action on the same-surname suggestion instead of just informing. */
+  onLinkToFamily?: (parentId: string) => void
   onSaved: (parent: ParentRow) => void
   onCancel: () => void
 }
@@ -46,6 +49,7 @@ export function NewFamilyStep({
   prefillChildBirthDate = '',
   prefillChildComments = '',
   existingChildren = [],
+  onLinkToFamily,
   onSaved,
   onCancel,
 }: Props) {
@@ -66,6 +70,25 @@ export function NewFamilyStep({
     if (name.trim().length < 4) return []
     const { exact, suggestions } = searchChildrenSplit(duplicateSearcher, name.trim())
     return [...exact, ...suggestions].slice(0, 3)
+  }
+
+  // Catches the "dad registered the family, mom brings a sibling weeks
+  // later" case — a maestro who's never seen this family has no way to know
+  // it already exists. Groups by parent so siblings don't produce repeat
+  // suggestions, and excludes anything already caught above as a same-child
+  // duplicate so the two boxes never say the same thing twice.
+  function findSameSurnameFamilies(name: string) {
+    if (name.trim().length < 4) return []
+    const dupIds = new Set(findPossibleDuplicates(name).map((d) => d.id))
+    const byParent = new Map<string, { parentId?: string; parentName: string; children: string[] }>()
+    for (const { item } of findBySurname(existingChildren, name.trim())) {
+      if (dupIds.has(item.id)) continue
+      const key = item.parents?.id ?? item.parents?.full_name ?? item.id
+      const entry = byParent.get(key) ?? { parentId: item.parents?.id, parentName: item.parents?.full_name ?? 'un responsable sin nombre registrado', children: [] }
+      entry.children.push(item.full_name)
+      byParent.set(key, entry)
+    }
+    return [...byParent.values()].slice(0, 3)
   }
 
   // ── Child helpers ───────────────────────────────────────────────────────────
@@ -246,6 +269,7 @@ export function NewFamilyStep({
           const age = hasDate ? differenceInYears(new Date(), new Date(child.birth_date)) : null
           const category = hasDate ? getCategoryFromBirthDate(child.birth_date) : null
           const duplicates = findPossibleDuplicates(child.full_name)
+          const sameSurnameFamilies = findSameSurnameFamilies(child.full_name)
 
           return (
             <div key={child.key} className="bg-white rounded-xl border-2 border-gray-200 p-5 space-y-4">
@@ -295,6 +319,31 @@ export function NewFamilyStep({
                         <span className="font-semibold">{m.full_name}</span>
                         {m.parents?.full_name ? <> · hijo/a de {m.parents.full_name}</> : null}
                       </p>
+                    ))}
+                  </div>
+                )}
+                {duplicates.length === 0 && sameSurnameFamilies.length > 0 && (
+                  <div className="mt-2 rounded-xl border-2 border-indigo-200 bg-indigo-50 px-3.5 py-2.5 space-y-2">
+                    <p className="text-xs font-semibold text-indigo-800 flex items-center gap-1.5">
+                      <Users size={13} className="shrink-0" />
+                      Ya hay niños con este apellido — podría ser la misma familia
+                    </p>
+                    {sameSurnameFamilies.map((f, idx) => (
+                      <div key={f.parentId ?? idx} className="flex items-center justify-between gap-2 pl-[19px]">
+                        <p className="text-xs text-indigo-700">
+                          <span className="font-semibold">{f.children.join(', ')}</span>
+                          {' '}· hijo/a de {f.parentName}
+                        </p>
+                        {onLinkToFamily && f.parentId && (
+                          <button
+                            type="button"
+                            onClick={() => onLinkToFamily(f.parentId!)}
+                            className="shrink-0 text-xs font-semibold text-indigo-700 underline hover:text-indigo-900 transition-colors"
+                          >
+                            Usar esta familia →
+                          </button>
+                        )}
+                      </div>
                     ))}
                   </div>
                 )}
