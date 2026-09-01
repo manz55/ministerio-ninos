@@ -56,10 +56,17 @@ function AdminInbox() {
     return () => { supabase.removeChannel(channel) }
   }, [fetchRequests])
 
-  function goTo(path: string) { navigate(path) }
-
   function goToNewFamily(r: CoordinatorRequest) {
     navigate('/registro?nueva=1', { state: parseChildFields(r.message) })
+  }
+
+  // Pre-fills the search box with the child's name (when the request has
+  // one — most do, since they usually come from the empty-search box) so
+  // Familias' "ya tenemos familia(s) con este apellido" suggestion runs
+  // immediately instead of the coordinator retyping the name from memory.
+  function goSearchFamilies(r: CoordinatorRequest) {
+    const { childName } = parseChildFields(r.message)
+    navigate(childName ? `/familias?buscar=${encodeURIComponent(childName)}` : '/familias')
   }
 
   async function resolveRequest(id: string) {
@@ -98,7 +105,7 @@ function AdminInbox() {
                 Agregar familia nueva
               </button>
               <button
-                onClick={() => goTo('/familias')}
+                onClick={() => goSearchFamilies(r)}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
               >
                 <Search size={13} />

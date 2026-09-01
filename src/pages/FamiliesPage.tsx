@@ -7,7 +7,7 @@ import {
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { getCategoryFromBirthDate, getEffectiveCategory, hasCategoryChanged, getAgeLabel } from '../lib/categoryUtils'
-import { createChildSearcher, searchChildrenSplit } from '../lib/fuzzySearch'
+import { createChildSearcher, searchChildrenSplit, findBySurname } from '../lib/fuzzySearch'
 import { uploadPhoto } from '../lib/photo'
 import { CategoryBadge } from '../components/ui/CategoryBadge'
 import { PhotoCapture, PhotoAvatar } from '../components/ui/PhotoCapture'
@@ -939,13 +939,17 @@ function RosterPanel({ onClose, initialFilter }: { onClose: () => void; initialF
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function FamiliesPage() {
-  const [query, setQuery]           = useState('')
+  const [searchParams, setSearchParams] = useSearchParams()
+  // Lets Mensajes deep-link here with the child's name already typed in
+  // (e.g. from a coordinator request) — same searched=true path as if
+  // someone had typed it themselves, so the same-surname suggestion below
+  // runs automatically instead of the coordinator retyping the name.
+  const [query, setQuery]           = useState(() => searchParams.get('buscar') ?? '')
   const [allFamilies, setAllFamilies] = useState<FamilyDetail[]>([])
   const [loadingAll, setLoadingAll] = useState(true)
   const [showAll, setShowAll]       = useState(false)
   const [selected, setSelected]     = useState<FamilyDetail | null>(null)
   const [showNewFamily, setShowNewFamily] = useState(false)
-  const [searchParams, setSearchParams] = useSearchParams()
   const rosterParam = searchParams.get('roster') as RosterFilter | null
   const [showRoster, setShowRoster] = useState(rosterParam !== null)
   const [totalFamilies, setTotalFamilies] = useState<number | null>(null)
@@ -1004,6 +1008,24 @@ export default function FamiliesPage() {
     }
     return allFamilies.filter((f) => matchedIds.has(f.id))
   }, [searched, debouncedQuery, searcher, allFamilies])
+
+  // Catches searching for a child who's never been registered before but
+  // whose siblings have — "Joshua Zet Ramos" won't match anything by exact
+  // or fuzzy name (his own name isn't in the system yet), but his surname
+  // matches an existing family's children. Excludes families already in
+  // `results` so it never repeats what's already shown above.
+  const sameSurnameFamilies = useMemo(() => {
+    if (!searched) return []
+    const resultIds = new Set(results.map((f) => f.id))
+    const byFamily = new Map<string, { familyId: string; parentName: string; children: string[] }>()
+    for (const { item } of findBySurname(searchIndex, debouncedQuery)) {
+      if (resultIds.has(item.familyId)) continue
+      const entry = byFamily.get(item.familyId) ?? { familyId: item.familyId, parentName: item.parents?.full_name ?? '', children: [] }
+      entry.children.push(item.full_name)
+      byFamily.set(item.familyId, entry)
+    }
+    return [...byFamily.values()].slice(0, 3)
+  }, [searched, debouncedQuery, searchIndex, results])
 
   const fetchFamily = useCallback(async (id: string): Promise<FamilyDetail | null> => {
     const { data } = await supabase
@@ -1154,6 +1176,32 @@ export default function FamiliesPage() {
       )}
 
       {loadingAll && (searched || showAll) && <p className="text-center text-gray-400 py-6">Cargando…</p>}
+
+      {!loadingAll && searched && sameSurnameFamilies.length > 0 && (
+        <div className="rounded-2xl border-2 border-indigo-200 bg-indigo-50 px-4 py-3.5 space-y-2.5">
+          <p className="text-sm font-semibold text-indigo-800 flex items-center gap-1.5">
+            <Users size={15} className="shrink-0" />
+            Ya tenemos familia(s) con este apellido — ¿es un hermano/a nuevo?
+          </p>
+          {sameSurnameFamilies.map((f) => (
+            <div key={f.familyId} className="flex items-center justify-between gap-3 bg-white rounded-xl border border-indigo-100 px-3.5 py-2.5">
+              <p className="text-sm text-gray-700 min-w-0">
+                <span className="font-semibold">{f.children.join(', ')}</span>
+                {f.parentName && <span className="text-gray-400"> · hijo/a de {f.parentName}</span>}
+              </p>
+              <button
+                onClick={() => {
+                  const family = allFamilies.find((fam) => fam.id === f.familyId)
+                  if (family) setSelected(family)
+                }}
+                className="shrink-0 text-xs font-semibold text-indigo-600 hover:text-indigo-800 transition-colors"
+              >
+                Ver familia →
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
 
       {!loadingAll && searched && results.length === 0 && (
         <div className="text-center py-10 text-gray-400 bg-white rounded-2xl border border-gray-200">
