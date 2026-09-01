@@ -30,11 +30,9 @@ function parseChildFields(message: string) {
 }
 
 function AdminInbox() {
-  const { session } = useAuth()
   const navigate = useNavigate()
   const [requests, setRequests] = useState<CoordinatorRequest[]>([])
   const [loading, setLoading] = useState(true)
-  const [resolvingId, setResolvingId] = useState<string | null>(null)
 
   const fetchRequests = useCallback(async () => {
     const { data } = await supabase
@@ -56,8 +54,13 @@ function AdminInbox() {
     return () => { supabase.removeChannel(channel) }
   }, [fetchRequests])
 
+  // There's no manual "marcar como resuelta" — a request only resolves when
+  // a coordinator actually adds the child (either path below), so it can't
+  // be dismissed without doing the work. requestId rides along in nav state
+  // and CheckInPage/FamiliesPage resolve it themselves once the child is
+  // really saved.
   function goToNewFamily(r: CoordinatorRequest) {
-    navigate('/registro?nueva=1', { state: parseChildFields(r.message) })
+    navigate('/registro?nueva=1', { state: { ...parseChildFields(r.message), requestId: r.id } })
   }
 
   // Pre-fills the search box with the child's name (when the request has
@@ -66,17 +69,7 @@ function AdminInbox() {
   // immediately instead of the coordinator retyping the name from memory.
   function goSearchFamilies(r: CoordinatorRequest) {
     const { childName } = parseChildFields(r.message)
-    navigate(childName ? `/familias?buscar=${encodeURIComponent(childName)}` : '/familias')
-  }
-
-  async function resolveRequest(id: string) {
-    setResolvingId(id)
-    await supabase
-      .from('coordinator_requests')
-      .update({ status: 'resuelta', resolved_by: session?.user.id ?? null, resolved_at: new Date().toISOString() })
-      .eq('id', id)
-    setResolvingId(null)
-    setRequests((prev) => prev.filter((r) => r.id !== id))
+    navigate(childName ? `/familias?buscar=${encodeURIComponent(childName)}` : '/familias', { state: { requestId: r.id } })
   }
 
   if (loading) return <p className="text-center text-gray-400 py-8">Cargando…</p>
@@ -110,14 +103,6 @@ function AdminInbox() {
               >
                 <Search size={13} />
                 Buscar en Familias
-              </button>
-              <button
-                onClick={() => resolveRequest(r.id)}
-                disabled={resolvingId === r.id}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors disabled:opacity-40"
-              >
-                <Check size={13} />
-                {resolvingId === r.id ? 'Marcando…' : 'Marcar como resuelta'}
               </button>
             </div>
           </div>

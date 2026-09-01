@@ -1,11 +1,12 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { useSearchParams, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Search, ChevronRight, Edit2, Check, X, Plus, Phone,
   AlertTriangle, UserPlus, Trash2, Users, ChevronLeft,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { useAuth } from '../lib/auth'
 import { getCategoryFromBirthDate, getEffectiveCategory, hasCategoryChanged, getAgeLabel } from '../lib/categoryUtils'
 import { createChildSearcher, searchChildrenSplit, findBySurname } from '../lib/fuzzySearch'
 import { uploadPhoto } from '../lib/photo'
@@ -386,11 +387,13 @@ function FamilyDetailPanel({
   onClose,
   onRefresh,
   onDeleted,
+  onChildAdded,
 }: {
   family: FamilyDetail
   onClose: () => void
   onRefresh: () => void
   onDeleted: () => void
+  onChildAdded?: () => void
 }) {
   const [editingParent, setEditingParent]   = useState(false)
   const [parentName, setParentName]         = useState(family.full_name)
@@ -668,7 +671,7 @@ function FamilyDetailPanel({
           {addingChild ? (
             <NewChildForm
               parentId={family.id}
-              onSaved={(childId) => { setAddingChild(false); setJustSavedChildId(childId); onRefresh() }}
+              onSaved={(childId) => { setAddingChild(false); setJustSavedChildId(childId); onRefresh(); onChildAdded?.() }}
               onCancel={() => setAddingChild(false)}
             />
           ) : (
@@ -939,6 +942,24 @@ function RosterPanel({ onClose, initialFilter }: { onClose: () => void; initialF
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function FamiliesPage() {
+  const location = useLocation()
+  const { session } = useAuth()
+  // Carried over when a coordinator jumps here from a maestro's request in
+  // Mensajes — there's deliberately no manual "marcar como resuelta" button
+  // anymore, so this is the only way a request gets resolved: by actually
+  // adding the child, here (to an existing family) or via "Nueva familia".
+  // A ref (not state) so consuming it doesn't need to be in any effect's
+  // dependency list, and it only ever fires once per visit from Mensajes.
+  const armedRequestId = useRef((location.state as { requestId?: string } | null)?.requestId ?? null)
+  const resolveArmedRequest = useCallback(async () => {
+    const id = armedRequestId.current
+    if (!id) return
+    armedRequestId.current = null
+    await supabase.from('coordinator_requests')
+      .update({ status: 'resuelta', resolved_by: session?.user.id ?? null, resolved_at: new Date().toISOString() })
+      .eq('id', id)
+  }, [session])
+
   const [searchParams, setSearchParams] = useSearchParams()
   // Lets Mensajes deep-link here with the child's name already typed in
   // (e.g. from a coordinator request) — same searched=true path as if
@@ -1062,6 +1083,7 @@ export default function FamiliesPage() {
       setAllFamilies((prev) => [...prev, family].sort((a, b) => a.full_name.localeCompare(b.full_name)))
     }
     setTotalFamilies((n) => (n !== null ? n + 1 : n))
+    resolveArmedRequest()
   }
 
   if (showNewFamily) {
@@ -1102,6 +1124,7 @@ export default function FamiliesPage() {
         onClose={() => setSelected(null)}
         onRefresh={handleRefresh}
         onDeleted={handleDeleted}
+        onChildAdded={resolveArmedRequest}
       />
     )
   }

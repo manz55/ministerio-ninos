@@ -760,7 +760,7 @@ export default function CheckInPage() {
   // just read.
   const location = useLocation()
   const newFamilyPrefill = (location.state ?? {}) as {
-    childName?: string; birthDate?: string; parentName?: string; phone?: string; alerts?: string
+    childName?: string; birthDate?: string; parentName?: string; phone?: string; alerts?: string; requestId?: string
   }
 
   // ── Búsqueda global ──
@@ -980,6 +980,15 @@ export default function CheckInPage() {
   async function handleFamilySaved(parent: ParentRow) {
     setShowNewFamily(false)
     if (searchParams.get('nueva') !== null) setSearchParams({})
+    // Resolving happens here — the moment the family is actually saved —
+    // instead of a manual "marcar como resuelta" button a coordinator could
+    // click without doing the work. There's deliberately no other way to
+    // resolve a request now.
+    if (newFamilyPrefill.requestId) {
+      await supabase.from('coordinator_requests')
+        .update({ status: 'resuelta', resolved_by: session?.user.id ?? null, resolved_at: new Date().toISOString() })
+        .eq('id', newFamilyPrefill.requestId)
+    }
     // Domingo en la mañana no hay tiempo de guardar la familia y luego ir a
     // buscar al niño de nuevo para ponerle gafete — el primer niño de la
     // familia recién guardada queda directo en su categoría, seleccionado
