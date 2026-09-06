@@ -36,12 +36,20 @@ export function ReporteAsistenciaDescarga({
   const [open, setOpen] = useState(false);
   const [stage, setStage] = useState<PrinterStage>("idle");
   const [error, setError] = useState<string | null>(null);
+  const [resultado, setResultado] = useState<Blob | string | null>(null);
   const canShare = canShareFiles();
   const extension = (fileName.split(".").pop() || "pdf").toUpperCase();
+  const shareText = `${titulo}${subtitulo ? ` — ${subtitulo}` : ""}`;
 
   function closeIfIdle() {
     if (stage === "working") return; // don't yank the modal out from under an in-flight generation
     setOpen(false);
+    // Reset so reopening always starts with a fresh "Generar" — the date
+    // range behind this modal could change while it's closed, and reusing a
+    // cached file from before would silently hand out the wrong dates.
+    setStage("idle");
+    setError(null);
+    setResultado(null);
   }
 
   async function handleGenerate() {
@@ -59,11 +67,34 @@ export function ReporteAsistenciaDescarga({
       setError(err instanceof Error && err.message ? err.message : "No se pudo generar el reporte. Intenta de nuevo.");
       return;
     }
+    setResultado(result);
     setStage("done");
-    // Generation already succeeded at this point — a share-sheet cancel or
-    // failure falls back to a plain download instead of showing an error,
-    // since the report itself is fine either way.
-    await entregar(result, fileName, `${titulo}${subtitulo ? ` — ${subtitulo}` : ""}`);
+  }
+
+  async function handleShare() {
+    if (!resultado || typeof resultado === "string") return;
+    try {
+      const file = new File([resultado], fileName, { type: mimeTypeFor(fileName) });
+      await navigator.share({ files: [file], title: fileName, text: shareText });
+    } catch (err) {
+      // AbortError = user backed out of the share sheet on purpose — not an error.
+      if (err instanceof Error && err.name === "AbortError") return;
+      setError("No se pudo abrir el menú de compartir. Puedes descargarlo con el otro botón.");
+    }
+  }
+
+  function handleDownload() {
+    if (!resultado) return;
+    const url = typeof resultado === "string" ? resultado : URL.createObjectURL(resultado);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    if (typeof resultado !== "string") {
+      setTimeout(() => URL.revokeObjectURL(url), 4000);
+    }
   }
 
   const iconEl = icon ?? <Receipt size={15} />;
@@ -170,16 +201,39 @@ export function ReporteAsistenciaDescarga({
                 </ReceiptPrinter.Output>
               </ReceiptPrinter.Root>
 
-              <button
-                type="button"
-                onClick={handleGenerate}
-                disabled={stage === "working"}
-                className="w-full max-w-sm rounded-xl border border-neutral-200 bg-white py-2.5 text-sm font-medium text-neutral-900 transition hover:bg-neutral-50 disabled:opacity-60"
-              >
-                {stage === "idle" && (canShare ? `Generar y compartir ${extension}` : `Generar y descargar ${extension}`)}
-                {stage === "working" && "Generando…"}
-                {stage === "done" && (canShare ? "Compartir de nuevo" : "Descargar de nuevo")}
-              </button>
+              {stage === "done" ? (
+                // Once the file is ready, compartir and descargar are two
+                // independent actions — sharing to WhatsApp shouldn't be the
+                // only way to get the file, since not every share target
+                // actually saves a copy for the coordinator to keep.
+                <div className="flex w-full max-w-sm gap-2">
+                  {canShare && (
+                    <button
+                      type="button"
+                      onClick={handleShare}
+                      className="flex-1 rounded-xl bg-neutral-900 py-2.5 text-sm font-medium text-white transition hover:bg-neutral-800"
+                    >
+                      Compartir
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={handleDownload}
+                    className="flex-1 rounded-xl border border-neutral-200 bg-white py-2.5 text-sm font-medium text-neutral-900 transition hover:bg-neutral-50"
+                  >
+                    Descargar {extension}
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleGenerate}
+                  disabled={stage === "working"}
+                  className="w-full max-w-sm rounded-xl border border-neutral-200 bg-white py-2.5 text-sm font-medium text-neutral-900 transition hover:bg-neutral-50 disabled:opacity-60"
+                >
+                  {stage === "idle" ? `Generar ${extension}` : "Generando…"}
+                </button>
+              )}
               {error && <p className="text-xs text-red-200">{error}</p>}
             </motion.div>
           </motion.div>
@@ -202,33 +256,6 @@ function canShareFiles() {
 
 function mimeTypeFor(fileName: string) {
   return fileName.toLowerCase().endsWith(".csv") ? "text/csv" : "application/pdf";
-}
-
-async function entregar(result: Blob | string, fileName: string, shareText: string) {
-  if (typeof result !== "string" && canShareFiles()) {
-    try {
-      const file = new File([result], fileName, { type: mimeTypeFor(fileName) });
-      await navigator.share({ files: [file], title: fileName, text: shareText });
-      return;
-    } catch (err) {
-      // AbortError = user closed the share sheet on purpose — leave it at that,
-      // don't dump them into a download they didn't ask for.
-      if (err instanceof Error && err.name === "AbortError") return;
-      // Any other share failure (e.g. no app can handle the file) falls
-      // through to a plain download below so the report isn't lost.
-    }
-  }
-
-  const url = typeof result === "string" ? result : URL.createObjectURL(result);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = fileName;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  if (typeof result !== "string") {
-    setTimeout(() => URL.revokeObjectURL(url), 4000);
-  }
 }
 
 // ---------- Ejemplo de uso ----------
