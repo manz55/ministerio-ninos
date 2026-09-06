@@ -1233,14 +1233,14 @@ export default function FamiliesPage() {
     <BackgroundRadialViolet />
     <div className="relative z-[2] space-y-5">
       {/* Header */}
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Familias</h2>
           <p className="text-gray-500 text-sm mt-0.5">
             {totalFamilies !== null ? `${totalFamilies} familias registradas` : 'Cargando…'}
           </p>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap sm:shrink-0">
           <button
             onClick={() => setShowRoster(true)}
             className="flex items-center gap-2 px-3.5 py-2.5 text-sm font-semibold text-gray-600 bg-white border-2 border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
