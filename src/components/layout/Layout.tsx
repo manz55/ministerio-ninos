@@ -89,7 +89,7 @@ export default function Layout({ isAdmin, profile }: { isAdmin: boolean; profile
           without digging through the Netlify dashboard. */}
       <div
         className="fixed right-3 z-40 pointer-events-none"
-        style={{ bottom: 'calc(90px + env(safe-area-inset-bottom))' }}
+        style={{ bottom: 'calc(112px + env(safe-area-inset-bottom))' }}
       >
         <span className="text-[10px] font-medium text-gray-500 bg-white/90 backdrop-blur-md px-2 py-1 rounded-full border border-gray-200 shadow-sm">
           {BUILD_LABEL}
