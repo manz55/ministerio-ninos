@@ -58,9 +58,7 @@ export default function Layout({ isAdmin, profile }: { isAdmin: boolean; profile
           <ChurchLogo size={38} />
           <div className="flex-1 min-w-0">
             <span className="font-semibold text-gray-900 block leading-tight">Maestros de Niños</span>
-            <span className="text-xs text-gray-400 leading-tight truncate block">
-              {profile.full_name} · act. {BUILD_LABEL}
-            </span>
+            <span className="text-xs text-gray-400 leading-tight truncate block">{profile.full_name}</span>
           </div>
           <button
             onClick={() => setShowChangePassword(true)}
@@ -85,6 +83,18 @@ export default function Layout({ isAdmin, profile }: { isAdmin: boolean; profile
       >
         <Outlet context={profile} />
       </main>
+
+      {/* Build stamp — bottom corner, above the Dock, out of the way but
+          always on screen, so anyone can confirm what's actually live
+          without digging through the Netlify dashboard. */}
+      <div
+        className="fixed right-3 z-40 pointer-events-none"
+        style={{ bottom: 'calc(90px + env(safe-area-inset-bottom))' }}
+      >
+        <span className="text-[10px] font-medium text-gray-500 bg-white/90 backdrop-blur-md px-2 py-1 rounded-full border border-gray-200 shadow-sm">
+          {BUILD_LABEL}
+        </span>
+      </div>
 
       <Dock items={navItems} />
     </div>
