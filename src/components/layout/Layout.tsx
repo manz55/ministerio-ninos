@@ -11,21 +11,6 @@ import type { Profile } from '../../types/domain'
 
 const CONTAINER = 'max-w-4xl lg:max-w-6xl xl:max-w-[88rem] mx-auto'
 
-// Baked in at build time (vite.config.ts) — lets anyone confirm what's
-// actually live (and when it was published) right in the app, without
-// needing the Netlify dashboard. Build machines run in UTC, but everyone
-// reading this is in Guatemala — format explicitly in that zone (fixed
-// UTC-6, no DST) instead of date-fns' local-timezone default, or this would
-// show a UTC time that looks 6 hours "old" to whoever's checking it.
-const BUILD_LABEL = new Intl.DateTimeFormat('es-GT', {
-  timeZone: 'America/Guatemala',
-  day: 'numeric',
-  month: 'short',
-  hour: '2-digit',
-  minute: '2-digit',
-  hour12: false,
-}).format(new Date(__BUILD_TIME__))
-
 export default function Layout({ isAdmin, profile }: { isAdmin: boolean; profile: Profile }) {
   const messagesBadge = useMessagesBadgeCount(profile.id, isAdmin)
   const navItems = isAdmin
@@ -84,7 +69,7 @@ export default function Layout({ isAdmin, profile }: { isAdmin: boolean; profile
         <Outlet context={profile} />
       </main>
 
-      {/* Build stamp — centered directly above the Dock, the same way the
+      {/* Version stamp — centered directly above the Dock, the same way the
           Dock itself centers relative to the full viewport (not the
           content-column CONTAINER, which on a wide desktop window sits far
           to the right of the Dock's actual — much narrower — centered
@@ -92,13 +77,18 @@ export default function Layout({ isAdmin, profile }: { isAdmin: boolean; profile
           group at every screen width instead of drifting apart. The Dock
           only grows taller at the `sm:` breakpoint (bigger icons/padding)
           and never beyond it, so one fixed clearance comfortably clears it
-          everywhere. */}
+          everywhere. __APP_VERSION__/__COMMIT_HASH__ come from vite.config.ts
+          (git commit count / short hash) — always accurate, no manual
+          bumping, and traceable to an exact commit. */}
       <div
         className="fixed inset-x-0 z-40 flex justify-center pointer-events-none"
         style={{ bottom: 'calc(130px + env(safe-area-inset-bottom))' }}
       >
-        <span className="text-[10px] font-medium text-gray-500 bg-white/90 backdrop-blur-md px-2 py-1 rounded-full border border-gray-200 shadow-sm">
-          {BUILD_LABEL}
+        <span
+          title={`commit ${__COMMIT_HASH__}`}
+          className="text-[10px] font-medium text-gray-500 bg-white/90 backdrop-blur-md px-2 py-1 rounded-full border border-gray-200 shadow-sm"
+        >
+          {__APP_VERSION__}
         </span>
       </div>
 
