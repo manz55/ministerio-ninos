@@ -11,6 +11,21 @@ import type { Profile } from '../../types/domain'
 
 const CONTAINER = 'max-w-4xl lg:max-w-6xl xl:max-w-[88rem] mx-auto'
 
+// Baked in at build time (vite.config.ts) — lets anyone confirm what's
+// actually live (and when it was published) right in the app, without
+// needing the Netlify dashboard. Build machines run in UTC, but everyone
+// reading this is in Guatemala — format explicitly in that zone (fixed
+// UTC-6, no DST) instead of date-fns' local-timezone default, or this would
+// show a UTC time that looks 6 hours "old" to whoever's checking it.
+const BUILD_LABEL = new Intl.DateTimeFormat('es-GT', {
+  timeZone: 'America/Guatemala',
+  day: 'numeric',
+  month: 'short',
+  hour: '2-digit',
+  minute: '2-digit',
+  hour12: false,
+}).format(new Date(__BUILD_TIME__))
+
 export default function Layout({ isAdmin, profile }: { isAdmin: boolean; profile: Profile }) {
   const messagesBadge = useMessagesBadgeCount(profile.id, isAdmin)
   const navItems = isAdmin
@@ -43,7 +58,9 @@ export default function Layout({ isAdmin, profile }: { isAdmin: boolean; profile
           <ChurchLogo size={38} />
           <div className="flex-1 min-w-0">
             <span className="font-semibold text-gray-900 block leading-tight">Maestros de Niños</span>
-            <span className="text-xs text-gray-400 leading-tight truncate block">{profile.full_name}</span>
+            <span className="text-xs text-gray-400 leading-tight truncate block">
+              {profile.full_name} · act. {BUILD_LABEL}
+            </span>
           </div>
           <button
             onClick={() => setShowChangePassword(true)}
