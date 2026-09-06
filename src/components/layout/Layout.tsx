@@ -99,7 +99,7 @@ export default function Layout({ isAdmin, profile }: { isAdmin: boolean; profile
         style={{ bottom: 'calc(130px + env(safe-area-inset-bottom))' }}
       >
         <div className={`${CONTAINER} px-4 relative`}>
-          <span className="absolute right-4 text-[10px] font-medium text-gray-500 bg-white/90 backdrop-blur-md px-2 py-1 rounded-full border border-gray-200 shadow-sm">
+          <span className="absolute right-4 bottom-0 text-[10px] font-medium text-gray-500 bg-white/90 backdrop-blur-md px-2 py-1 rounded-full border border-gray-200 shadow-sm">
             {BUILD_LABEL}
           </span>
         </div>
