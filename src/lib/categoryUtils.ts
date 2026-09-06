@@ -35,12 +35,16 @@ export function requiresCheckout(category: Category | null): boolean {
 }
 
 /**
- * The category to actually use for a child: computed live from birth_date
- * when available, otherwise the manually-assigned `category` stored on the
- * record (set at import time for children with no birth_date on file).
+ * The category to actually use for a child: the stored `category` when set
+ * (whether from a coordinator's manual override, a prior graduation sync, or
+ * initial registration), otherwise computed live from birth_date as a
+ * fallback for children whose category was never set. Stored must win over
+ * computed — otherwise a manual override always displays as unchanged even
+ * right after being saved, since birth_date keeps recomputing the same
+ * age-based category regardless of what was just written to the DB.
  */
 export function getEffectiveCategory(child: { birth_date: string | null; category: Category | null }): Category | null {
-  return getCategoryFromBirthDate(child.birth_date) ?? child.category
+  return child.category ?? getCategoryFromBirthDate(child.birth_date)
 }
 
 /** True when the child has aged into a new category since their `category` was last synced. */

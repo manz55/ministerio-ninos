@@ -6,7 +6,7 @@ import { es } from 'date-fns/locale'
 import { Search, CheckCircle2, UserPlus, AlertTriangle, ChevronLeft, Bug, Zap, Compass, Baby, PersonStanding, User, Pencil, LogIn, Trash2, X, Users, Lock, Check, FileWarning, Monitor } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
-import { getCategoryFromBirthDate, getEffectiveCategory, hasCategoryChanged, getAgeLabel, requiresBadge, requiresPager } from '../lib/categoryUtils'
+import { getEffectiveCategory, hasCategoryChanged, getAgeLabel, requiresBadge, requiresPager } from '../lib/categoryUtils'
 import { createChildSearcher, searchChildrenSplit } from '../lib/fuzzySearch'
 import { CATEGORY_LABELS, CATEGORY_COLORS, NEXT_CATEGORY, isCorderitos, type Category, type TeamColor, type ParentRow } from '../types/domain'
 import { CategoryBadge } from '../components/ui/CategoryBadge'
@@ -376,7 +376,6 @@ function ChildCard({
   onDeselect: () => void
   onRegistered: (childId: string) => void
 }) {
-  const computedCategory = getCategoryFromBirthDate(child.birth_date)
   const category = getEffectiveCategory(child)
   const categoryChanged = hasCategoryChanged(child)
   const age = getAgeLabel(child.birth_date)
@@ -427,13 +426,11 @@ function ChildCard({
       }
       return
     }
-    // Keep the stored category in sync with age now that we know it — future
-    // imports/no-birth-date children simply keep whatever was last set. Uses a
-    // narrow RPC (not a blanket UPDATE grant) so a maestro's session can only
-    // ever touch this one column, not rewrite arbitrary child data.
-    if (computedCategory && computedCategory !== child.category) {
-      await supabase.rpc('sync_child_category', { p_child_id: child.id, p_category: computedCategory })
-    }
+    // Category no longer auto-syncs to age on check-in — a coordinator's
+    // manual category change (FamiliesPage) must stick until someone moves
+    // it again by hand, even past the child's next birthday. The 🎉 badge
+    // above (hasCategoryChanged) still nudges that a child can graduate;
+    // moving them is a deliberate edit, not something check-in does silently.
     setSubmitting(false)
     setBadge('')
     setPager('')

@@ -49,7 +49,7 @@ export async function fetchDailyStaffing(from: string, to: string): Promise<Dail
   return staffing
 }
 
-function downloadBlob(blob: Blob, filename: string) {
+export function downloadBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url; a.download = filename; a.click()
@@ -87,8 +87,10 @@ export function exportRangeCSV(rows: RangeAttendanceRow[], from: string, to: str
 // jspdf/jspdf-autotable (and the html2canvas they pull in) are only needed
 // once someone actually clicks "PDF" — loading them dynamically here keeps
 // them out of ReportsPage's initial bundle instead of always paying for
-// ~200KB nobody may ever use.
-export async function exportRangePDF(rows: RangeAttendanceRow[], from: string, to: string, staffing: DailyStaffing = {}) {
+// ~200KB nobody may ever use. Returns the Blob instead of saving directly so
+// callers can also hand it to something other than the browser's save
+// dialog (e.g. the receipt-printer download animation).
+export async function exportRangePDF(rows: RangeAttendanceRow[], from: string, to: string, staffing: DailyStaffing = {}): Promise<Blob> {
   const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([
     import('jspdf'),
     import('jspdf-autotable'),
@@ -120,5 +122,5 @@ export async function exportRangePDF(rows: RangeAttendanceRow[], from: string, t
     headStyles: { fillColor: [79, 70, 229] },
   })
 
-  doc.save(`asistencia-${from}-a-${to}.pdf`)
+  return doc.output('blob')
 }

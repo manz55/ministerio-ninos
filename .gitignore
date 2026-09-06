@@ -28,3 +28,6 @@ Base de datos ninos.xlsx
 *.njsproj
 *.sln
 *.sw?
+
+# Local Netlify folder
+.netlify

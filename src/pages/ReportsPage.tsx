@@ -11,7 +11,8 @@ import { CATEGORY_LABELS, CATEGORY_COLORS, ACTIVE_CATEGORIES, NEXT_CATEGORY, typ
 import { hasCategoryChanged, getCategoryFromBirthDate } from '../lib/categoryUtils'
 import { DatePicker } from '../components/ui/DatePicker'
 import { AnimatedBlobBackground } from '../components/ui/AnimatedBlobBackground'
-import { fetchAttendanceRange, fetchDailyStaffing, exportRangeCSV, exportRangePDF, MAX_RANGE_ROWS, toCSV } from '../lib/exportUtils'
+import { fetchAttendanceRange, fetchDailyStaffing, exportRangeCSV, exportRangePDF, downloadBlob, MAX_RANGE_ROWS, toCSV } from '../lib/exportUtils'
+import { ReporteAsistenciaDescarga } from '../components/receipt-printer/ReporteAsistenciaDescarga'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -214,7 +215,11 @@ export default function ReportsPage() {
     // PDF stays "busy" through the export call since the PDF libraries load
     // on demand (first click downloads them) — CSV needs no extra library.
     if (kind === 'csv') { exportRangeCSV(rows, rangeFrom, rangeTo, staffing); setRangeBusy(null) }
-    else { await exportRangePDF(rows, rangeFrom, rangeTo, staffing); setRangeBusy(null) }
+    else {
+      const blob = await exportRangePDF(rows, rangeFrom, rangeTo, staffing)
+      downloadBlob(blob, `asistencia-${rangeFrom}-a-${rangeTo}.pdf`)
+      setRangeBusy(null)
+    }
   }
 
   const selectedStr    = format(selectedDate, 'yyyy-MM-dd')
@@ -314,24 +319,16 @@ export default function ReportsPage() {
     }
   }, [fetchLive, fetchHistory, fetchMedical])
 
-  // ── CSV exports ──────────────────────────────────────────────────────────────
-
-  function exportTodayCSV() {
-    const meta = [
-      ['Fecha', format(selectedDate, "EEEE d 'de' MMMM yyyy", { locale: es })],
-      ['Encargado', coordinatorName || 'Sin registrar'],
-      ['Encargado de computadora', computerOperatorName || 'Sin registrar'],
-      ['Total', String(total)],
-      [],
-    ]
-    const headers = ['Nombre niño', 'Padre/Madre', 'Categoría', 'Gafete']
-    const rows = liveRecords.map((r) => [
-      r.children?.full_name ?? '',
-      r.children?.parents?.full_name ?? '',
-      CATEGORY_LABELS[r.category as Category] ?? r.category,
-      r.badge_number ?? 'Sin gafete',
+  // Generates the real attendance-report PDF for the selected day — the same
+  // export pipeline the date-range "PDF" button uses (fetchAttendanceRange +
+  // fetchDailyStaffing + exportRangePDF), just scoped to a single day instead
+  // of a range, so the receipt-printer download gets a real PDF, not a stub.
+  async function generateTodayReceiptPDF(): Promise<Blob> {
+    const [{ rows }, staffing] = await Promise.all([
+      fetchAttendanceRange(selectedStr, selectedStr),
+      fetchDailyStaffing(selectedStr, selectedStr),
     ])
-    downloadCSV(toCSV([...meta, headers, ...rows]), `asistencia-${selectedStr}.csv`)
+    return exportRangePDF(rows, selectedStr, selectedStr, staffing)
   }
 
   async function deleteRecord(id: string) {
@@ -389,6 +386,20 @@ export default function ReportsPage() {
   }
   const total = liveRecords.length
 
+  // Real per-category counts for the receipt-printer download — never
+  // hardcoded, recomputed from the same liveRecords the KPI cards below use.
+  const receiptLineas = ACTIVE_CATEGORIES.map((cat) => ({
+    label: CATEGORY_LABELS[cat],
+    value: String(byCategory[cat]),
+  }))
+  // Omitted entirely (not "Generado por: Sin registrar") when nobody's been
+  // set for the day — a real receipt just wouldn't print an empty line.
+  const receiptNota = coordinatorName
+    ? computerOperatorName
+      ? `Generado por: ${coordinatorName} · Compu: ${computerOperatorName}`
+      : `Generado por: ${coordinatorName}`
+    : undefined
+
   const topCat = ACTIVE_CATEGORIES.reduce((a, b) => byCategory[a] >= byCategory[b] ? a : b)
   const avgWeek = weekHistory.length > 0
     ? Math.round(weekHistory.reduce((s, w) => s + w.total, 0) / weekHistory.length)
@@ -420,13 +431,6 @@ export default function ReportsPage() {
             >
               <RefreshCw size={13} /> Actualizar
             </button>
-            <button
-              onClick={exportTodayCSV}
-              disabled={total === 0}
-              className="flex items-center gap-1.5 px-3 py-2 text-sm text-gray-600 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 disabled:opacity-40 transition-colors"
-            >
-              <Download size={13} /> Exportar
-            </button>
           </div>
         </div>
 
@@ -453,6 +457,27 @@ export default function ReportsPage() {
                 <span className="text-xs font-medium text-gray-700">{computerOperatorName}</span>
               </div>
             )}
+          </div>
+        )}
+      </div>
+
+      {/* ── Reporte de asistencia (recibo animado, PDF real) ── */}
+      <div className="flex justify-center">
+        {total > 0 ? (
+          <ReporteAsistenciaDescarga
+            titulo="Reporte de asistencia"
+            subtitulo={format(selectedDate, "EEEE d 'de' MMMM yyyy", { locale: es })}
+            lineas={receiptLineas}
+            totalLabel="Total de niños"
+            totalValue={String(total)}
+            nota={receiptNota}
+            fileName={`reporte-asistencia-${selectedStr}.pdf`}
+            onGenerate={generateTodayReceiptPDF}
+          />
+        ) : (
+          <div className="w-full max-w-sm flex flex-col items-center gap-2 text-center py-8 px-4 bg-white rounded-2xl border-2 border-dashed border-gray-200">
+            <FileText size={20} className="text-gray-300" />
+            <p className="text-sm text-gray-400">Aún no hay registros este día para generar el reporte.</p>
           </div>
         )}
       </div>
