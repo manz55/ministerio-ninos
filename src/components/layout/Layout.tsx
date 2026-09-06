@@ -84,25 +84,22 @@ export default function Layout({ isAdmin, profile }: { isAdmin: boolean; profile
         <Outlet context={profile} />
       </main>
 
-      {/* Build stamp — above the Dock, out of the way but always on screen,
-          so anyone can confirm what's actually live without digging through
-          the Netlify dashboard. The Dock only grows taller at the `sm:`
-          breakpoint (bigger icons/padding) and never beyond it, so one fixed
-          clearance comfortably clears it at every width. The outer div spans
-          the full viewport just for correct fixed-position stacking — the
-          inner one reuses the app's own content-column width so the badge
-          lines up with the header/main's right edge instead of the raw
-          browser-window edge, which on a wide desktop monitor is far from
-          where the (centered, content-width) Dock actually sits. */}
+      {/* Build stamp — centered directly above the Dock, the same way the
+          Dock itself centers relative to the full viewport (not the
+          content-column CONTAINER, which on a wide desktop window sits far
+          to the right of the Dock's actual — much narrower — centered
+          pill). Centering both the same way keeps them paired as one visual
+          group at every screen width instead of drifting apart. The Dock
+          only grows taller at the `sm:` breakpoint (bigger icons/padding)
+          and never beyond it, so one fixed clearance comfortably clears it
+          everywhere. */}
       <div
-        className="fixed inset-x-0 z-40 pointer-events-none"
+        className="fixed inset-x-0 z-40 flex justify-center pointer-events-none"
         style={{ bottom: 'calc(130px + env(safe-area-inset-bottom))' }}
       >
-        <div className={`${CONTAINER} px-4 relative`}>
-          <span className="absolute right-4 bottom-0 text-[10px] font-medium text-gray-500 bg-white/90 backdrop-blur-md px-2 py-1 rounded-full border border-gray-200 shadow-sm">
-            {BUILD_LABEL}
-          </span>
-        </div>
+        <span className="text-[10px] font-medium text-gray-500 bg-white/90 backdrop-blur-md px-2 py-1 rounded-full border border-gray-200 shadow-sm">
+          {BUILD_LABEL}
+        </span>
       </div>
 
       <Dock items={navItems} />
