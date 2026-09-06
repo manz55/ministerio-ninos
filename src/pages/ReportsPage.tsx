@@ -3,7 +3,7 @@ import { format, subWeeks, startOfWeek, endOfWeek } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  Users, RefreshCw, Download, AlertTriangle, FileText, PartyPopper, Check, Pencil,
+  Users, RefreshCw, Download, AlertTriangle, FileText, FileSpreadsheet, PartyPopper, Check, Pencil,
   Bug, Zap, Compass, Baby, PersonStanding, TrendingUp, ChevronDown, ChevronUp, User, Trash2, X, CalendarRange, Monitor,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
@@ -11,7 +11,7 @@ import { CATEGORY_LABELS, CATEGORY_COLORS, ACTIVE_CATEGORIES, NEXT_CATEGORY, typ
 import { hasCategoryChanged, getCategoryFromBirthDate } from '../lib/categoryUtils'
 import { DatePicker } from '../components/ui/DatePicker'
 import { AnimatedBlobBackground } from '../components/ui/AnimatedBlobBackground'
-import { fetchAttendanceRange, fetchDailyStaffing, exportRangeCSV, exportRangePDF, downloadBlob, MAX_RANGE_ROWS, toCSV } from '../lib/exportUtils'
+import { fetchAttendanceRange, fetchDailyStaffing, exportRangeCSV, exportRangePDF, toCSV } from '../lib/exportUtils'
 import { ReporteAsistenciaDescarga } from '../components/receipt-printer/ReporteAsistenciaDescarga'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -197,29 +197,28 @@ export default function ReportsPage() {
 
   const [rangeFrom, setRangeFrom] = useState(format(subWeeks(new Date(), 1), 'yyyy-MM-dd'))
   const [rangeTo, setRangeTo]     = useState(todayStr)
-  const [rangeBusy, setRangeBusy] = useState<'csv' | 'pdf' | null>(null)
-  const [rangeError, setRangeError] = useState<string | null>(null)
 
-  async function handleRangeExport(kind: 'csv' | 'pdf') {
-    if (!rangeFrom || !rangeTo || rangeFrom > rangeTo) { setRangeError('Selecciona un rango de fechas válido.'); return }
-    setRangeError(null)
-    setRangeBusy(kind)
-    const [{ rows, total }, staffing] = await Promise.all([
+  // Shared by both range exports below — thrown messages surface directly in
+  // the receipt's own error banner (rango inválido, sin registros…) instead
+  // of a generic "no se pudo generar".
+  async function fetchRangeRows() {
+    if (!rangeFrom || !rangeTo || rangeFrom > rangeTo) throw new Error('Selecciona un rango de fechas válido.')
+    const [{ rows }, staffing] = await Promise.all([
       fetchAttendanceRange(rangeFrom, rangeTo),
       fetchDailyStaffing(rangeFrom, rangeTo),
     ])
-    if (rows.length === 0) { setRangeBusy(null); setRangeError('No hay registros en ese rango.'); return }
-    if (total > MAX_RANGE_ROWS) {
-      setRangeError(`El rango tiene ${total} registros — se exportaron los primeros ${MAX_RANGE_ROWS}. Prueba un rango más corto para un reporte completo.`)
-    }
-    // PDF stays "busy" through the export call since the PDF libraries load
-    // on demand (first click downloads them) — CSV needs no extra library.
-    if (kind === 'csv') { exportRangeCSV(rows, rangeFrom, rangeTo, staffing); setRangeBusy(null) }
-    else {
-      const blob = await exportRangePDF(rows, rangeFrom, rangeTo, staffing)
-      downloadBlob(blob, `asistencia-${rangeFrom}-a-${rangeTo}.pdf`)
-      setRangeBusy(null)
-    }
+    if (rows.length === 0) throw new Error('No hay registros en ese rango.')
+    return { rows, staffing }
+  }
+
+  async function generateRangeCSV() {
+    const { rows, staffing } = await fetchRangeRows()
+    return exportRangeCSV(rows, staffing)
+  }
+
+  async function generateRangePDF() {
+    const { rows, staffing } = await fetchRangeRows()
+    return exportRangePDF(rows, rangeFrom, rangeTo, staffing)
   }
 
   const selectedStr    = format(selectedDate, 'yyyy-MM-dd')
@@ -461,27 +460,6 @@ export default function ReportsPage() {
         )}
       </div>
 
-      {/* ── Reporte de asistencia (recibo animado, PDF real) ── */}
-      <div className="flex justify-center">
-        {total > 0 ? (
-          <ReporteAsistenciaDescarga
-            titulo="Reporte de asistencia"
-            subtitulo={format(selectedDate, "EEEE d 'de' MMMM yyyy", { locale: es })}
-            lineas={receiptLineas}
-            totalLabel="Total de niños"
-            totalValue={String(total)}
-            nota={receiptNota}
-            fileName={`reporte-asistencia-${selectedStr}.pdf`}
-            onGenerate={generateTodayReceiptPDF}
-          />
-        ) : (
-          <div className="w-full max-w-sm flex flex-col items-center gap-2 text-center py-8 px-4 bg-white rounded-2xl border-2 border-dashed border-gray-200">
-            <FileText size={20} className="text-gray-300" />
-            <p className="text-sm text-gray-400">Aún no hay registros este día para generar el reporte.</p>
-          </div>
-        )}
-      </div>
-
       {/* ── KPI cards ── */}
       <div className="grid grid-cols-3 gap-3">
         {/* Total hoy */}
@@ -557,37 +535,56 @@ export default function ReportsPage() {
         </div>
       )}
 
-      {/* ── Reporte por rango de fechas ── */}
-      <section className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 space-y-3">
+      {/* ── Reportes y exportaciones (recibo animado, PDF/CSV reales) ── */}
+      <section className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 space-y-4">
         <div className="flex items-center gap-2">
           <CalendarRange size={16} className="text-indigo-500" />
-          <h3 className="font-semibold text-gray-800">Reporte por rango de fechas</h3>
+          <h3 className="font-semibold text-gray-800">Reportes y exportaciones</h3>
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          <input type="date" value={rangeFrom} max={rangeTo} onChange={(e) => setRangeFrom(e.target.value)}
-            className="px-3 py-2 border-2 border-gray-200 rounded-lg text-sm focus:border-indigo-500 focus:outline-none" />
-          <span className="text-sm text-gray-400">a</span>
-          <input type="date" value={rangeTo} min={rangeFrom} max={todayStr} onChange={(e) => setRangeTo(e.target.value)}
-            className="px-3 py-2 border-2 border-gray-200 rounded-lg text-sm focus:border-indigo-500 focus:outline-none" />
-        </div>
-        {rangeError && (
-          <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">{rangeError}</p>
+
+        {total > 0 ? (
+          <ReporteAsistenciaDescarga
+            titulo="Reporte de hoy"
+            subtitulo={format(selectedDate, "EEEE d 'de' MMMM yyyy", { locale: es })}
+            lineas={receiptLineas}
+            totalLabel="Total de niños"
+            totalValue={String(total)}
+            nota={receiptNota}
+            fileName={`reporte-asistencia-${selectedStr}.pdf`}
+            onGenerate={generateTodayReceiptPDF}
+          />
+        ) : (
+          <div className="flex flex-col items-center gap-2 text-center py-6 px-4 bg-gray-50 rounded-2xl border-2 border-dashed border-gray-200">
+            <FileText size={20} className="text-gray-300" />
+            <p className="text-sm text-gray-400">Aún no hay registros este día para generar el reporte.</p>
+          </div>
         )}
-        <div className="flex gap-2">
-          <button
-            onClick={() => handleRangeExport('csv')}
-            disabled={rangeBusy !== null}
-            className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-sm font-semibold text-gray-700 bg-gray-100 rounded-xl hover:bg-gray-200 disabled:opacity-50 transition-colors"
-          >
-            <Download size={14} /> {rangeBusy === 'csv' ? 'Generando…' : 'CSV'}
-          </button>
-          <button
-            onClick={() => handleRangeExport('pdf')}
-            disabled={rangeBusy !== null}
-            className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-sm font-semibold text-white bg-indigo-600 rounded-xl hover:bg-indigo-700 disabled:opacity-50 transition-colors"
-          >
-            <FileText size={14} /> {rangeBusy === 'pdf' ? 'Generando…' : 'PDF'}
-          </button>
+
+        <div className="border-t border-gray-100 pt-4 space-y-3">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Rango de fechas</p>
+          <div className="flex items-center gap-2 flex-wrap">
+            <input type="date" value={rangeFrom} max={rangeTo} onChange={(e) => setRangeFrom(e.target.value)}
+              className="px-3 py-2 border-2 border-gray-200 rounded-lg text-sm focus:border-indigo-500 focus:outline-none" />
+            <span className="text-sm text-gray-400">a</span>
+            <input type="date" value={rangeTo} min={rangeFrom} max={todayStr} onChange={(e) => setRangeTo(e.target.value)}
+              className="px-3 py-2 border-2 border-gray-200 rounded-lg text-sm focus:border-indigo-500 focus:outline-none" />
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <ReporteAsistenciaDescarga
+              titulo="Asistencia (CSV)"
+              subtitulo={`${rangeFrom} al ${rangeTo}`}
+              icon={<FileSpreadsheet size={15} />}
+              fileName={`asistencia-${rangeFrom}-a-${rangeTo}.csv`}
+              onGenerate={generateRangeCSV}
+            />
+            <ReporteAsistenciaDescarga
+              titulo="Asistencia (PDF)"
+              subtitulo={`${rangeFrom} al ${rangeTo}`}
+              icon={<FileText size={15} />}
+              fileName={`asistencia-${rangeFrom}-a-${rangeTo}.pdf`}
+              onGenerate={generateRangePDF}
+            />
+          </div>
         </div>
       </section>
 

@@ -68,7 +68,9 @@ export function toCSV(rows: unknown[][]): string {
   return rows.map((row) => row.map(csvEscape).join(',')).join('\n')
 }
 
-export function exportRangeCSV(rows: RangeAttendanceRow[], from: string, to: string, staffing: DailyStaffing = {}) {
+// Returns the Blob instead of saving directly (mirrors exportRangePDF) so
+// callers can also hand it to the receipt-printer share/download animation.
+export function exportRangeCSV(rows: RangeAttendanceRow[], staffing: DailyStaffing = {}): Blob {
   const headers = ['Fecha', 'Nombre niño', 'Padre/Madre', 'Categoría', 'Equipo', 'Gafete', 'Hora de entrada', 'Encargado', 'Encargado de computadora']
   const body = rows.map((r) => [
     r.session_date,
@@ -81,7 +83,7 @@ export function exportRangeCSV(rows: RangeAttendanceRow[], from: string, to: str
     staffing[r.session_date]?.coordinator ?? '',
     staffing[r.session_date]?.computerOperator ?? '',
   ])
-  downloadBlob(new Blob(['﻿' + toCSV([headers, ...body])], { type: 'text/csv;charset=utf-8;' }), `asistencia-${from}-a-${to}.csv`)
+  return new Blob(['﻿' + toCSV([headers, ...body])], { type: 'text/csv;charset=utf-8;' })
 }
 
 // jspdf/jspdf-autotable (and the html2canvas they pull in) are only needed
