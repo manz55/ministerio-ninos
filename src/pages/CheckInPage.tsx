@@ -53,7 +53,7 @@ type ChildResult = {
   comments: string | null
   parent_id: string | null
   parents: { full_name: string; phone: string } | null
-  attendance: { session_date: string }[]
+  attendance: { session_date: string; badge_number?: number | null }[]
 }
 
 const CHILD_SELECT = 'id, full_name, birth_date, category, allergies, medical_notes, toilet_trained, comments, parent_id, parents(full_name, phone)'
@@ -375,12 +375,13 @@ function ChildCard({
   isSelected: boolean
   onSelect: () => void
   onDeselect: () => void
-  onRegistered: (childId: string) => void
+  onRegistered: (childId: string, badgeNumber: number | null) => void
 }) {
   const category = getEffectiveCategory(child)
   const categoryChanged = hasCategoryChanged(child)
   const age = getAgeLabel(child.birth_date)
   const alreadyIn = child.attendance.some((a) => a.session_date === today)
+  const todayBadgeNumber = child.attendance.find((a) => a.session_date === today)?.badge_number
   const hasAlert = !!(child.allergies || child.medical_notes)
   const missingBirthDate = !child.birth_date
   const needsBadge = requiresBadge(category)
@@ -438,7 +439,7 @@ function ChildCard({
     setShowStamp(true)
     setTimeout(() => {
       setShowStamp(false)
-      onRegistered(child.id)
+      onRegistered(child.id, badgeNumber)
     }, 1600)
   }
 
@@ -511,7 +512,9 @@ function ChildCard({
           {alreadyIn && (
             <div className="flex items-center gap-1.5 text-green-600 shrink-0">
               <CheckCircle2 size={20} />
-              <span className="text-sm font-semibold">Registrado</span>
+              <span className="text-sm font-semibold">
+                {todayBadgeNumber ? `#${todayBadgeNumber}` : 'Registrado'}
+              </span>
             </div>
           )}
           {!alreadyIn && !needsBadge && isSelected && submitting && (
@@ -825,10 +828,10 @@ export default function CheckInPage() {
         (payload) => {
           fetchCounts()
           if (payload.eventType === 'INSERT') {
-            const childId = (payload.new as { child_id: string }).child_id
+            const { child_id: childId, badge_number: badgeNumber } = payload.new as { child_id: string; badge_number: number | null }
             const mark = (c: ChildResult) =>
               c.id === childId && !c.attendance.some((a) => a.session_date === today)
-                ? { ...c, attendance: [...c.attendance, { session_date: today }] }
+                ? { ...c, attendance: [...c.attendance, { session_date: today, badge_number: badgeNumber }] }
                 : c
             setChildren((prev) => prev.map(mark))
             setAllChildren((prev) => prev.map(mark))
@@ -897,14 +900,14 @@ export default function CheckInPage() {
         .order('full_name'),
       supabase
         .from('attendance')
-        .select('child_id')
+        .select('child_id, badge_number')
         .eq('session_date', today)
         .is('deleted_at', null),
     ])
-    const attSet = new Set((todayAtt ?? []).map((a) => a.child_id))
+    const attMap = new Map((todayAtt ?? []).map((a) => [a.child_id, a.badge_number]))
     const mapped = ((all ?? []) as Omit<ChildResult, 'attendance'>[]).map((c) => ({
       ...c,
-      attendance: attSet.has(c.id) ? [{ session_date: today }] : [],
+      attendance: attMap.has(c.id) ? [{ session_date: today, badge_number: attMap.get(c.id) }] : [],
     })) as ChildResult[]
     setAllChildren(mapped)
     setLoadingAllChildren(false)
@@ -953,7 +956,7 @@ export default function CheckInPage() {
         .order('full_name'),
       supabase
         .from('attendance')
-        .select('child_id')
+        .select('child_id, badge_number')
         .eq('session_date', today)
         .is('deleted_at', null),
     ])
@@ -961,12 +964,12 @@ export default function CheckInPage() {
     // Otra categoría fue seleccionada (o se volvió al home) mientras esta consulta estaba en vuelo
     if (categoryRequestRef.current !== requestId) return
 
-    const attSet = new Set((todayAtt ?? []).map((a) => a.child_id))
+    const attMap = new Map((todayAtt ?? []).map((a) => [a.child_id, a.badge_number]))
     const filtered = ((all ?? []) as Omit<ChildResult, 'attendance'>[])
       .filter((c) => getEffectiveCategory(c) === category)
       .map((c) => ({
         ...c,
-        attendance: attSet.has(c.id) ? [{ session_date: today }] : [],
+        attendance: attMap.has(c.id) ? [{ session_date: today, badge_number: attMap.get(c.id) }] : [],
       })) as ChildResult[]
 
     setChildren(filtered)
@@ -981,9 +984,9 @@ export default function CheckInPage() {
     fetchCounts()
   }
 
-  function handleRegistered(childId: string) {
+  function handleRegistered(childId: string, badgeNumber: number | null) {
     const mark = (c: ChildResult) =>
-      c.id === childId ? { ...c, attendance: [...c.attendance, { session_date: today }] } : c
+      c.id === childId ? { ...c, attendance: [...c.attendance, { session_date: today, badge_number: badgeNumber }] } : c
     setChildren((prev) => prev.map(mark))
     setAllChildren((prev) => prev.map(mark))
     setSelectedId(null)
@@ -1125,10 +1128,29 @@ export default function CheckInPage() {
     else setComputerOperatorError('Solo un coordinador puede cambiar quién está en la computadora.')
   }
 
-  const categorySearcher = useMemo(() => createChildSearcher(children), [children])
+  // Already-registered-today children float to the top (sorted by badge
+  // number, so you can scan "1, 2, 3…" and immediately tell who you have),
+  // then everyone else alphabetically — instead of one alphabetical list
+  // where who's actually checked in today is scattered and easy to miss.
+  const sortedChildren = useMemo(() => {
+    const todayBadge = (c: ChildResult) => c.attendance.find((a) => a.session_date === today)?.badge_number
+    return [...children].sort((a, b) => {
+      const aIn = a.attendance.some((att) => att.session_date === today)
+      const bIn = b.attendance.some((att) => att.session_date === today)
+      if (aIn !== bIn) return aIn ? -1 : 1
+      if (aIn && bIn) {
+        const aBadge = todayBadge(a) ?? Infinity
+        const bBadge = todayBadge(b) ?? Infinity
+        if (aBadge !== bBadge) return aBadge - bBadge
+      }
+      return a.full_name.localeCompare(b.full_name)
+    })
+  }, [children])
+
+  const categorySearcher = useMemo(() => createChildSearcher(sortedChildren), [sortedChildren])
   const filteredChildren = useMemo(
-    () => (filter.trim() ? searchChildrenSplit(categorySearcher, filter) : { exact: children, suggestions: [] }),
-    [filter, children, categorySearcher]
+    () => (filter.trim() ? searchChildrenSplit(categorySearcher, filter) : { exact: sortedChildren, suggestions: [] }),
+    [filter, sortedChildren, categorySearcher]
   )
 
   const registeredCount = useMemo(
