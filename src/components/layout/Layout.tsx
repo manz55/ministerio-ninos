@@ -42,7 +42,26 @@ export default function Layout({ isAdmin, profile }: { isAdmin: boolean; profile
         <div className={`${CONTAINER} flex items-center gap-2.5`}>
           <ChurchLogo size={38} />
           <div className="flex-1 min-w-0">
-            <span className="font-semibold text-gray-900 block leading-tight">Maestros de Niños</span>
+            <div className="flex items-center gap-1.5">
+              <span className="font-semibold text-gray-900 leading-tight truncate">Maestros de Niños</span>
+              {/* Version stamp — its own separate pill, not folded into the
+                  name line. Lives in the (sticky, always-on-top) header
+                  instead of floating over the page: a fixed badge anywhere
+                  above the Dock inevitably overlaps whatever scrollable page
+                  content happens to land in that same screen band on a
+                  longer page (found this the hard way — it sat on top of
+                  Reportes' date-range inputs). The header never has that
+                  problem since content scrolls underneath it, never over it.
+                  __APP_VERSION__/__COMMIT_HASH__ come from vite.config.ts
+                  (git commit count / short hash) — always accurate, no
+                  manual bumping, traceable to an exact commit. */}
+              <span
+                title={`commit ${__COMMIT_HASH__}`}
+                className="shrink-0 text-[9px] font-medium text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded-full"
+              >
+                {__APP_VERSION__}
+              </span>
+            </div>
             <span className="text-xs text-gray-400 leading-tight truncate block">{profile.full_name}</span>
           </div>
           <button
@@ -68,29 +87,6 @@ export default function Layout({ isAdmin, profile }: { isAdmin: boolean; profile
       >
         <Outlet context={profile} />
       </main>
-
-      {/* Version stamp — centered directly above the Dock, the same way the
-          Dock itself centers relative to the full viewport (not the
-          content-column CONTAINER, which on a wide desktop window sits far
-          to the right of the Dock's actual — much narrower — centered
-          pill). Centering both the same way keeps them paired as one visual
-          group at every screen width instead of drifting apart. The Dock
-          only grows taller at the `sm:` breakpoint (bigger icons/padding)
-          and never beyond it, so one fixed clearance comfortably clears it
-          everywhere. __APP_VERSION__/__COMMIT_HASH__ come from vite.config.ts
-          (git commit count / short hash) — always accurate, no manual
-          bumping, and traceable to an exact commit. */}
-      <div
-        className="fixed inset-x-0 z-40 flex justify-center pointer-events-none"
-        style={{ bottom: 'calc(130px + env(safe-area-inset-bottom))' }}
-      >
-        <span
-          title={`commit ${__COMMIT_HASH__}`}
-          className="text-[10px] font-medium text-gray-500 bg-white/90 backdrop-blur-md px-2 py-1 rounded-full border border-gray-200 shadow-sm"
-        >
-          {__APP_VERSION__}
-        </span>
-      </div>
 
       <Dock items={navItems} />
     </div>
