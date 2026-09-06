@@ -1614,8 +1614,22 @@ export default function CheckInPage() {
               Registrados hoy · {todayRecords.length}
             </p>
           </div>
-          <div className="space-y-1.5">
-            {todayRecords.map((rec) => {
+          <div className="space-y-3">
+            {TILES.map((tile) => {
+              const catRecords = todayRecords.filter((r) => r.category === tile.category)
+              if (catRecords.length === 0) return null
+              const Icon = tile.icon
+              return (
+                <div key={tile.category} className="space-y-1.5">
+                  <div className="flex items-center gap-2 px-1">
+                    <div className={`p-1 rounded-md ${tile.iconBg}`}>
+                      <Icon size={12} className={tile.iconColor} />
+                    </div>
+                    <p className={`text-xs font-bold uppercase tracking-widest ${tile.iconColor}`}>
+                      {CATEGORY_LABELS[tile.category]} · {catRecords.length}
+                    </p>
+                  </div>
+                  {catRecords.map((rec) => {
               const isConfirming = confirmDeleteRecordId === rec.id
               const hasObs = !!(
                 rec.children.allergies || rec.children.medical_notes ||
@@ -1779,6 +1793,9 @@ export default function CheckInPage() {
                   </div>
                 )}
                 </motion.div>
+              )
+                  })}
+                </div>
               )
             })}
           </div>
