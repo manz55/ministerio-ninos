@@ -124,7 +124,12 @@ export function ReporteAsistenciaDescarga({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
+            // z-[60], not z-50: the Dock nav is also position:fixed at z-50,
+            // and rendered later in the DOM (it's a Layout-level sibling of
+            // this page's content) — with equal z-index, later DOM order
+            // wins, so the Dock painted on top of this modal on any screen
+            // short enough for the two to overlap (reported on desktop).
+            className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
             onClick={closeIfIdle}
           >
             <motion.div

@@ -28,7 +28,10 @@ export function ChangePasswordModal({ onClose }: { onClose: () => void }) {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/30 backdrop-blur-sm"
+        // z-[60], above the Dock's z-50 fixed nav — same fix as the receipt
+        // modal, same root cause (Dock renders later in the DOM at an equal
+        // z-index, so it would win the tie and paint on top on short screens).
+        className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/30 backdrop-blur-sm"
         onClick={onClose}
       >
         <motion.div
