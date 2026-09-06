@@ -976,6 +976,13 @@ export default function CheckInPage() {
     setChildren((prev) => prev.map(mark))
     setAllChildren((prev) => prev.map(mark))
     setSelectedId(null)
+    // Clears whichever search box was used (global or the per-category
+    // filter — clearing an already-empty one is a harmless no-op) so a
+    // maestro can go straight into typing the next child's name instead of
+    // having to tap the "×" themselves first. Fires after ChildCard's own
+    // 1.6s success stamp, so there's already been time to see it confirmed.
+    setGlobalSearch('')
+    setFilter('')
     // Deriving category from data avoids depending on activeCategory
     const child = [...children, ...globalResults.exact, ...globalResults.suggestions, ...allChildren].find((c) => c.id === childId)
     const cat = child ? getEffectiveCategory(child) : activeCategory
