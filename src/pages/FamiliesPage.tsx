@@ -8,6 +8,7 @@ import {
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { getCategoryFromBirthDate, getEffectiveCategory, hasCategoryChanged, getAgeLabel } from '../lib/categoryUtils'
+import { markRequestResolved } from '../lib/coordinatorRequests'
 import { createChildSearcher, searchChildrenSplit, findBySurname, normalizeName } from '../lib/fuzzySearch'
 import { uploadPhoto } from '../lib/photo'
 import { CategoryBadge } from '../components/ui/CategoryBadge'
@@ -1035,13 +1036,17 @@ export default function FamiliesPage() {
   // A ref (not state) so consuming it doesn't need to be in any effect's
   // dependency list, and it only ever fires once per visit from Mensajes.
   const armedRequestId = useRef((location.state as { requestId?: string } | null)?.requestId ?? null)
+  // The child/family is already saved by the time this runs — a failure here
+  // only means the Mensajes bookkeeping didn't close the loop, not that any
+  // data was lost. Still worth telling the coordinator, since otherwise the
+  // maestro who asked would look permanently ignored despite being helped.
+  const [resolveWarning, setResolveWarning] = useState(false)
   const resolveArmedRequest = useCallback(async () => {
     const id = armedRequestId.current
     if (!id) return
     armedRequestId.current = null
-    await supabase.from('coordinator_requests')
-      .update({ status: 'resuelta', resolved_by: session?.user.id ?? null, resolved_at: new Date().toISOString() })
-      .eq('id', id)
+    const ok = await markRequestResolved(id, session?.user.id ?? null)
+    if (!ok) setResolveWarning(true)
   }, [session])
   // The fuller version of the same Mensajes handoff — when the request had
   // a birth date/allergies/etc, not just a name, use all of it once the
@@ -1255,6 +1260,12 @@ export default function FamiliesPage() {
           </button>
         </div>
       </div>
+
+      {resolveWarning && (
+        <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+          La familia se guardó bien, pero no se pudo marcar el mensaje como resuelto en Mensajes — probablemente por la conexión. Avísale al dueño para que lo marque a mano si sigue apareciendo como pendiente.
+        </p>
+      )}
 
       {/* Search */}
       <div className="relative">

@@ -29,12 +29,14 @@ export function CoordinatorRequestBox({
   const [alerts, setAlerts] = useState('')
   const [sending, setSending] = useState(false)
   const [sent, setSent] = useState(false)
+  const [sendError, setSendError] = useState<string | null>(null)
 
   const hasContent = !!(message.trim() || childName.trim())
 
   async function send() {
     if (!hasContent || sending) return
     setSending(true)
+    setSendError(null)
     const childBlock = [
       childName.trim() && `Nombre del niño: ${childName.trim()}`,
       birthDate && `Fecha de nacimiento: ${format(new Date(`${birthDate}T00:00:00`), 'd MMM yyyy', { locale: es })}`,
@@ -43,11 +45,21 @@ export function CoordinatorRequestBox({
       alerts.trim() && `Alertas/comentarios: ${alerts.trim()}`,
     ].filter(Boolean).join('\n')
     const fullMessage = [message.trim(), childBlock].filter(Boolean).join('\n\n')
-    const { error } = await supabase
-      .from('coordinator_requests')
-      .insert({ message: fullMessage, author_id: authorId })
-    setSending(false)
-    if (!error) { setSent(true); onSent?.() }
+    try {
+      const { error } = await supabase
+        .from('coordinator_requests')
+        .insert({ message: fullMessage, author_id: authorId })
+      if (error) { setSendError('No se pudo enviar. Intenta de nuevo.'); return }
+      setSent(true)
+      onSent?.()
+    } catch {
+      // A hard network failure (not a Postgres-level error) throws instead of
+      // resolving with { error } — without this catch, sending stayed stuck
+      // on "Enviando…" forever since the line clearing it was never reached.
+      setSendError('No se pudo enviar — revisa tu conexión e intenta de nuevo.')
+    } finally {
+      setSending(false)
+    }
   }
 
   if (sent) {
@@ -119,6 +131,7 @@ export function CoordinatorRequestBox({
         <Send size={14} />
         {sending ? 'Enviando…' : 'Enviar solicitud'}
       </button>
+      {sendError && <p className="text-xs text-red-600 text-center">{sendError}</p>}
     </div>
   )
 }

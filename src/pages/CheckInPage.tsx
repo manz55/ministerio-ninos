@@ -7,6 +7,7 @@ import { Search, CheckCircle2, UserPlus, AlertTriangle, ChevronLeft, Bug, Zap, C
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { getEffectiveCategory, hasCategoryChanged, getAgeLabel, requiresBadge, requiresPager } from '../lib/categoryUtils'
+import { markRequestResolved } from '../lib/coordinatorRequests'
 import { createChildSearcher, searchChildrenSplit } from '../lib/fuzzySearch'
 import { CATEGORY_LABELS, CATEGORY_COLORS, NEXT_CATEGORY, isCorderitos, type Category, type TeamColor, type ParentRow } from '../types/domain'
 import { CategoryBadge } from '../components/ui/CategoryBadge'
@@ -737,6 +738,10 @@ export default function CheckInPage() {
   const [badgeEditValue, setBadgeEditValue] = useState('')
   const [badgeEditError, setBadgeEditError] = useState<string | null>(null)
   const [savingBadgeEdit, setSavingBadgeEdit] = useState(false)
+  // Same as FamiliesPage's version — the family/child is already saved by the
+  // time this could go wrong, so a failure here means Mensajes bookkeeping
+  // didn't close the loop, not that any data was lost.
+  const [resolveWarning, setResolveWarning] = useState(false)
   const [children, setChildren] = useState<ChildResult[]>([])
   const [filter, setFilter] = useState('')
   const [loadingChildren, setLoadingChildren] = useState(false)
@@ -982,9 +987,8 @@ export default function CheckInPage() {
     // click without doing the work. There's deliberately no other way to
     // resolve a request now.
     if (newFamilyPrefill.requestId) {
-      await supabase.from('coordinator_requests')
-        .update({ status: 'resuelta', resolved_by: session?.user.id ?? null, resolved_at: new Date().toISOString() })
-        .eq('id', newFamilyPrefill.requestId)
+      const ok = await markRequestResolved(newFamilyPrefill.requestId, session?.user.id ?? null)
+      if (!ok) setResolveWarning(true)
     }
     // Domingo en la mañana no hay tiempo de guardar la familia y luego ir a
     // buscar al niño de nuevo para ponerle gafete — el primer niño de la
@@ -1172,6 +1176,12 @@ export default function CheckInPage() {
             </span>
           )}
         </div>
+
+        {resolveWarning && (
+          <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+            La familia se guardó bien, pero no se pudo marcar el mensaje como resuelto en Mensajes — probablemente por la conexión. Avísale al dueño para que lo marque a mano si sigue apareciendo como pendiente.
+          </p>
+        )}
 
         {/* Filter */}
         <div className="relative">

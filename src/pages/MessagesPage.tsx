@@ -5,6 +5,7 @@ import { es } from 'date-fns/locale'
 import { Inbox, Check, Clock, UserPlus, Search } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
+import { markRequestResolved } from '../lib/coordinatorRequests'
 import type { CoordinatorRequest } from '../types/domain'
 import { CoordinatorRequestBox } from '../components/ui/CoordinatorRequestBox'
 
@@ -35,6 +36,7 @@ function AdminInbox() {
   const [requests, setRequests] = useState<CoordinatorRequest[]>([])
   const [loading, setLoading] = useState(true)
   const [resolvingId, setResolvingId] = useState<string | null>(null)
+  const [resolveError, setResolveError] = useState<{ id: string; message: string } | null>(null)
 
   const fetchRequests = useCallback(async () => {
     const { data } = await supabase
@@ -64,10 +66,10 @@ function AdminInbox() {
   // as "Resuelta" with no name to whoever sent it, not "por Joshua Zet".
   async function resolveRequest(id: string) {
     setResolvingId(id)
-    await supabase.from('coordinator_requests')
-      .update({ status: 'resuelta', resolved_by: null, resolved_at: new Date().toISOString() })
-      .eq('id', id)
+    setResolveError(null)
+    const ok = await markRequestResolved(id, null)
     setResolvingId(null)
+    if (!ok) setResolveError({ id, message: 'No se pudo marcar como resuelta. Revisa tu conexión e intenta de nuevo.' })
   }
   function goToNewFamily(r: CoordinatorRequest) {
     navigate('/registro?nueva=1', { state: { ...parseChildFields(r.message), requestId: r.id } })
@@ -128,6 +130,9 @@ function AdminInbox() {
                 </button>
               )}
             </div>
+            {resolveError?.id === r.id && (
+              <p className="text-xs text-red-600 mt-1.5">{resolveError.message}</p>
+            )}
           </div>
         </div>
       ))}
