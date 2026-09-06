@@ -3,7 +3,7 @@ import { useSearchParams, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
-import { Search, CheckCircle2, UserPlus, AlertTriangle, ChevronLeft, Bug, Zap, Compass, Baby, PersonStanding, User, Pencil, LogIn, Trash2, X, Users, Lock, Check, FileWarning, Monitor } from 'lucide-react'
+import { Search, CheckCircle2, UserPlus, AlertTriangle, ChevronLeft, ChevronDown, Bug, Zap, Compass, Baby, PersonStanding, User, Pencil, LogIn, Trash2, X, Users, Lock, Check, FileWarning, Monitor } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { getEffectiveCategory, hasCategoryChanged, getAgeLabel, requiresBadge, requiresPager } from '../lib/categoryUtils'
@@ -731,6 +731,17 @@ export default function CheckInPage() {
   const [todayCounts, setTodayCounts] = useState<Partial<Record<Category, number>>>({})
   const [totalToday, setTotalToday] = useState(0)
   const [todayRecords, setTodayRecords] = useState<TodayRecord[]>([])
+  // Which category groups in "Registrados hoy" are expanded — starts empty
+  // (all collapsed) so a busy Sunday's full 40+-child list doesn't force
+  // scrolling past every category just to check one.
+  const [expandedTodayCategories, setExpandedTodayCategories] = useState<Set<Category>>(new Set())
+  function toggleTodayCategory(cat: Category) {
+    setExpandedTodayCategories((prev) => {
+      const next = new Set(prev)
+      if (next.has(cat)) next.delete(cat); else next.add(cat)
+      return next
+    })
+  }
   const [confirmDeleteRecordId, setConfirmDeleteRecordId] = useState<string | null>(null)
   const [expandedObservationId, setExpandedObservationId] = useState<string | null>(null)
   const [deleteRecordError, setDeleteRecordError] = useState<string | null>(null)
@@ -1619,17 +1630,26 @@ export default function CheckInPage() {
               const catRecords = todayRecords.filter((r) => r.category === tile.category)
               if (catRecords.length === 0) return null
               const Icon = tile.icon
+              const isOpen = expandedTodayCategories.has(tile.category)
               return (
                 <div key={tile.category} className="space-y-1.5">
-                  <div className="flex items-center gap-2 px-1">
+                  <button
+                    type="button"
+                    onClick={() => toggleTodayCategory(tile.category)}
+                    className="flex items-center gap-2 px-1 py-1 w-full text-left"
+                  >
                     <div className={`p-1 rounded-md ${tile.iconBg}`}>
                       <Icon size={12} className={tile.iconColor} />
                     </div>
                     <p className={`text-xs font-bold uppercase tracking-widest ${tile.iconColor}`}>
                       {CATEGORY_LABELS[tile.category]} · {catRecords.length}
                     </p>
-                  </div>
-                  {catRecords.map((rec) => {
+                    <ChevronDown
+                      size={14}
+                      className={`ml-auto shrink-0 transition-transform ${tile.iconColor} ${isOpen ? 'rotate-180' : ''}`}
+                    />
+                  </button>
+                  {isOpen && catRecords.map((rec) => {
               const isConfirming = confirmDeleteRecordId === rec.id
               const hasObs = !!(
                 rec.children.allergies || rec.children.medical_notes ||
