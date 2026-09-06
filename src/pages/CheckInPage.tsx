@@ -775,12 +775,21 @@ export default function CheckInPage() {
   const [showAllChildren, setShowAllChildren] = useState(false)
 
   const fetchCounts = useCallback(async () => {
-    const { data } = await supabase
+    // `assigned_teacher:profiles(...)` must name the exact FK — attendance
+    // has two of them (assigned_teacher_id and deleted_by, added 2026-08-31
+    // for the papelera feature), so a bare `profiles(...)` is ambiguous and
+    // PostgREST rejects the whole query (PGRST201). That silently emptied
+    // today's counts/list for everyone since the day deleted_by was added,
+    // because the missing `{ error }` check below let it fail with no signal
+    // anywhere — found only when a full week of real Sunday data staying at
+    // zero was reported.
+    const { data, error } = await supabase
       .from('attendance')
-      .select('id, category, badge_number, pager_number, checked_in_at, checked_out_at, assigned_teacher_id, assigned_teacher:profiles(full_name), children(full_name, allergies, medical_notes, toilet_trained, comments)')
+      .select('id, category, badge_number, pager_number, checked_in_at, checked_out_at, assigned_teacher_id, assigned_teacher:profiles!attendance_assigned_teacher_id_fkey(full_name), children(full_name, allergies, medical_notes, toilet_trained, comments)')
       .eq('session_date', today)
       .is('deleted_at', null)
       .order('checked_in_at', { ascending: false })
+    if (error) console.error('fetchCounts failed:', error)
     if (!data) return
     const counts: Partial<Record<Category, number>> = {}
     for (const row of data) {
