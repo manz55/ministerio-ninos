@@ -523,9 +523,14 @@ function ChildCard({
         </div>
       </button>
 
-      {/* ── Observaciones: alergias, notas médicas, baño, comentarios ── */}
-      {hasObservations && (
-        <div className="px-5 pb-3 -mt-1">
+      {/* ── Observaciones: alergias, notas médicas, baño, comentarios ──
+          min-h reserves this row's space always, whether or not this
+          particular child has anything to show — before, a card without
+          observations was simply shorter than one with, so cards in the
+          same grid row ended up at different heights depending on which
+          kids happened to have allergies/notes set. */}
+      <div className="px-5 pb-3 -mt-1 min-h-[18px]">
+        {hasObservations && (
           <button
             type="button"
             onClick={() => setShowObservations((v) => !v)}
@@ -536,18 +541,18 @@ function ChildCard({
             {hasAlert && <AlertTriangle size={12} className="shrink-0" />}
             {showObservations ? 'Ocultar observaciones' : '+ Ver observaciones'}
           </button>
-          {showObservations && (
-            <div className="mt-2">
-              <ObservationsPanel
-                allergies={child.allergies}
-                medicalNotes={child.medical_notes}
-                toiletTrained={child.toilet_trained}
-                comments={child.comments}
-              />
-            </div>
-          )}
-        </div>
-      )}
+        )}
+        {showObservations && (
+          <div className="mt-2">
+            <ObservationsPanel
+              allergies={child.allergies}
+              medicalNotes={child.medical_notes}
+              toiletTrained={child.toilet_trained}
+              comments={child.comments}
+            />
+          </div>
+        )}
+      </div>
 
       {/* ── Otros contactos autorizados ── */}
       <div className="px-5 pb-3 -mt-1">
