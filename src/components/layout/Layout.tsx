@@ -9,7 +9,7 @@ import { useMessagesBadgeCount } from '../../hooks/useMessagesBadgeCount'
 import { signOut } from '../../lib/auth'
 import type { Profile } from '../../types/domain'
 
-const CONTAINER = 'max-w-4xl lg:max-w-6xl xl:max-w-[88rem] mx-auto'
+const CONTAINER = 'max-w-4xl lg:max-w-6xl xl:max-w-[88rem] 2xl:max-w-[112rem] mx-auto'
 
 export default function Layout({ isAdmin, profile }: { isAdmin: boolean; profile: Profile }) {
   const messagesBadge = useMessagesBadgeCount(profile.id, isAdmin)

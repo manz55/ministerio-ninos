@@ -1660,7 +1660,7 @@ export default function CheckInPage() {
               Registrados hoy · {todayRecords.length}
             </p>
           </div>
-          <div className="space-y-3">
+          <div className="space-y-3 lg:space-y-0 lg:grid lg:grid-cols-2 lg:gap-x-6 lg:gap-y-3 lg:items-start">
             {TILES.map((tile) => {
               const catRecords = todayRecords.filter((r) => r.category === tile.category)
               if (catRecords.length === 0) return null
