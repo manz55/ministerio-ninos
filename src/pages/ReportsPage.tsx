@@ -677,10 +677,49 @@ export default function ReportsPage() {
             {filtered.map((r) => {
               const isConfirming = confirmDeleteId === r.id
               return (
-                <div key={r.id} className={`flex items-center justify-between rounded-2xl border px-4 py-3 gap-3 shadow-sm transition-colors ${isConfirming ? 'bg-red-50 border-red-200' : 'bg-white border-gray-100'}`}>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <p className="font-semibold text-gray-900 text-sm leading-tight">{r.children?.full_name}</p>
+                // Fixed 3-line shape (name / responsable / chips) for every
+                // card, name and responsable each truncated to one line —
+                // previously the badge chip shared a flex-wrap row with the
+                // name, so a long name pushed it to a second line and made
+                // that one card taller than its neighbors in the same grid
+                // row. A consistent shape beats cramming in more per card.
+                <div key={r.id} className={`rounded-2xl border px-4 py-3 shadow-sm transition-colors ${isConfirming ? 'bg-red-50 border-red-200' : 'bg-white border-gray-100'}`}>
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="font-semibold text-gray-900 text-sm leading-tight truncate min-w-0">{r.children?.full_name}</p>
+                    {!isConfirming && (
+                      <button
+                        onClick={() => setConfirmDeleteId(r.id)}
+                        className="p-1 -m-1 text-gray-300 hover:text-red-400 rounded-lg hover:bg-red-50 transition-colors shrink-0"
+                        title="Borrar registro"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    )}
+                  </div>
+                  <p className="text-xs text-gray-400 truncate mt-0.5">{r.children?.parents?.full_name || 'Sin responsable'}</p>
+
+                  {isConfirming ? (
+                    <div className="flex items-center gap-2 mt-2">
+                      <span className="text-xs text-red-600 font-semibold flex-1">¿Borrar registro?</span>
+                      <button
+                        onClick={() => deleteRecord(r.id)}
+                        disabled={deleting}
+                        className="flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-white bg-red-500 rounded-lg hover:bg-red-600 active:bg-red-700 disabled:opacity-50 transition-colors"
+                      >
+                        {deleting ? '…' : 'Sí, borrar'}
+                      </button>
+                      <button
+                        onClick={() => setConfirmDeleteId(null)}
+                        className="p-1 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1.5 flex-wrap mt-2">
+                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${CATEGORY_COLORS[r.category as Category]}`}>
+                        {CATEGORY_LABELS[r.category as Category]}
+                      </span>
                       {editingBadgeId === r.id ? (
                         <span className="flex items-center gap-1">
                           <input
@@ -713,55 +752,18 @@ export default function ReportsPage() {
                           <Pencil size={10} className="text-indigo-400" />
                         </button>
                       ) : null}
+                      <span className="text-[10px] text-gray-400 font-medium ml-auto">
+                        {format(new Date(r.checked_in_at), 'HH:mm')}
+                      </span>
+                      {r.checked_out_at ? (
+                        <span className="text-[10px] font-semibold text-gray-400 bg-gray-100 rounded-full px-1.5 py-0.5">Salió</span>
+                      ) : (
+                        <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 rounded-full px-1.5 py-0.5">Adentro</span>
+                      )}
                     </div>
-                    <p className="text-xs text-gray-400 mt-0.5">{r.children?.parents?.full_name}</p>
-                    {editingBadgeId === r.id && badgeEditError && (
-                      <p className="text-[11px] text-red-600 mt-1">{badgeEditError}</p>
-                    )}
-                  </div>
-
-                  {isConfirming ? (
-                    <div className="flex items-center gap-2 shrink-0">
-                      <span className="text-xs text-red-600 font-semibold">¿Borrar registro?</span>
-                      <button
-                        onClick={() => deleteRecord(r.id)}
-                        disabled={deleting}
-                        className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold text-white bg-red-500 rounded-lg hover:bg-red-600 active:bg-red-700 disabled:opacity-50 transition-colors"
-                      >
-                        {deleting ? '…' : 'Sí, borrar'}
-                      </button>
-                      <button
-                        onClick={() => setConfirmDeleteId(null)}
-                        className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors"
-                      >
-                        <X size={14} />
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="flex flex-col items-end gap-1 shrink-0">
-                      <div className="flex items-center gap-1.5">
-                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${CATEGORY_COLORS[r.category as Category]}`}>
-                          {CATEGORY_LABELS[r.category as Category]}
-                        </span>
-                        <button
-                          onClick={() => setConfirmDeleteId(r.id)}
-                          className="p-1 text-gray-300 hover:text-red-400 rounded-lg hover:bg-red-50 transition-colors"
-                          title="Borrar registro"
-                        >
-                          <Trash2 size={13} />
-                        </button>
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-[10px] text-gray-400 font-medium">
-                          {format(new Date(r.checked_in_at), 'HH:mm')}
-                        </span>
-                        {r.checked_out_at ? (
-                          <span className="text-[10px] font-semibold text-gray-400 bg-gray-100 rounded-full px-1.5 py-0.5">Salió</span>
-                        ) : (
-                          <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 rounded-full px-1.5 py-0.5">Adentro</span>
-                        )}
-                      </div>
-                    </div>
+                  )}
+                  {editingBadgeId === r.id && badgeEditError && (
+                    <p className="text-[11px] text-red-600 mt-1">{badgeEditError}</p>
                   )}
                 </div>
               )
