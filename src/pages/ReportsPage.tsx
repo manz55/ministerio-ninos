@@ -717,7 +717,7 @@ export default function ReportsPage() {
                     </div>
                   ) : (
                     <div className="flex items-center gap-1.5 flex-wrap mt-2">
-                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${CATEGORY_COLORS[r.category as Category]}`}>
+                      <span className={`text-xs font-semibold shrink-0 whitespace-nowrap px-2 py-0.5 rounded-full border ${CATEGORY_COLORS[r.category as Category]}`}>
                         {CATEGORY_LABELS[r.category as Category]}
                       </span>
                       {editingBadgeId === r.id ? (
@@ -874,13 +874,13 @@ export default function ReportsPage() {
                     </div>
                     <div className="flex items-center gap-1.5 text-xs font-semibold shrink-0">
                       {child.category && (
-                        <span className={`px-2 py-0.5 rounded-full border ${CATEGORY_COLORS[child.category]}`}>
+                        <span className={`px-2 py-0.5 whitespace-nowrap rounded-full border ${CATEGORY_COLORS[child.category]}`}>
                           {CATEGORY_LABELS[child.category]}
                         </span>
                       )}
                       <span className="text-amber-500">→</span>
                       {(computedCat ?? nextCat) && (
-                        <span className={`px-2 py-0.5 rounded-full border ${CATEGORY_COLORS[(computedCat ?? nextCat)!]}`}>
+                        <span className={`px-2 py-0.5 whitespace-nowrap rounded-full border ${CATEGORY_COLORS[(computedCat ?? nextCat)!]}`}>
                           {CATEGORY_LABELS[(computedCat ?? nextCat)!]}
                         </span>
                       )}

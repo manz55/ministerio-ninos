@@ -1208,12 +1208,18 @@ export default function CheckInPage() {
       {activeCategory === 'saltamontes'    && <SaltamontesBackground />}
       {activeCategory === 'corderitos_0_2' && <Corderitos02Background />}
       {activeCategory === 'corderitos_2_4' && <Corderitos24Background />}
-      <div className="relative z-10 space-y-4">
-        {/* Header */}
-        <div className="flex items-center gap-3 bg-white rounded-2xl border border-gray-200 px-4 py-3">
+      <div className="relative z-[2] space-y-4">
+        {/* Header — sticky right below the app's own sticky header (which is
+            z-[3]; this whole category view used to be z-10, painting its
+            content ABOVE that header instead of scrolling under it) so the
+            back button never scrolls out of reach. */}
+        <div
+          className="sticky z-10 flex items-center gap-3 bg-white rounded-2xl border border-gray-200 px-4 py-3 shadow-sm"
+          style={{ top: 'calc(4.5rem + env(safe-area-inset-top))' }}
+        >
           <button
             onClick={handleBack}
-            className="p-2 rounded-xl text-gray-500 hover:bg-gray-100 transition-colors"
+            className="p-2 -ml-1 rounded-xl text-gray-500 hover:bg-gray-100 active:bg-gray-200 transition-colors"
           >
             <ChevronLeft size={22} />
           </button>
@@ -1702,7 +1708,7 @@ export default function CheckInPage() {
                       {hasObsAlert && <AlertTriangle size={13} className="text-red-500 shrink-0" />}
                     </p>
                     <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                      <span className={`inline-flex items-center rounded-full border font-semibold text-xs px-2 py-0.5 ${CATEGORY_COLORS[rec.category]}`}>
+                      <span className={`inline-flex items-center shrink-0 whitespace-nowrap rounded-full border font-semibold text-xs px-2 py-0.5 ${CATEGORY_COLORS[rec.category]}`}>
                         {CATEGORY_LABELS[rec.category]}
                       </span>
                       {rec.badge_number && editingBadgeRecordId === rec.id ? (
