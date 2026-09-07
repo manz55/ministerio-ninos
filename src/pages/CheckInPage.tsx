@@ -529,7 +529,7 @@ function ChildCard({
           observations was simply shorter than one with, so cards in the
           same grid row ended up at different heights depending on which
           kids happened to have allergies/notes set. */}
-      <div className="px-5 pb-3 -mt-1 min-h-[18px]">
+      <div className="px-5 pb-3 -mt-1 min-h-[28px]">
         {hasObservations && (
           <button
             type="button"
