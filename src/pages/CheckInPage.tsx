@@ -1475,7 +1475,7 @@ export default function CheckInPage() {
       {isSearching ? (
         <div className={`space-y-2.5 transition-opacity ${isTyping ? 'opacity-50' : 'opacity-100'}`}>
           {loadingAllChildren && allChildren.length === 0 && (
-            <p className="text-center text-gray-400 py-8 text-base">Cargando padrón…</p>
+            <p className="text-center text-gray-400 py-8 text-base">Cargando registro…</p>
           )}
           {!(loadingAllChildren && allChildren.length === 0) && globalResults.exact.length === 0 && globalResults.suggestions.length === 0 && (
             <div className="text-center py-10 space-y-4 bg-white rounded-2xl border border-gray-200">
@@ -1614,7 +1614,7 @@ export default function CheckInPage() {
             className="w-full flex items-center justify-center gap-2 py-3 text-sm font-medium text-gray-600 bg-white border-2 border-gray-200 rounded-2xl hover:bg-gray-50 transition-colors"
           >
             <Users size={15} />
-            {loadingAllChildren ? 'Cargando…' : `Ver padrón completo${allChildren.length > 0 ? ` (${allChildren.length})` : ''}`}
+            {loadingAllChildren ? 'Cargando…' : `Ver registro completo${allChildren.length > 0 ? ` (${allChildren.length})` : ''}`}
           </button>
         ) : allChildren.length === 0 ? (
           <p className="text-center text-gray-400 py-6 text-sm bg-white rounded-2xl border border-gray-200">
