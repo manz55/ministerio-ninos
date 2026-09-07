@@ -24,7 +24,14 @@ function BalloonSVG({ color, size }: { color: string; size: number }) {
 
 export function BalloonBackground() {
   return (
-    <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
+    // top offset (not inset-0) keeps every balloon below the sticky header —
+    // several sit at y:2-6%, which used to land right in the header's own
+    // band; its 80%-opacity + blur background let them show through, faint
+    // and blurred, right behind "Maestros de Niños".
+    <div
+      className="fixed inset-x-0 bottom-0 overflow-hidden pointer-events-none z-0"
+      style={{ top: 'calc(4.5rem + env(safe-area-inset-top))' }}
+    >
       {BALLOONS.map((b, i) => (
         <div
           key={i}

@@ -1545,30 +1545,32 @@ export default function CheckInPage() {
         O selecciona el grupo
       </p>
 
-      {/* ── Category tiles: bento layout — Saltamontes big in the middle up
-          top (flanked by Hormiguitas/Exploradores), the two Corderitos
-          groups paired below as one long row — instead of five identical
-          tiles wasting the extra width on a wide screen. ── */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      {/* ── Category tiles: all five the same size. The previous version
+          made Saltamontes and both Corderitos groups span 2 columns of a
+          4-column grid starting at `lg:` (1024px) — below that width
+          (a very common laptop-window size, not just phones) every tile
+          fell back to a plain 2-column grid, leaving Corderitos 2-4 as a
+          lone card by itself in its own row. Uniform sizing at breakpoints
+          that don't leave a 1-card orphan row (2 → 3 → 5 columns) instead. ── */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3">
         {TILES.map(({ category, icon: Icon, ages, cardBg, iconBg, iconColor, bar, barBg, textColor }) => {
           const count = todayCounts[category] ?? 0
-          const big = category === 'saltamontes' || category === 'corderitos_0_2' || category === 'corderitos_2_4'
           return (
             <motion.button
               key={category}
               onClick={() => openCategory(category)}
               whileTap={{ scale: 0.97 }}
               whileHover={{ scale: 1.02 }}
-              className={`relative overflow-hidden rounded-2xl text-left shadow-md ${cardBg} ${big ? 'lg:col-span-2 p-6' : 'p-5'}`}
+              className={`relative overflow-hidden rounded-2xl text-left shadow-md p-5 ${cardBg}`}
             >
               <div>
-                <div className={`rounded-2xl ${iconBg} flex items-center justify-center backdrop-blur-sm ${big ? 'w-14 h-14 mb-5' : 'w-12 h-12 mb-4'}`}>
-                  <Icon className={`${big ? 'w-7 h-7' : 'w-6 h-6'} ${iconColor}`} />
+                <div className={`rounded-2xl ${iconBg} flex items-center justify-center backdrop-blur-sm w-12 h-12 mb-4`}>
+                  <Icon className={`w-6 h-6 ${iconColor}`} />
                 </div>
-                <p className={`font-bold uppercase tracking-wide ${textColor} leading-tight ${big ? 'text-base' : 'text-sm'}`}>
+                <p className={`font-bold uppercase tracking-wide ${textColor} leading-tight text-sm`}>
                   {CATEGORY_LABELS[category]}
                 </p>
-                <p className={`${iconColor} opacity-70 mt-0.5 mb-3 ${big ? 'text-sm' : 'text-xs'}`}>{ages}</p>
+                <p className={`${iconColor} opacity-70 mt-0.5 mb-3 text-xs`}>{ages}</p>
                 <div className={`h-1.5 w-full rounded-full ${barBg} mb-1.5`}>
                   <motion.div
                     initial={{ width: 0 }}
