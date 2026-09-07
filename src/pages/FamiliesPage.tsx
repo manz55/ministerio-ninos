@@ -1065,7 +1065,11 @@ export default function FamiliesPage() {
   const [query, setQuery]           = useState(() => searchParams.get('buscar') ?? '')
   const [allFamilies, setAllFamilies] = useState<FamilyDetail[]>([])
   const [loadingAll, setLoadingAll] = useState(true)
-  const [showAll, setShowAll]       = useState(false)
+  // Defaults to true — the family data is already fetched unconditionally
+  // on mount either way (see loadAllFamilies below), so requiring an extra
+  // tap on "Ver todas las familias" just to see it only left the whole page
+  // empty below the search box until someone clicked it.
+  const [showAll, setShowAll]       = useState(true)
   const [selected, setSelected]     = useState<FamilyDetail | null>(null)
   const [showNewFamily, setShowNewFamily] = useState(false)
   const rosterParam = searchParams.get('roster') as RosterFilter | null
