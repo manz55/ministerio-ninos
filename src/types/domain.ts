@@ -187,6 +187,7 @@ export interface Maestro {
   profesion: string | null
   photo_url: string | null
   created_at: string
+  team_color: TeamColor
 }
 
 // A maestro can't self-serve family registration or category changes — this
