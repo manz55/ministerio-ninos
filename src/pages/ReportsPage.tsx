@@ -74,12 +74,12 @@ function downloadCSV(content: string, filename: string) {
 
 // ─── Category config for display ─────────────────────────────────────────────
 
-const CAT_CONFIG: Record<string, { icon: React.ComponentType<{ className?: string }>, color: string, bg: string, bar: string }> = {
-  corderitos_0_2: { icon: Baby,           color: 'text-pink-600', bg: 'bg-pink-50', bar: 'bg-pink-500' },
-  corderitos_2_4: { icon: PersonStanding, color: 'text-rose-600', bg: 'bg-rose-50', bar: 'bg-rose-500' },
-  hormiguitas: { icon: Bug,     color: 'text-emerald-600', bg: 'bg-emerald-50',  bar: 'bg-emerald-500' },
-  saltamontes: { icon: Zap,     color: 'text-amber-600',   bg: 'bg-amber-50',    bar: 'bg-amber-500'   },
-  exploradores:{ icon: Compass, color: 'text-sky-600',     bg: 'bg-sky-50',      bar: 'bg-sky-500'     },
+const CAT_CONFIG: Record<string, { icon: React.ComponentType<{ className?: string }>, color: string, bg: string, border: string, bar: string }> = {
+  corderitos_0_2: { icon: Baby,           color: 'text-pink-600', bg: 'bg-pink-50', border: 'border-pink-200', bar: 'bg-pink-500' },
+  corderitos_2_4: { icon: PersonStanding, color: 'text-rose-600', bg: 'bg-rose-50', border: 'border-rose-200', bar: 'bg-rose-500' },
+  hormiguitas: { icon: Bug,     color: 'text-emerald-600', bg: 'bg-emerald-50',  border: 'border-emerald-200', bar: 'bg-emerald-500' },
+  saltamontes: { icon: Zap,     color: 'text-amber-600',   bg: 'bg-amber-50',    border: 'border-amber-200',   bar: 'bg-amber-500'   },
+  exploradores:{ icon: Compass, color: 'text-sky-600',     bg: 'bg-sky-50',      border: 'border-sky-200',     bar: 'bg-sky-500'     },
 }
 
 // ─── SVG Weekly Chart ─────────────────────────────────────────────────────────
@@ -475,7 +475,12 @@ export default function ReportsPage() {
 
         {/* Categoría mayor */}
         <div className={`rounded-2xl border p-4 space-y-1 shadow-sm ${
-          total > 0 ? CAT_CONFIG[topCat]?.bg ?? 'bg-white' : 'bg-white border-gray-200'
+          // Was `border ${CAT_CONFIG[topCat]?.bg}` — a bg-* class in the
+          // border slot doesn't set a border color, so this card always
+          // rendered with Tailwind's plain default border instead of one
+          // that matched its own background, looking visually unrelated to
+          // the other two (evenly-styled) KPI cards next to it.
+          total > 0 ? `${CAT_CONFIG[topCat]?.bg ?? 'bg-white'} ${CAT_CONFIG[topCat]?.border ?? 'border-gray-200'}` : 'bg-white border-gray-200'
         }`}>
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Mayor grupo</p>
           {total > 0 ? (
@@ -663,12 +668,16 @@ export default function ReportsPage() {
           </div>
         )}
 
+        {/* One long single-column list left most of a wide screen empty on
+            both sides of every row — same grid CheckInPage's own "Registrados
+            hoy" already uses, so a busy Sunday's records read as cards
+            instead of scrolling a narrow strip down the middle. */}
         {filtered.length > 0 && (
-          <div className="bg-white rounded-2xl border border-gray-200 divide-y divide-gray-100 overflow-hidden shadow-sm">
+          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-2.5 items-start">
             {filtered.map((r) => {
               const isConfirming = confirmDeleteId === r.id
               return (
-                <div key={r.id} className={`flex items-center justify-between px-4 py-3 gap-3 transition-colors ${isConfirming ? 'bg-red-50' : ''}`}>
+                <div key={r.id} className={`flex items-center justify-between rounded-2xl border px-4 py-3 gap-3 shadow-sm transition-colors ${isConfirming ? 'bg-red-50 border-red-200' : 'bg-white border-gray-100'}`}>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className="font-semibold text-gray-900 text-sm leading-tight">{r.children?.full_name}</p>
