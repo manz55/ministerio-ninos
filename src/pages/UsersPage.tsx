@@ -1,8 +1,8 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { formatDistanceToNow } from 'date-fns'
 import { es } from 'date-fns/locale'
-import { UserPlus, Shield, User, Trash2, Power, Check, Users as UsersIcon, Baby, LogIn, RotateCcw, Crown, Pencil } from 'lucide-react'
+import { UserPlus, Shield, User, Trash2, Power, Check, Users as UsersIcon, Baby, LogIn, RotateCcw, Crown, Pencil, MoreVertical } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { createUser, updateUserRole, setUserActive, deleteUser } from '../lib/adminUsers'
 import { useAuth } from '../lib/auth'
@@ -105,8 +105,24 @@ function UserRow({ user, isSelf, onChanged }: { user: Profile; isSelf: boolean; 
   const [busy, setBusy] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Role/deactivate/delete used to sit as three always-visible buttons on
+  // every row — one stray tap on a busy phone screen during service was all
+  // it took to deactivate or delete the wrong coordinator. Tucked behind a
+  // menu now so touching a row does nothing by accident; delete still keeps
+  // its own confirm dialog on top of that.
+  const [showMenu, setShowMenu] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!showMenu) return
+    const handler = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setShowMenu(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [showMenu])
 
   async function toggleRole() {
+    setShowMenu(false)
     setBusy(true)
     const res = await updateUserRole(user.id, user.role === 'admin' ? 'maestro' : 'admin')
     setBusy(false)
@@ -115,6 +131,7 @@ function UserRow({ user, isSelf, onChanged }: { user: Profile; isSelf: boolean; 
   }
 
   async function toggleActive() {
+    setShowMenu(false)
     setBusy(true)
     const res = await setUserActive(user.id, !user.active)
     setBusy(false)
@@ -152,37 +169,51 @@ function UserRow({ user, isSelf, onChanged }: { user: Profile; isSelf: boolean; 
             </div>
             <p className="text-xs text-gray-500 truncate">{user.email}</p>
           </div>
-          <span className={`shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full ${
-            user.role === 'admin' ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-600'
-          }`}>
-            {user.role === 'admin' ? 'Coordinador' : 'Maestro'}
-          </span>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+              user.role === 'admin' ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-600'
+            }`}>
+              {user.role === 'admin' ? 'Coordinador' : 'Maestro'}
+            </span>
+            {/* Role/deactivate/delete live behind this menu, not as
+                always-visible buttons — nothing here should visually mark
+                the owner's row as different. The edge function (admin-users)
+                unconditionally rejects any change to is_owner=true accounts
+                regardless of who calls it, so the real protection lives
+                server-side; someone who deliberately tries anyway just gets
+                a rejection message, same as any other blocked action. */}
+            {!isSelf && (
+              <div className="relative" ref={menuRef}>
+                <button
+                  onClick={() => setShowMenu((v) => !v)}
+                  disabled={busy}
+                  aria-label="Más opciones"
+                  className="p-1 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg disabled:opacity-50 transition-colors"
+                >
+                  <MoreVertical size={16} />
+                </button>
+                {showMenu && (
+                  <div className="absolute right-0 top-full mt-1 z-20 w-44 bg-white border border-gray-200 rounded-xl shadow-lg py-1 text-left">
+                    <button onClick={toggleRole} disabled={busy}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium text-indigo-600 hover:bg-indigo-50 disabled:opacity-50 transition-colors">
+                      Hacer {user.role === 'admin' ? 'maestro' : 'coordinador'}
+                    </button>
+                    <button onClick={toggleActive} disabled={busy}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition-colors">
+                      <Power size={12} /> {user.active ? 'Desactivar' : 'Activar'}
+                    </button>
+                    <button onClick={() => { setShowMenu(false); setConfirmDelete(true) }} disabled={busy}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium text-red-500 hover:bg-red-50 disabled:opacity-50 transition-colors">
+                      <Trash2 size={12} /> Eliminar
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
 
         {error && <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>}
-
-        {/* Shown on every non-self row, including the owner's — nothing here
-            should visually mark that account as different. The edge function
-            (admin-users) unconditionally rejects any change to is_owner=true
-            accounts regardless of who calls it, so the real protection lives
-            server-side; someone who deliberately tries anyway just gets a
-            rejection message, same as any other blocked action. */}
-        {!isSelf && (
-          <div className="flex items-center gap-1.5 pt-1">
-            <button onClick={toggleRole} disabled={busy}
-              className="flex-1 flex items-center justify-center gap-1 py-1.5 text-xs font-medium text-indigo-600 bg-indigo-50 rounded-lg hover:bg-indigo-100 disabled:opacity-50 transition-colors">
-              Hacer {user.role === 'admin' ? 'maestro' : 'coordinador'}
-            </button>
-            <button onClick={toggleActive} disabled={busy}
-              className="flex items-center justify-center gap-1 px-2.5 py-1.5 text-xs font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 disabled:opacity-50 transition-colors">
-              <Power size={12} /> {user.active ? 'Desactivar' : 'Activar'}
-            </button>
-            <button onClick={() => setConfirmDelete(true)} disabled={busy}
-              className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
-              <Trash2 size={14} />
-            </button>
-          </div>
-        )}
       </div>
     </>
   )
