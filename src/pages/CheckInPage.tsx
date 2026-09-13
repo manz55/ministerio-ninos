@@ -9,7 +9,7 @@ import { useAuth } from '../lib/auth'
 import { getEffectiveCategory, hasCategoryChanged, getAgeLabel, requiresBadge, requiresPager } from '../lib/categoryUtils'
 import { markRequestResolved } from '../lib/coordinatorRequests'
 import { createChildSearcher, searchChildrenSplit } from '../lib/fuzzySearch'
-import { CATEGORY_LABELS, CATEGORY_COLORS, NEXT_CATEGORY, isCorderitos, type Category, type TeamColor, type ParentRow } from '../types/domain'
+import { CATEGORY_LABELS, CATEGORY_COLORS, NEXT_CATEGORY, ACTIVE_CATEGORIES, isCorderitos, type Category, type TeamColor, type ParentRow } from '../types/domain'
 import { CategoryBadge } from '../components/ui/CategoryBadge'
 import { ChildContacts } from '../components/ui/ChildContacts'
 import { NewFamilyStep } from '../components/checkin/NewFamilyStep'
@@ -365,6 +365,7 @@ function ChildCard({
   child,
   teamColor,
   isSelected,
+  isAdmin,
   onSelect,
   onDeselect,
   onRegistered,
@@ -372,11 +373,18 @@ function ChildCard({
   child: ChildResult
   teamColor: TeamColor
   isSelected: boolean
+  isAdmin: boolean
   onSelect: () => void
   onDeselect: () => void
   onRegistered: (childId: string, badgeNumber: number | null) => void
 }) {
-  const category = getEffectiveCategory(child)
+  // Overrides getEffectiveCategory() once a coordinator changes the category
+  // right here — everything below (needsBadge/needsPager/the check-in insert
+  // itself) reads `category`, so this has to win immediately, not just be a
+  // cosmetic badge swap, or check-in right after a change would still use
+  // the stale category.
+  const [categoryOverride, setCategoryOverride] = useState<Category | null>(null)
+  const category = categoryOverride ?? getEffectiveCategory(child)
   const categoryChanged = hasCategoryChanged(child)
   const age = getAgeLabel(child.birth_date)
   const alreadyIn = child.attendance.some((a) => a.session_date === today)
@@ -393,6 +401,9 @@ function ChildCard({
   const [showStamp, setShowStamp] = useState(false)
   const [showContacts, setShowContacts] = useState(false)
   const [showObservations, setShowObservations] = useState(false)
+  const [showCategoryPicker, setShowCategoryPicker] = useState(false)
+  const [savingCategory, setSavingCategory] = useState(false)
+  const [categoryError, setCategoryError] = useState<string | null>(null)
   const badgeRef = useRef<HTMLInputElement>(null)
   const hasObservations = !!(child.allergies || child.medical_notes || child.comments || child.toilet_trained !== null)
 
@@ -440,6 +451,17 @@ function ChildCard({
       setShowStamp(false)
       onRegistered(child.id, badgeNumber)
     }, 1600)
+  }
+
+  async function changeCategory(newCategory: Category) {
+    setShowCategoryPicker(false)
+    if (newCategory === category) return
+    setSavingCategory(true)
+    setCategoryError(null)
+    const { error } = await supabase.from('children').update({ category: newCategory }).eq('id', child.id)
+    setSavingCategory(false)
+    if (error) { setCategoryError('No se pudo cambiar la categoría.'); return }
+    setCategoryOverride(newCategory)
   }
 
   // Auto-check-in for no-badge, non-corderitos categories reads fresh values
@@ -568,6 +590,40 @@ function ChildCard({
           </div>
         )}
       </div>
+
+      {/* ── Cambiar categoría — same manual override Familias already has,
+          just reachable without leaving Registro. Sits outside the header
+          button (can't nest a <select> inside it) and stays admin-only,
+          matching the RLS on children.category (is_admin()-only UPDATE). */}
+      {isAdmin && (
+        <div className="px-5 pb-3 -mt-1">
+          {showCategoryPicker ? (
+            <select
+              autoFocus
+              disabled={savingCategory}
+              defaultValue={category ?? ''}
+              onChange={(e) => changeCategory(e.target.value as Category)}
+              onBlur={() => setShowCategoryPicker(false)}
+              className="text-xs px-2 py-1.5 border-2 border-indigo-300 rounded-lg focus:border-indigo-500 focus:outline-none bg-white"
+            >
+              {!category && <option value="" disabled>Sin categoría</option>}
+              {ACTIVE_CATEGORIES.map((c) => (
+                <option key={c} value={c}>{CATEGORY_LABELS[c]}</option>
+              ))}
+            </select>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setShowCategoryPicker(true)}
+              className="flex items-center gap-1 text-xs font-medium text-gray-400 hover:text-indigo-600 transition-colors"
+            >
+              <Pencil size={11} />
+              Cambiar categoría
+            </button>
+          )}
+          {categoryError && <p className="text-xs text-red-600 mt-1">{categoryError}</p>}
+        </div>
+      )}
 
       {/* ── Inline badge form ── */}
       {isSelected && needsBadge && (
@@ -1280,6 +1336,7 @@ export default function CheckInPage() {
                     key={child.id}
                     child={child}
                     teamColor={teamColor}
+                    isAdmin={isAdmin}
                     isSelected={selectedId === child.id}
                     onSelect={() => setSelectedId(child.id)}
                     onDeselect={() => setSelectedId(null)}
@@ -1297,6 +1354,7 @@ export default function CheckInPage() {
                       key={child.id}
                       child={child}
                       teamColor={teamColor}
+                      isAdmin={isAdmin}
                       isSelected={selectedId === child.id}
                       onSelect={() => setSelectedId(child.id)}
                       onDeselect={() => setSelectedId(null)}
@@ -1502,6 +1560,7 @@ export default function CheckInPage() {
                   key={child.id}
                   child={child}
                   teamColor={teamColor}
+                  isAdmin={isAdmin}
                   isSelected={selectedId === child.id}
                   onSelect={() => setSelectedId(child.id)}
                   onDeselect={() => setSelectedId(null)}
@@ -1519,6 +1578,7 @@ export default function CheckInPage() {
                     key={child.id}
                     child={child}
                     teamColor={teamColor}
+                    isAdmin={isAdmin}
                     isSelected={selectedId === child.id}
                     onSelect={() => setSelectedId(child.id)}
                     onDeselect={() => setSelectedId(null)}
@@ -1627,6 +1687,7 @@ export default function CheckInPage() {
                 key={child.id}
                 child={child}
                 teamColor={teamColor}
+                isAdmin={isAdmin}
                 isSelected={selectedId === child.id}
                 onSelect={() => setSelectedId(child.id)}
                 onDeselect={() => setSelectedId(null)}
