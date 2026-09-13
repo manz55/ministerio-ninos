@@ -1,22 +1,19 @@
 import { useState } from 'react'
 import { Outlet, useOutletContext } from 'react-router-dom'
-import { ClipboardList, BarChart3, Users, NotebookPen, UserCog, Contact, LogOut, KeyRound, MessageSquare } from 'lucide-react'
+import { ClipboardList, BarChart3, Users, NotebookPen, UserCog, Contact, LogOut, KeyRound } from 'lucide-react'
 import Dock from '../ui/Dock'
 import { ChurchLogo } from '../ui/ChurchLogo'
 import { ChangePasswordModal } from '../ui/ChangePasswordModal'
 import { LivingBackground } from '../ui/LivingBackground'
-import { useMessagesBadgeCount } from '../../hooks/useMessagesBadgeCount'
 import { signOut } from '../../lib/auth'
 import type { Profile } from '../../types/domain'
 
 const CONTAINER = 'max-w-4xl lg:max-w-6xl xl:max-w-[88rem] 2xl:max-w-[112rem] mx-auto'
 
 export default function Layout({ isAdmin, profile }: { isAdmin: boolean; profile: Profile }) {
-  const messagesBadge = useMessagesBadgeCount(profile.id, isAdmin)
   const navItems = isAdmin
     ? [
         { icon: ClipboardList,  label: 'Registro', to: '/registro' },
-        { icon: MessageSquare,  label: 'Mensajes', to: '/mensajes', badge: messagesBadge },
         { icon: BarChart3,      label: 'Reportes', to: '/reportes' },
         { icon: Users,          label: 'Familias', to: '/familias' },
         { icon: Contact,        label: 'Maestros', to: '/maestros' },
@@ -25,7 +22,6 @@ export default function Layout({ isAdmin, profile }: { isAdmin: boolean; profile
       ]
     : [
         { icon: ClipboardList,  label: 'Registro', to: '/registro' },
-        { icon: MessageSquare,  label: 'Mensajes', to: '/mensajes', badge: messagesBadge },
         { icon: NotebookPen,    label: 'Notas',    to: '/notas' },
       ]
   const [showChangePassword, setShowChangePassword] = useState(false)

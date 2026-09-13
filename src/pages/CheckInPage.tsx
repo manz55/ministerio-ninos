@@ -12,7 +12,6 @@ import { createChildSearcher, searchChildrenSplit } from '../lib/fuzzySearch'
 import { CATEGORY_LABELS, CATEGORY_COLORS, NEXT_CATEGORY, isCorderitos, type Category, type TeamColor, type ParentRow } from '../types/domain'
 import { CategoryBadge } from '../components/ui/CategoryBadge'
 import { ChildContacts } from '../components/ui/ChildContacts'
-import { CoordinatorRequestBox } from '../components/ui/CoordinatorRequestBox'
 import { NewFamilyStep } from '../components/checkin/NewFamilyStep'
 import { useDebounce } from '../hooks/useDebounce'
 import { BalloonBackground } from '../components/ui/BalloonBackground'
@@ -1262,7 +1261,7 @@ export default function CheckInPage() {
         ) : filteredChildren.exact.length === 0 && filteredChildren.suggestions.length === 0 ? (
           <div className="text-center py-12 space-y-4 text-gray-400">
             <p className="text-base">{filter ? `Sin resultados para "${filter}"` : 'No hay niños en esta categoría todavía'}</p>
-            {isAdmin ? (
+            {session && (
               <button
                 onClick={() => setShowNewFamily(true)}
                 className="inline-flex items-center gap-2 px-6 py-3.5 text-base font-semibold text-white bg-indigo-600 rounded-2xl hover:bg-indigo-700 transition-colors"
@@ -1270,12 +1269,7 @@ export default function CheckInPage() {
                 <UserPlus size={18} />
                 Registrar familia nueva
               </button>
-            ) : session ? (
-              <CoordinatorRequestBox
-                authorId={session.user.id}
-                defaultMessage={filter ? `Por favor agregar a este niño: ${filter}` : undefined}
-              />
-            ) : null}
+            )}
           </div>
         ) : (
           <>
@@ -1315,7 +1309,7 @@ export default function CheckInPage() {
           </>
         )}
 
-        {!loadingChildren && children.length > 0 && isAdmin && (
+        {!loadingChildren && children.length > 0 && session && (
           <button
             onClick={() => setShowNewFamily(true)}
             className="w-full flex items-center justify-center gap-2 py-3.5 text-sm font-medium text-indigo-600 border-2 border-dashed border-indigo-200 rounded-2xl hover:bg-indigo-50 transition-colors"
@@ -1491,19 +1485,14 @@ export default function CheckInPage() {
           {!(loadingAllChildren && allChildren.length === 0) && globalResults.exact.length === 0 && globalResults.suggestions.length === 0 && (
             <div className="text-center py-10 space-y-4 bg-white rounded-2xl border border-gray-200">
               <p className="text-gray-400">Sin resultados para "{debouncedGlobal}"</p>
-              {isAdmin ? (
+              {session && (
                 <button
                   onClick={() => setShowNewFamily(true)}
                   className="inline-flex items-center gap-2 px-5 py-3 text-sm font-semibold text-white bg-indigo-600 rounded-2xl hover:bg-indigo-700 transition-colors"
                 >
                   <UserPlus size={16} /> Registrar familia nueva
                 </button>
-              ) : session ? (
-                <CoordinatorRequestBox
-                  authorId={session.user.id}
-                  defaultMessage={debouncedGlobal ? `Por favor agregar a este niño: ${debouncedGlobal}` : undefined}
-                />
-              ) : null}
+              )}
             </div>
           )}
           {globalResults.exact.length > 0 && (
@@ -1539,7 +1528,7 @@ export default function CheckInPage() {
               </div>
             </div>
           )}
-          {(globalResults.exact.length > 0 || globalResults.suggestions.length > 0) && isAdmin && (
+          {(globalResults.exact.length > 0 || globalResults.suggestions.length > 0) && session && (
             <button
               onClick={() => setShowNewFamily(true)}
               className="w-full flex items-center justify-center gap-2 py-3.5 text-sm font-medium text-indigo-600 border-2 border-dashed border-indigo-200 rounded-2xl hover:bg-indigo-50 transition-colors"
