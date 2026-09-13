@@ -369,6 +369,7 @@ function ChildCard({
   onSelect,
   onDeselect,
   onRegistered,
+  onCategoryChanged,
 }: {
   child: ChildResult
   teamColor: TeamColor
@@ -377,6 +378,7 @@ function ChildCard({
   onSelect: () => void
   onDeselect: () => void
   onRegistered: (childId: string, badgeNumber: number | null) => void
+  onCategoryChanged: (childId: string, newCategory: Category) => void
 }) {
   // Overrides getEffectiveCategory() once a coordinator changes the category
   // right here — everything below (needsBadge/needsPager/the check-in insert
@@ -462,6 +464,7 @@ function ChildCard({
     setSavingCategory(false)
     if (error) { setCategoryError('No se pudo cambiar la categoría.'); return }
     setCategoryOverride(newCategory)
+    onCategoryChanged(child.id, newCategory)
   }
 
   // Auto-check-in for no-badge, non-corderitos categories reads fresh values
@@ -818,7 +821,6 @@ export default function CheckInPage() {
   const [resolveWarning, setResolveWarning] = useState(false)
   const [children, setChildren] = useState<ChildResult[]>([])
   const [filter, setFilter] = useState('')
-  const [loadingChildren, setLoadingChildren] = useState(false)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [teamColor, setTeamColor]         = useState<TeamColor>(getStoredTeamForToday() ?? 'rojo')
   const [teamConfirmed, setTeamConfirmed]   = useState(() => getStoredTeamForToday() !== null)
@@ -991,53 +993,31 @@ export default function CheckInPage() {
     [debouncedGlobal, globalSearcher]
   )
 
-  // Evita que una respuesta "vieja" (de una categoría abandonada) sobrescriba
-  // la lista de la categoría que el usuario seleccionó después
-  const categoryRequestRef = useRef(0)
+  // Abrir una categoría solía volver a pedirle a Supabase TODOS los niños +
+  // la asistencia de hoy desde cero cada vez — exactamente la misma consulta
+  // que fetchRoster ya hizo una vez al cargar la página. Eso era el origen
+  // de la lentitud al entrar a una categoría. allChildren ya vive en memoria
+  // y se mantiene al día (realtime de asistencia + las mutaciones locales de
+  // registro/cambio de categoría), así que ahora solo se filtra ahí mismo,
+  // sin ida y vuelta al servidor. Este efecto también re-filtra solo si
+  // allChildren cambia mientras una categoría está abierta (por ejemplo, un
+  // cambio de categoría hecho desde la misma tarjeta).
+  useEffect(() => {
+    if (!activeCategory) return
+    setChildren(allChildren.filter((c) => getEffectiveCategory(c) === activeCategory))
+  }, [activeCategory, allChildren])
 
-  // Abre grupo: dos queries pequeñas en lugar de un join masivo
-  async function openCategory(category: Category) {
-    const requestId = ++categoryRequestRef.current
-
+  function openCategory(category: Category) {
     // startTransition mantiene el home interactivo mientras React prepara la nueva vista
     startTransition(() => {
       setActiveCategory(category)
       setFilter('')
       setSelectedId(null)
       setGlobalSearch('')
-      setLoadingChildren(true)
     })
-
-    const [{ data: all }, { data: todayAtt }] = await Promise.all([
-      supabase
-        .from('children')
-        .select(CHILD_SELECT)
-        .is('deleted_at', null)
-        .order('full_name'),
-      supabase
-        .from('attendance')
-        .select('child_id, badge_number')
-        .eq('session_date', today)
-        .is('deleted_at', null),
-    ])
-
-    // Otra categoría fue seleccionada (o se volvió al home) mientras esta consulta estaba en vuelo
-    if (categoryRequestRef.current !== requestId) return
-
-    const attMap = new Map((todayAtt ?? []).map((a) => [a.child_id, a.badge_number]))
-    const filtered = ((all ?? []) as Omit<ChildResult, 'attendance'>[])
-      .filter((c) => getEffectiveCategory(c) === category)
-      .map((c) => ({
-        ...c,
-        attendance: attMap.has(c.id) ? [{ session_date: today, badge_number: attMap.get(c.id) }] : [],
-      })) as ChildResult[]
-
-    setChildren(filtered)
-    setLoadingChildren(false)
   }
 
   function handleBack() {
-    categoryRequestRef.current++ // invalida cualquier openCategory() pendiente
     setActiveCategory(null)
     setChildren([])
     setSelectedId(null)
@@ -1064,6 +1044,16 @@ export default function CheckInPage() {
       setTodayCounts((prev) => ({ ...prev, [cat]: (prev[cat] ?? 0) + 1 }))
       setTotalToday((n) => n + 1)
     }
+  }
+
+  // Patches allChildren so every list derived from it (category view,
+  // global search, "Ver registro completo") picks up a manual category
+  // change immediately — the useEffect above re-filters `children` off
+  // this automatically, which also makes the card vanish from a now-wrong
+  // category view without needing a re-open.
+  function handleCategoryChanged(childId: string, newCategory: Category) {
+    const patch = (c: ChildResult) => (c.id === childId ? { ...c, category: newCategory } : c)
+    setAllChildren((prev) => prev.map(patch))
   }
 
   // Refreshes whichever list(s) are currently on screen so a newly-added
@@ -1285,7 +1275,7 @@ export default function CheckInPage() {
             </div>
             <p className="text-xs text-gray-400">{tile.ages}</p>
           </div>
-          {!loadingChildren && (
+          {!loadingAllChildren && (
             <span className="text-sm font-semibold text-gray-500 shrink-0">
               {registeredCount}/{children.length}
             </span>
@@ -1312,7 +1302,7 @@ export default function CheckInPage() {
         </div>
 
         {/* Children list */}
-        {loadingChildren ? (
+        {loadingAllChildren ? (
           <p className="text-center text-gray-400 py-10 text-lg">Cargando…</p>
         ) : filteredChildren.exact.length === 0 && filteredChildren.suggestions.length === 0 ? (
           <div className="text-center py-12 space-y-4 text-gray-400">
@@ -1337,6 +1327,7 @@ export default function CheckInPage() {
                     child={child}
                     teamColor={teamColor}
                     isAdmin={isAdmin}
+                    onCategoryChanged={handleCategoryChanged}
                     isSelected={selectedId === child.id}
                     onSelect={() => setSelectedId(child.id)}
                     onDeselect={() => setSelectedId(null)}
@@ -1355,6 +1346,7 @@ export default function CheckInPage() {
                       child={child}
                       teamColor={teamColor}
                       isAdmin={isAdmin}
+                      onCategoryChanged={handleCategoryChanged}
                       isSelected={selectedId === child.id}
                       onSelect={() => setSelectedId(child.id)}
                       onDeselect={() => setSelectedId(null)}
@@ -1367,7 +1359,7 @@ export default function CheckInPage() {
           </>
         )}
 
-        {!loadingChildren && children.length > 0 && session && (
+        {!loadingAllChildren && children.length > 0 && session && (
           <button
             onClick={() => setShowNewFamily(true)}
             className="w-full flex items-center justify-center gap-2 py-3.5 text-sm font-medium text-indigo-600 border-2 border-dashed border-indigo-200 rounded-2xl hover:bg-indigo-50 transition-colors"
@@ -1561,6 +1553,7 @@ export default function CheckInPage() {
                   child={child}
                   teamColor={teamColor}
                   isAdmin={isAdmin}
+                  onCategoryChanged={handleCategoryChanged}
                   isSelected={selectedId === child.id}
                   onSelect={() => setSelectedId(child.id)}
                   onDeselect={() => setSelectedId(null)}
@@ -1579,6 +1572,7 @@ export default function CheckInPage() {
                     child={child}
                     teamColor={teamColor}
                     isAdmin={isAdmin}
+                    onCategoryChanged={handleCategoryChanged}
                     isSelected={selectedId === child.id}
                     onSelect={() => setSelectedId(child.id)}
                     onDeselect={() => setSelectedId(null)}
@@ -1688,6 +1682,7 @@ export default function CheckInPage() {
                 child={child}
                 teamColor={teamColor}
                 isAdmin={isAdmin}
+                onCategoryChanged={handleCategoryChanged}
                 isSelected={selectedId === child.id}
                 onSelect={() => setSelectedId(child.id)}
                 onDeselect={() => setSelectedId(null)}
