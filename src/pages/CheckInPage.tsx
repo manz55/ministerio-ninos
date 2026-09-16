@@ -547,23 +547,34 @@ function ChildCard({
     doCheckIn(num, pager ? parseInt(pager, 10) : null)
   }
 
+  // El card entero es el blanco de tap/click para seleccionar — antes solo
+  // el bloque del encabezado (nombre/categoría) lo era, así que tocar más
+  // abajo (donde antes solo había padding vacío) no hacía nada. Cada control
+  // interactivo dentro (observaciones, contactos, cambiar categoría, editar
+  // niño, el formulario de gafete/bíper) para la propagación del click para
+  // no disparar selección/deselección de paso.
+  const canToggleSelect = !alreadyIn && !submitting && !!category
   return (
     <div className="relative">
     <div
-      className={`rounded-2xl border-2 overflow-hidden transition-all ${
+      className={`rounded-2xl border-2 overflow-hidden transition-all ${canToggleSelect ? 'cursor-pointer' : ''} ${
         alreadyIn
           ? 'border-green-200 bg-green-50'
           : isSelected
           ? 'border-indigo-400 bg-white shadow-md'
           : 'border-gray-200 bg-white hover:border-indigo-300'
       }`}
+      role="button"
+      tabIndex={canToggleSelect ? 0 : -1}
+      onClick={canToggleSelect ? (isSelected ? onDeselect : onSelect) : undefined}
+      onKeyDown={canToggleSelect ? (e) => {
+        if (e.key !== 'Enter' && e.key !== ' ') return
+        e.preventDefault()
+        if (isSelected) onDeselect(); else onSelect()
+      } : undefined}
     >
       {/* ── Card header ── */}
-      <button
-        className="w-full text-left px-5 py-4 disabled:cursor-not-allowed"
-        onClick={alreadyIn || !category ? undefined : isSelected ? onDeselect : onSelect}
-        disabled={alreadyIn || submitting || !category}
-      >
+      <div className="w-full text-left px-5 py-4">
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0 space-y-1.5">
             <div className="flex items-center gap-2 min-w-0">
@@ -600,7 +611,7 @@ function ChildCard({
             <span className="text-sm text-gray-400 shrink-0">Registrando…</span>
           )}
         </div>
-      </button>
+      </div>
 
       {/* ── Observaciones: alergias, notas médicas, baño, comentarios ──
           min-h reserves this row's space always, whether or not this
@@ -608,7 +619,7 @@ function ChildCard({
           observations was simply shorter than one with, so cards in the
           same grid row ended up at different heights depending on which
           kids happened to have allergies/notes set. */}
-      <div className="px-5 pb-3 -mt-1 min-h-[28px]">
+      <div className="px-5 pb-3 -mt-1 min-h-[28px]" onClick={(e) => e.stopPropagation()}>
         {hasObservations && (
           <button
             type="button"
@@ -634,7 +645,7 @@ function ChildCard({
       </div>
 
       {/* ── Otros contactos autorizados ── */}
-      <div className="px-5 pb-3 -mt-1">
+      <div className="px-5 pb-3 -mt-1" onClick={(e) => e.stopPropagation()}>
         <button
           type="button"
           onClick={() => setShowContacts((v) => !v)}
@@ -654,7 +665,7 @@ function ChildCard({
           button (can't nest a <select> inside it) and stays admin-only,
           matching the RLS on children.category (is_admin()-only UPDATE). */}
       {isAdmin && (
-        <div className="px-5 pb-3 -mt-1 flex items-center gap-3 flex-wrap">
+        <div className="px-5 pb-3 -mt-1 flex items-center gap-3 flex-wrap" onClick={(e) => e.stopPropagation()}>
           {showCategoryPicker ? (
             <select
               autoFocus
@@ -693,7 +704,7 @@ function ChildCard({
 
       {/* ── Inline badge form ── */}
       {isSelected && needsBadge && (
-        <form onSubmit={handleSubmit} className="px-5 pb-5 space-y-3 border-t border-gray-100 pt-4">
+        <form onSubmit={handleSubmit} onClick={(e) => e.stopPropagation()} className="px-5 pb-5 space-y-3 border-t border-gray-100 pt-4">
 
           {hasAlert && (
             <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-3">
@@ -760,7 +771,7 @@ function ChildCard({
 
       {/* ── Corderitos: confirm step with baby-specific info before registering ── */}
       {isSelected && !needsBadge && isCorderitos(category) && !alreadyIn && (
-        <div className="px-5 pb-5 space-y-3 border-t border-gray-100 pt-4">
+        <div className="px-5 pb-5 space-y-3 border-t border-gray-100 pt-4" onClick={(e) => e.stopPropagation()}>
           {hasAlert && (
             <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-3">
               <p className="text-xs font-bold text-red-700 uppercase tracking-wide mb-1">⚠ Alerta médica</p>
@@ -1550,13 +1561,6 @@ export default function CheckInPage() {
                   placeholder="Tu nombre…"
                   className="text-sm border-b-2 border-indigo-400 focus:outline-none font-medium text-gray-700 bg-transparent w-36"
                 />
-              ) : !isAdmin && computerOperatorName ? (
-                <span className="flex items-center gap-1.5 text-sm text-gray-700 font-semibold">
-                  {computerOperatorName}
-                  <span title="Solo un coordinador puede cambiar esto">
-                    <Lock size={11} className="text-gray-300" />
-                  </span>
-                </span>
               ) : (
                 <button
                   onClick={() => setEditingComputerOperator(true)}
