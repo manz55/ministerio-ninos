@@ -158,6 +158,7 @@ export type Database = {
         Row: {
           allergies: string | null
           assigned_maestro_id: string | null
+          assigned_maestro_name: string | null
           birth_date: string | null
           category: string | null
           comments: string | null
@@ -175,6 +176,7 @@ export type Database = {
         Insert: {
           allergies?: string | null
           assigned_maestro_id?: string | null
+          assigned_maestro_name?: string | null
           birth_date?: string | null
           category?: string | null
           comments?: string | null
@@ -192,6 +194,7 @@ export type Database = {
         Update: {
           allergies?: string | null
           assigned_maestro_id?: string | null
+          assigned_maestro_name?: string | null
           birth_date?: string | null
           category?: string | null
           comments?: string | null

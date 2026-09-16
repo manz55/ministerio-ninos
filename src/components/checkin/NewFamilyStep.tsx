@@ -20,6 +20,7 @@ interface ChildDraft {
   comments: string
   toilet_trained: boolean | null
   assigned_maestro_id: string | null
+  assigned_maestro_name: string
   photoBlob: Blob | null
 }
 
@@ -40,7 +41,7 @@ interface Props {
 function newChild(key: string): ChildDraft {
   return {
     key, full_name: '', birth_date: '', allergies: '', medical_notes: '',
-    guardian_relationship: '', comments: '', toilet_trained: null, assigned_maestro_id: null, photoBlob: null,
+    guardian_relationship: '', comments: '', toilet_trained: null, assigned_maestro_id: null, assigned_maestro_name: '', photoBlob: null,
   }
 }
 
@@ -159,6 +160,7 @@ export function NewFamilyStep({
           comments: c.comments.trim() || null,
           toilet_trained: c.toilet_trained,
           assigned_maestro_id: c.assigned_maestro_id,
+          assigned_maestro_name: c.assigned_maestro_name.trim() || null,
         }))
       )
       .select()
@@ -420,6 +422,8 @@ export function NewFamilyStep({
                 <AssignedMaestroField
                   value={child.assigned_maestro_id}
                   onChange={(id) => updateChild(child.key, 'assigned_maestro_id', id)}
+                  freeTextValue={child.assigned_maestro_name || null}
+                  onFreeTextChange={(name) => updateChild(child.key, 'assigned_maestro_name', name ?? '')}
                 />
               )}
 

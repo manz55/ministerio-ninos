@@ -127,6 +127,7 @@ export interface Child {
   photo_url: string | null
   created_at: string
   assigned_maestro_id: string | null
+  assigned_maestro_name: string | null
   parent?: Parent
   assigned_maestro?: { nombre: string; apellido: string } | null
 }
@@ -168,6 +169,7 @@ export interface ChildRow {
   photo_url: string | null
   created_at: string
   assigned_maestro_id: string | null
+  assigned_maestro_name: string | null
   assigned_maestro?: { nombre: string; apellido: string } | null
   attendance: AttendanceToday[]
 }

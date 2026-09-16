@@ -8,6 +8,8 @@ const TEAM_DOT: Record<TeamColor, string> = { rojo: 'bg-red-500', amarillo: 'bg-
 interface Props {
   value: string | null
   onChange: (id: string | null) => void
+  freeTextValue: string | null
+  onFreeTextChange: (name: string | null) => void
   compact?: boolean
 }
 
@@ -16,8 +18,13 @@ interface Props {
  * elige el equipo (rojo/amarillo/azul) para acotar la lista, luego se
  * escoge el maestro dentro de ese equipo — evita desplazarse entre ~27
  * maestros de golpe. Nada impide asignar el mismo maestro a varios niños.
+ *
+ * También incluye un campo de texto libre (assigned_maestro_name) para
+ * cuando el maestro todavía no está cargado en el directorio — temporal,
+ * mientras se completa `maestros`. Elegir uno de los dos modos limpia el
+ * otro, para no guardar ambos a la vez y no saber cuál mostrar.
  */
-export function AssignedMaestroField({ value, onChange, compact }: Props) {
+export function AssignedMaestroField({ value, onChange, freeTextValue, onFreeTextChange, compact }: Props) {
   const [maestros, setMaestros] = useState<Maestro[]>([])
   const [team, setTeam] = useState<TeamColor | null>(null)
 
@@ -66,7 +73,7 @@ export function AssignedMaestroField({ value, onChange, compact }: Props) {
         filtered.length > 0 ? (
           <select
             value={value ?? ''}
-            onChange={(e) => onChange(e.target.value || null)}
+            onChange={(e) => { onChange(e.target.value || null); if (e.target.value) onFreeTextChange(null) }}
             className={inputClass}
           >
             <option value="">Sin asignar</option>
@@ -78,6 +85,18 @@ export function AssignedMaestroField({ value, onChange, compact }: Props) {
           <p className="text-xs text-gray-400">Aún no hay maestros en el equipo {TEAM_COLOR_LABELS[team]}.</p>
         )
       )}
+      <div className="mt-2">
+        <label className={`${labelClass} !text-gray-400 !font-normal`}>
+          ¿Aún no está en la lista? Escribe su nombre (temporal)
+        </label>
+        <input
+          type="text"
+          value={freeTextValue ?? ''}
+          onChange={(e) => { const v = e.target.value; onFreeTextChange(v || null); if (v) onChange(null) }}
+          placeholder="Nombre y apellido"
+          className={inputClass}
+        />
+      </div>
     </div>
   )
 }

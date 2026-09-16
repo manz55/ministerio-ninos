@@ -24,6 +24,7 @@ export interface EditableChild {
   toilet_trained: boolean | null
   photo_url: string | null
   assigned_maestro_id: string | null
+  assigned_maestro_name: string | null
 }
 
 /**
@@ -51,6 +52,7 @@ export function EditChildModal({
   const [comments, setComments] = useState(child.comments ?? '')
   const [toiletTrained, setToiletTrained] = useState<boolean | null>(child.toilet_trained)
   const [assignedMaestroId, setAssignedMaestroId] = useState<string | null>(child.assigned_maestro_id)
+  const [assignedMaestroName, setAssignedMaestroName] = useState<string | null>(child.assigned_maestro_name)
   const [manualCategory, setManualCategory] = useState<Category | ''>(child.category ?? '')
   const [photoBlob, setPhotoBlob] = useState<Blob | null>(null)
   const [saving, setSaving] = useState(false)
@@ -80,6 +82,7 @@ export function EditChildModal({
       comments: comments.trim() || null,
       toilet_trained: toiletTrained,
       assigned_maestro_id: assignedMaestroId,
+      assigned_maestro_name: assignedMaestroName,
       photo_url,
     }
     const { data, error: err } = await supabase.from('children').update(patch).eq('id', child.id).select('id')
@@ -186,7 +189,13 @@ export function EditChildModal({
           )}
 
           {isCorderitos(effectiveCategory) && (
-            <AssignedMaestroField value={assignedMaestroId} onChange={setAssignedMaestroId} compact />
+            <AssignedMaestroField
+              value={assignedMaestroId}
+              onChange={setAssignedMaestroId}
+              freeTextValue={assignedMaestroName}
+              onFreeTextChange={setAssignedMaestroName}
+              compact
+            />
           )}
 
           <div>

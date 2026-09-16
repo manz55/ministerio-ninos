@@ -36,6 +36,7 @@ type ChildDetail = {
   toilet_trained: boolean | null
   photo_url: string | null
   assigned_maestro_id: string | null
+  assigned_maestro_name: string | null
   assigned_maestro?: { nombre: string; apellido: string } | null
   attendance: { count: number }[]
 }
@@ -113,6 +114,7 @@ function ChildEditForm({
   const [comments, setComments] = useState(child.comments ?? '')
   const [toiletTrained, setToiletTrained] = useState<boolean | null>(child.toilet_trained)
   const [assignedMaestroId, setAssignedMaestroId] = useState<string | null>(child.assigned_maestro_id)
+  const [assignedMaestroName, setAssignedMaestroName] = useState<string | null>(child.assigned_maestro_name)
   const [manualCategory, setManualCategory] = useState<Category | ''>(child.category ?? '')
   const [photoBlob, setPhotoBlob] = useState<Blob | null>(null)
   const [saving, setSaving]     = useState(false)
@@ -156,6 +158,7 @@ function ChildEditForm({
       comments: comments.trim() || null,
       toilet_trained: toiletTrained,
       assigned_maestro_id: assignedMaestroId,
+      assigned_maestro_name: assignedMaestroName,
       photo_url,
     })
     setSaving(false)
@@ -223,7 +226,13 @@ function ChildEditForm({
         </div>
       )}
       {isCorderitos(manualCategory || previewCategory || child.category) && (
-        <AssignedMaestroField value={assignedMaestroId} onChange={setAssignedMaestroId} compact />
+        <AssignedMaestroField
+          value={assignedMaestroId}
+          onChange={setAssignedMaestroId}
+          freeTextValue={assignedMaestroName}
+          onFreeTextChange={setAssignedMaestroName}
+          compact
+        />
       )}
       <div>
         <label className="block text-xs font-medium text-gray-500 mb-1">Parentesco del responsable</label>
@@ -279,6 +288,7 @@ function NewChildForm({ parentId, prefill, onSaved, onCancel }: { parentId: stri
   const [comments, setComments] = useState(prefill?.comments ?? '')
   const [toiletTrained, setToiletTrained] = useState<boolean | null>(prefill?.toilet_trained ?? null)
   const [assignedMaestroId, setAssignedMaestroId] = useState<string | null>(null)
+  const [assignedMaestroName, setAssignedMaestroName] = useState<string | null>(null)
   const [photoBlob, setPhotoBlob] = useState<Blob | null>(null)
   const [saving, setSaving]     = useState(false)
   const [error, setError]       = useState<string | null>(null)
@@ -296,6 +306,7 @@ function NewChildForm({ parentId, prefill, onSaved, onCancel }: { parentId: stri
       allergies: allergies.trim() || null, medical_notes: notes.trim() || null,
       guardian_relationship: relationship || null, comments: comments.trim() || null,
       toilet_trained: toiletTrained, assigned_maestro_id: assignedMaestroId,
+      assigned_maestro_name: assignedMaestroName,
     }).select().single()
     if (err || !data) { setSaving(false); setError('Error al guardar.'); return }
     if (photoBlob) {
@@ -356,7 +367,13 @@ function NewChildForm({ parentId, prefill, onSaved, onCancel }: { parentId: stri
         </div>
       )}
       {isCorderitos(previewCategory) && (
-        <AssignedMaestroField value={assignedMaestroId} onChange={setAssignedMaestroId} compact />
+        <AssignedMaestroField
+          value={assignedMaestroId}
+          onChange={setAssignedMaestroId}
+          freeTextValue={assignedMaestroName}
+          onFreeTextChange={setAssignedMaestroName}
+          compact
+        />
       )}
       <div>
         <label className="block text-xs font-medium text-gray-500 mb-1">Parentesco del responsable</label>
@@ -667,9 +684,11 @@ function FamilyDetailPanel({
                   </p>
                 )}
 
-                {isCorderitos(category) && child.assigned_maestro && !isEditing && (
+                {isCorderitos(category) && !isEditing && (child.assigned_maestro || child.assigned_maestro_name) && (
                   <p className="text-xs text-gray-500 bg-gray-50 rounded-lg px-3 py-2">
-                    🧑‍🏫 Maestro responsable: {child.assigned_maestro.nombre} {child.assigned_maestro.apellido}
+                    🧑‍🏫 Maestro responsable: {child.assigned_maestro
+                      ? `${child.assigned_maestro.nombre} ${child.assigned_maestro.apellido}`
+                      : `${child.assigned_maestro_name} (aún sin registrar)`}
                   </p>
                 )}
 

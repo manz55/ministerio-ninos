@@ -54,12 +54,13 @@ type ChildResult = {
   guardian_relationship: GuardianRelationship | null
   photo_url: string | null
   assigned_maestro_id: string | null
+  assigned_maestro_name: string | null
   parent_id: string | null
   parents: { full_name: string; phone: string } | null
   attendance: { session_date: string; badge_number?: number | null }[]
 }
 
-const CHILD_SELECT = 'id, full_name, birth_date, category, allergies, medical_notes, toilet_trained, comments, guardian_relationship, photo_url, assigned_maestro_id, parent_id, parents(full_name, phone)'
+const CHILD_SELECT = 'id, full_name, birth_date, category, allergies, medical_notes, toilet_trained, comments, guardian_relationship, photo_url, assigned_maestro_id, assigned_maestro_name, parent_id, parents(full_name, phone)'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
