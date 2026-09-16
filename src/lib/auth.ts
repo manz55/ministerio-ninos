@@ -24,11 +24,23 @@ export async function updateOwnPassword(newPassword: string) {
   return supabase.auth.updateUser({ password: newPassword })
 }
 
+/** Envía el correo de "olvidé mi contraseña" — el enlace regresa al sitio
+ * con una sesión temporal de recuperación, detectada en useAuth() abajo. */
+export async function requestPasswordReset(email: string) {
+  return supabase.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin })
+}
+
 /** Session + profile (role) for the currently logged-in user, kept in sync with auth state changes. */
 export function useAuth() {
   const [session, setSession] = useState<Session | null>(null)
   const [profile, setProfile] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
+  // true entre el momento en que alguien abre el enlace de "olvidé mi
+  // contraseña" (Supabase dispara PASSWORD_RECOVERY con una sesión temporal
+  // válida) y el momento en que de verdad elige una contraseña nueva — App.tsx
+  // usa esto para mostrar la pantalla de "elige tu nueva contraseña" en vez
+  // de dejarlo entrar a la app con la sesión de recuperación.
+  const [isPasswordRecovery, setIsPasswordRecovery] = useState(false)
 
   // Tracks whose profile is currently loaded so a silent token refresh
   // (fires roughly every 50 min while the app stays open, same user) doesn't
@@ -54,7 +66,9 @@ export function useAuth() {
       else setLoading(false)
     })
 
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, newSession) => {
+    const { data: sub } = supabase.auth.onAuthStateChange((event, newSession) => {
+      if (event === 'PASSWORD_RECOVERY') setIsPasswordRecovery(true)
+      if (event === 'SIGNED_OUT') setIsPasswordRecovery(false)
       setSession(newSession)
       if (newSession) {
         if (newSession.user.id !== loadedForUserId.current) loadProfile(newSession.user.id)
@@ -77,5 +91,6 @@ export function useAuth() {
     loading,
     isAdmin: !!profile && profile.role === 'admin' && profile.active,
     isOwner: !!profile && profile.is_owner && profile.active,
+    isPasswordRecovery,
   }
 }

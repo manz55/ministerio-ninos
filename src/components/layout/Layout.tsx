@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { Outlet, useOutletContext } from 'react-router-dom'
-import { ClipboardList, BarChart3, Users, NotebookPen, UserCog, Contact, LogOut, KeyRound } from 'lucide-react'
+import { ClipboardList, BarChart3, Users, NotebookPen, UserCog, Contact, LogOut, KeyRound, UserRound } from 'lucide-react'
 import Dock from '../ui/Dock'
 import { ChurchLogo } from '../ui/ChurchLogo'
 import { ChangePasswordModal } from '../ui/ChangePasswordModal'
+import { EditProfileModal } from '../ui/EditProfileModal'
 import { LivingBackground } from '../ui/LivingBackground'
 import { signOut } from '../../lib/auth'
 import type { Profile } from '../../types/domain'
@@ -25,11 +26,22 @@ export default function Layout({ isAdmin, profile }: { isAdmin: boolean; profile
         { icon: NotebookPen,    label: 'Notas',    to: '/notas' },
       ]
   const [showChangePassword, setShowChangePassword] = useState(false)
+  const [showEditProfile, setShowEditProfile] = useState(false)
+  // Local override so the header updates the instant the name is saved,
+  // without waiting on useAuth() to notice the profiles row changed.
+  const [displayName, setDisplayName] = useState(profile.full_name)
 
   return (
     <div style={{ minHeight: '100dvh' }}>
       <LivingBackground />
       {showChangePassword && <ChangePasswordModal onClose={() => setShowChangePassword(false)} />}
+      {showEditProfile && (
+        <EditProfileModal
+          profile={profile}
+          onClose={() => setShowEditProfile(false)}
+          onSaved={setDisplayName}
+        />
+      )}
 
       <header
         className="sticky top-0 z-[3] bg-white/80 backdrop-blur-xl border-b border-gray-200/70 px-4 py-3"
@@ -58,8 +70,15 @@ export default function Layout({ isAdmin, profile }: { isAdmin: boolean; profile
                 {__APP_VERSION__}
               </span>
             </div>
-            <span className="text-xs text-gray-400 leading-tight truncate block">{profile.full_name}</span>
+            <span className="text-xs text-gray-400 leading-tight truncate block">{displayName}</span>
           </div>
+          <button
+            onClick={() => setShowEditProfile(true)}
+            className="p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors shrink-0"
+            title="Mis datos"
+          >
+            <UserRound size={18} />
+          </button>
           <button
             onClick={() => setShowChangePassword(true)}
             className="p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors shrink-0"

@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import Layout from './components/layout/Layout'
 import { LoginScreen } from './components/ui/LoginScreen'
+import { ResetPasswordScreen } from './components/ui/ResetPasswordScreen'
 import { useAuth } from './lib/auth'
 
 const CheckInPage  = lazy(() => import('./pages/CheckInPage'))
@@ -25,7 +26,7 @@ function RequireAdmin({ isAdmin, children }: { isAdmin: boolean; children: React
 }
 
 function App() {
-  const { session, profile, loading, isAdmin } = useAuth()
+  const { session, profile, loading, isAdmin, isPasswordRecovery } = useAuth()
 
   if (loading) {
     return (
@@ -33,6 +34,14 @@ function App() {
         <div className="w-7 h-7 border-2 border-indigo-200 border-t-indigo-600 rounded-full animate-spin" />
       </div>
     )
+  }
+
+  // Antes que cualquier otra cosa: una sesión de recuperación (llegó del
+  // enlace de "olvidé mi contraseña") ya cuenta como `session` válida para
+  // Supabase, pero no debe dejar entrar a la app normal hasta que de verdad
+  // elija una contraseña nueva.
+  if (isPasswordRecovery) {
+    return <ResetPasswordScreen />
   }
 
   if (!session || !profile) {
