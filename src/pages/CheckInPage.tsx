@@ -9,9 +9,10 @@ import { useAuth } from '../lib/auth'
 import { getEffectiveCategory, hasCategoryChanged, getAgeLabel, requiresBadge, requiresPager } from '../lib/categoryUtils'
 import { markRequestResolved } from '../lib/coordinatorRequests'
 import { createChildSearcher, searchChildrenSplit } from '../lib/fuzzySearch'
-import { CATEGORY_LABELS, CATEGORY_COLORS, NEXT_CATEGORY, ACTIVE_CATEGORIES, isCorderitos, type Category, type TeamColor, type ParentRow } from '../types/domain'
+import { CATEGORY_LABELS, CATEGORY_COLORS, NEXT_CATEGORY, ACTIVE_CATEGORIES, isCorderitos, type Category, type TeamColor, type ParentRow, type GuardianRelationship } from '../types/domain'
 import { CategoryBadge } from '../components/ui/CategoryBadge'
 import { ChildContacts } from '../components/ui/ChildContacts'
+import { EditChildModal, type EditableChild } from '../components/ui/EditChildModal'
 import { NewFamilyStep } from '../components/checkin/NewFamilyStep'
 import { useDebounce } from '../hooks/useDebounce'
 import { BalloonBackground } from '../components/ui/BalloonBackground'
@@ -50,12 +51,15 @@ type ChildResult = {
   medical_notes: string | null
   toilet_trained: boolean | null
   comments: string | null
+  guardian_relationship: GuardianRelationship | null
+  photo_url: string | null
+  assigned_maestro_id: string | null
   parent_id: string | null
   parents: { full_name: string; phone: string } | null
   attendance: { session_date: string; badge_number?: number | null }[]
 }
 
-const CHILD_SELECT = 'id, full_name, birth_date, category, allergies, medical_notes, toilet_trained, comments, parent_id, parents(full_name, phone)'
+const CHILD_SELECT = 'id, full_name, birth_date, category, allergies, medical_notes, toilet_trained, comments, guardian_relationship, photo_url, assigned_maestro_id, parent_id, parents(full_name, phone)'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -81,33 +85,49 @@ const TEAM_META: Record<TeamColor, { label: string; bg: string; dot: string; tex
   azul:     { label: 'Azul',     bg: 'bg-blue-500',   dot: 'bg-blue-500',   text: 'text-white',    cardBg: 'bg-blue-50',   cardText: 'text-blue-700'   },
 }
 
+// Misma paleta que CATEGORY_COLORS (types/domain.ts) y CAT_CONFIG
+// (ReportsPage.tsx) — Corderitos azul, Hormiguitas rojo, Saltamontes verde,
+// Exploradores naranja. Este es un tercer mapeo independiente (tiles grandes
+// de la pantalla de inicio) — mantenerlo sincronizado a mano si la paleta
+// vuelve a cambiar. `ages` también viene de CATEGORY_AGE_RANGES a mano.
 const TILES = [
   {
     category: 'hormiguitas' as Category,
     icon: Bug,
     ages: '4–6 años',
-    cardBg: 'bg-emerald-100',
-    iconBg: 'bg-emerald-500/20',
-    iconColor: 'text-emerald-700',
-    bar: 'bg-emerald-500',
-    barBg: 'bg-emerald-200/60',
-    textColor: 'text-emerald-900',
+    cardBg: 'bg-red-100',
+    iconBg: 'bg-red-500/20',
+    iconColor: 'text-red-700',
+    bar: 'bg-red-500',
+    barBg: 'bg-red-200/60',
+    textColor: 'text-red-900',
   },
   {
     category: 'saltamontes' as Category,
     icon: Zap,
     ages: '7–9 años',
-    cardBg: 'bg-amber-100',
-    iconBg: 'bg-amber-500/20',
-    iconColor: 'text-amber-700',
-    bar: 'bg-amber-500',
-    barBg: 'bg-amber-200/60',
-    textColor: 'text-amber-900',
+    cardBg: 'bg-green-100',
+    iconBg: 'bg-green-500/20',
+    iconColor: 'text-green-700',
+    bar: 'bg-green-500',
+    barBg: 'bg-green-200/60',
+    textColor: 'text-green-900',
   },
   {
     category: 'exploradores' as Category,
     icon: Compass,
-    ages: '10+ años',
+    ages: '10–12 años',
+    cardBg: 'bg-orange-100',
+    iconBg: 'bg-orange-500/20',
+    iconColor: 'text-orange-700',
+    bar: 'bg-orange-500',
+    barBg: 'bg-orange-200/60',
+    textColor: 'text-orange-900',
+  },
+  {
+    category: 'corderitos_0_2' as Category,
+    icon: Baby,
+    ages: '1–2 años',
     cardBg: 'bg-sky-100',
     iconBg: 'bg-sky-500/20',
     iconColor: 'text-sky-700',
@@ -116,26 +136,15 @@ const TILES = [
     textColor: 'text-sky-900',
   },
   {
-    category: 'corderitos_0_2' as Category,
-    icon: Baby,
-    ages: '0–2 años',
-    cardBg: 'bg-pink-100',
-    iconBg: 'bg-pink-500/20',
-    iconColor: 'text-pink-700',
-    bar: 'bg-pink-500',
-    barBg: 'bg-pink-200/60',
-    textColor: 'text-pink-900',
-  },
-  {
     category: 'corderitos_2_4' as Category,
     icon: PersonStanding,
-    ages: '2–4 años',
-    cardBg: 'bg-rose-100',
-    iconBg: 'bg-rose-500/20',
-    iconColor: 'text-rose-700',
-    bar: 'bg-rose-500',
-    barBg: 'bg-rose-200/60',
-    textColor: 'text-rose-900',
+    ages: '3–4 años',
+    cardBg: 'bg-blue-100',
+    iconBg: 'bg-blue-500/20',
+    iconColor: 'text-blue-700',
+    bar: 'bg-blue-500',
+    barBg: 'bg-blue-200/60',
+    textColor: 'text-blue-900',
   },
 ]
 
@@ -370,6 +379,8 @@ function ChildCard({
   onDeselect,
   onRegistered,
   onCategoryChanged,
+  onEdited,
+  onDeleted,
 }: {
   child: ChildResult
   teamColor: TeamColor
@@ -379,6 +390,8 @@ function ChildCard({
   onDeselect: () => void
   onRegistered: (childId: string, badgeNumber: number | null) => void
   onCategoryChanged: (childId: string, newCategory: Category) => void
+  onEdited: (childId: string, patch: Partial<EditableChild>) => void
+  onDeleted: (childId: string) => void
 }) {
   // Overrides getEffectiveCategory() once a coordinator changes the category
   // right here — everything below (needsBadge/needsPager/the check-in insert
@@ -406,6 +419,7 @@ function ChildCard({
   const [showCategoryPicker, setShowCategoryPicker] = useState(false)
   const [savingCategory, setSavingCategory] = useState(false)
   const [categoryError, setCategoryError] = useState<string | null>(null)
+  const [showEditModal, setShowEditModal] = useState(false)
   const badgeRef = useRef<HTMLInputElement>(null)
   const hasObservations = !!(child.allergies || child.medical_notes || child.comments || child.toilet_trained !== null)
 
@@ -522,9 +536,9 @@ function ChildCard({
             </div>
             <div className="flex items-center gap-2 min-w-0">
               <CategoryBadge category={category} size="sm" />
-              {categoryChanged && category && NEXT_CATEGORY[child.category!] === category && (
+              {categoryChanged && child.category && NEXT_CATEGORY[child.category] && (
                 <span className="text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5 shrink-0">
-                  🎉 Ya cumplió años, puede pasar a {CATEGORY_LABELS[category]}
+                  🎉 Ya cumplió años, puede pasar a {CATEGORY_LABELS[NEXT_CATEGORY[child.category]!]}
                 </span>
               )}
               <span className="text-sm text-gray-400 truncate min-w-0">
@@ -599,7 +613,7 @@ function ChildCard({
           button (can't nest a <select> inside it) and stays admin-only,
           matching the RLS on children.category (is_admin()-only UPDATE). */}
       {isAdmin && (
-        <div className="px-5 pb-3 -mt-1">
+        <div className="px-5 pb-3 -mt-1 flex items-center gap-3 flex-wrap">
           {showCategoryPicker ? (
             <select
               autoFocus
@@ -624,7 +638,15 @@ function ChildCard({
               Cambiar categoría
             </button>
           )}
-          {categoryError && <p className="text-xs text-red-600 mt-1">{categoryError}</p>}
+          <button
+            type="button"
+            onClick={() => setShowEditModal(true)}
+            className="flex items-center gap-1 text-xs font-medium text-gray-400 hover:text-indigo-600 transition-colors"
+          >
+            <Pencil size={11} />
+            Editar niño
+          </button>
+          {categoryError && <p className="text-xs text-red-600 mt-1 w-full">{categoryError}</p>}
         </div>
       )}
 
@@ -785,6 +807,15 @@ function ChildCard({
         </motion.div>
       )}
     </AnimatePresence>
+
+    {showEditModal && (
+      <EditChildModal
+        child={child}
+        onClose={() => setShowEditModal(false)}
+        onSaved={(patch) => { setShowEditModal(false); onEdited(child.id, patch) }}
+        onDeleted={() => { setShowEditModal(false); onDeleted(child.id) }}
+      />
+    )}
     </div>
   )
 }
@@ -1054,6 +1085,17 @@ export default function CheckInPage() {
   function handleCategoryChanged(childId: string, newCategory: Category) {
     const patch = (c: ChildResult) => (c.id === childId ? { ...c, category: newCategory } : c)
     setAllChildren((prev) => prev.map(patch))
+  }
+
+  // Same idea as handleCategoryChanged — allChildren is the source both
+  // `children` (category view) and the global search results derive from,
+  // so patching/removing there is enough to update every list on screen.
+  function handleChildEdited(childId: string, patch: Partial<ChildResult>) {
+    setAllChildren((prev) => prev.map((c) => (c.id === childId ? { ...c, ...patch } : c)))
+  }
+
+  function handleChildDeleted(childId: string) {
+    setAllChildren((prev) => prev.filter((c) => c.id !== childId))
   }
 
   // Refreshes whichever list(s) are currently on screen so a newly-added
@@ -1328,6 +1370,8 @@ export default function CheckInPage() {
                     teamColor={teamColor}
                     isAdmin={isAdmin}
                     onCategoryChanged={handleCategoryChanged}
+                    onEdited={handleChildEdited}
+                    onDeleted={handleChildDeleted}
                     isSelected={selectedId === child.id}
                     onSelect={() => setSelectedId(child.id)}
                     onDeselect={() => setSelectedId(null)}
@@ -1347,6 +1391,8 @@ export default function CheckInPage() {
                       teamColor={teamColor}
                       isAdmin={isAdmin}
                       onCategoryChanged={handleCategoryChanged}
+                      onEdited={handleChildEdited}
+                      onDeleted={handleChildDeleted}
                       isSelected={selectedId === child.id}
                       onSelect={() => setSelectedId(child.id)}
                       onDeselect={() => setSelectedId(null)}
@@ -1554,6 +1600,8 @@ export default function CheckInPage() {
                   teamColor={teamColor}
                   isAdmin={isAdmin}
                   onCategoryChanged={handleCategoryChanged}
+                  onEdited={handleChildEdited}
+                  onDeleted={handleChildDeleted}
                   isSelected={selectedId === child.id}
                   onSelect={() => setSelectedId(child.id)}
                   onDeselect={() => setSelectedId(null)}
@@ -1573,6 +1621,8 @@ export default function CheckInPage() {
                     teamColor={teamColor}
                     isAdmin={isAdmin}
                     onCategoryChanged={handleCategoryChanged}
+                    onEdited={handleChildEdited}
+                    onDeleted={handleChildDeleted}
                     isSelected={selectedId === child.id}
                     onSelect={() => setSelectedId(child.id)}
                     onDeselect={() => setSelectedId(null)}
@@ -1683,6 +1733,8 @@ export default function CheckInPage() {
                 teamColor={teamColor}
                 isAdmin={isAdmin}
                 onCategoryChanged={handleCategoryChanged}
+                onEdited={handleChildEdited}
+                onDeleted={handleChildDeleted}
                 isSelected={selectedId === child.id}
                 onSelect={() => setSelectedId(child.id)}
                 onDeselect={() => setSelectedId(null)}
