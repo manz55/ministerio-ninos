@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   Users, RefreshCw, Download, AlertTriangle, FileText, FileSpreadsheet, PartyPopper, Check, Pencil,
   Bug, Zap, Compass, Baby, PersonStanding, TrendingUp, ChevronDown, ChevronUp, User, Trash2, X, CalendarRange, Monitor,
-  FileWarning, ArrowRight,
+  FileWarning, ArrowRight, Copy,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { CATEGORY_LABELS, CATEGORY_COLORS, ACTIVE_CATEGORIES, NEXT_CATEGORY, type Category } from '../types/domain'
@@ -217,6 +217,45 @@ export default function ReportsPage() {
 
   const [rangeFrom, setRangeFrom] = useState(format(subWeeks(new Date(), 1), 'yyyy-MM-dd'))
   const [rangeTo, setRangeTo]     = useState(todayStr)
+
+  // ── Ranking de asistencia (quién viene más seguido, en el mismo rango) ──
+  const [showRanking, setShowRanking] = useState(false)
+  const [loadingRanking, setLoadingRanking] = useState(false)
+  const [rankingCategory, setRankingCategory] = useState<Category | 'todas'>('todas')
+  const [ranking, setRanking] = useState<{ id: string; full_name: string; category: Category; visits: number }[]>([])
+  const [copiedRanking, setCopiedRanking] = useState(false)
+
+  const fetchRanking = useCallback(async () => {
+    if (!rangeFrom || !rangeTo || rangeFrom > rangeTo) return
+    setLoadingRanking(true)
+    const { data } = await supabase
+      .from('attendance')
+      .select('child_id, category, children(full_name)')
+      .gte('session_date', rangeFrom)
+      .lte('session_date', rangeTo)
+      .is('deleted_at', null)
+    const byChild = new Map<string, { full_name: string; category: Category; visits: number }>()
+    for (const row of (data ?? []) as unknown as { child_id: string; category: Category; children: { full_name: string } | null }[]) {
+      if (!row.children) continue
+      const existing = byChild.get(row.child_id)
+      if (existing) existing.visits += 1
+      else byChild.set(row.child_id, { full_name: row.children.full_name, category: row.category, visits: 1 })
+    }
+    setRanking([...byChild.entries()].map(([id, v]) => ({ id, ...v })).sort((a, b) => b.visits - a.visits || a.full_name.localeCompare(b.full_name)))
+    setLoadingRanking(false)
+  }, [rangeFrom, rangeTo])
+
+  useEffect(() => {
+    if (showRanking) fetchRanking()
+  }, [showRanking, fetchRanking])
+
+  const filteredRanking = rankingCategory === 'todas' ? ranking : ranking.filter((r) => r.category === rankingCategory)
+
+  function copyRankingNames() {
+    navigator.clipboard.writeText(filteredRanking.map((r) => r.full_name).join('\n'))
+    setCopiedRanking(true)
+    setTimeout(() => setCopiedRanking(false), 1500)
+  }
 
   // Shared by both range exports below — thrown messages surface directly in
   // the receipt's own error banner (rango inválido, sin registros…) instead
@@ -659,6 +698,77 @@ export default function ReportsPage() {
             />
           </div>
         </div>
+      </section>
+
+      {/* ── Ranking de asistencia — quién viene más seguido, mismo rango de arriba ── */}
+      <section className="space-y-3">
+        <button
+          onClick={() => setShowRanking((v) => !v)}
+          className="w-full flex items-center justify-between p-4 bg-indigo-50 border border-indigo-200 rounded-2xl hover:bg-indigo-100 transition-colors"
+        >
+          <div className="flex items-center gap-2 text-indigo-700">
+            <TrendingUp size={15} />
+            <span className="font-semibold text-sm">Ranking de asistencia</span>
+          </div>
+          {showRanking ? <ChevronUp size={14} className="text-indigo-400" /> : <ChevronDown size={14} className="text-indigo-400" />}
+        </button>
+
+        <AnimatePresence>
+          {showRanking && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              className="overflow-hidden"
+            >
+              <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4 space-y-3">
+                <p className="text-xs text-gray-400">
+                  Cuenta las veces que cada niño vino, del <strong>{rangeFrom}</strong> al <strong>{rangeTo}</strong> (cambia el rango arriba, en "Reportes y exportaciones").
+                </p>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <select
+                    value={rankingCategory}
+                    onChange={(e) => setRankingCategory(e.target.value as Category | 'todas')}
+                    className="px-3 py-2 border-2 border-gray-200 rounded-lg text-sm focus:border-indigo-500 focus:outline-none bg-white"
+                  >
+                    <option value="todas">Todas las categorías</option>
+                    {ACTIVE_CATEGORIES.map((c) => (
+                      <option key={c} value={c}>{CATEGORY_LABELS[c]}</option>
+                    ))}
+                  </select>
+                  <button
+                    onClick={copyRankingNames}
+                    disabled={filteredRanking.length === 0}
+                    className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-indigo-700 bg-indigo-50 border-2 border-indigo-200 rounded-lg hover:bg-indigo-100 disabled:opacity-40 transition-colors"
+                  >
+                    {copiedRanking ? <Check size={13} /> : <Copy size={13} />}
+                    {copiedRanking ? 'Copiado' : 'Copiar nombres'}
+                  </button>
+                  <span className="text-xs text-gray-400">{filteredRanking.length} niño{filteredRanking.length !== 1 ? 's' : ''}</span>
+                </div>
+
+                {loadingRanking ? (
+                  <p className="text-sm text-gray-400 text-center py-6">Calculando…</p>
+                ) : filteredRanking.length === 0 ? (
+                  <p className="text-sm text-gray-400 text-center py-6">Nadie ha venido en ese rango todavía.</p>
+                ) : (
+                  <div className="max-h-96 overflow-y-auto -mx-1 px-1">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                      {filteredRanking.map((r) => (
+                        <div key={r.id} className="flex items-center justify-between gap-2 px-3 py-2 bg-gray-50 rounded-lg">
+                          <span className="text-sm text-gray-700 truncate">{r.full_name}</span>
+                          <span className={`shrink-0 text-xs font-bold px-2 py-0.5 rounded-full border ${CATEGORY_COLORS[r.category]}`}>
+                            {r.visits}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </section>
 
       {/* ── Historial semanal ── */}
