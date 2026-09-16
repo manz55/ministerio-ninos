@@ -6,6 +6,7 @@ import { getCategoryFromBirthDate } from '../../lib/categoryUtils'
 import { uploadPhoto } from '../../lib/photo'
 import { createChildSearcher, searchChildrenSplit, findBySurname, type SearchableChild } from '../../lib/fuzzySearch'
 import { CategoryBadge } from '../ui/CategoryBadge'
+import { AssignedMaestroField } from '../ui/AssignedMaestroField'
 import { PhotoCapture } from '../ui/PhotoCapture'
 import { GUARDIAN_RELATIONSHIP_LABELS, isCorderitos, type Category, type GuardianRelationship, type ParentRow, type ChildRow, type ChildPrefill } from '../../types/domain'
 
@@ -18,6 +19,7 @@ interface ChildDraft {
   guardian_relationship: GuardianRelationship | ''
   comments: string
   toilet_trained: boolean | null
+  assigned_maestro_id: string | null
   photoBlob: Blob | null
 }
 
@@ -38,7 +40,7 @@ interface Props {
 function newChild(key: string): ChildDraft {
   return {
     key, full_name: '', birth_date: '', allergies: '', medical_notes: '',
-    guardian_relationship: '', comments: '', toilet_trained: null, photoBlob: null,
+    guardian_relationship: '', comments: '', toilet_trained: null, assigned_maestro_id: null, photoBlob: null,
   }
 }
 
@@ -156,6 +158,7 @@ export function NewFamilyStep({
           guardian_relationship: c.guardian_relationship || null,
           comments: c.comments.trim() || null,
           toilet_trained: c.toilet_trained,
+          assigned_maestro_id: c.assigned_maestro_id,
         }))
       )
       .select()
@@ -411,6 +414,13 @@ export function NewFamilyStep({
                     ))}
                   </div>
                 </div>
+              )}
+
+              {isCorderitos(category) && (
+                <AssignedMaestroField
+                  value={child.assigned_maestro_id}
+                  onChange={(id) => updateChild(child.key, 'assigned_maestro_id', id)}
+                />
               )}
 
               <div>

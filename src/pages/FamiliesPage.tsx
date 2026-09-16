@@ -12,6 +12,7 @@ import { markRequestResolved } from '../lib/coordinatorRequests'
 import { createChildSearcher, searchChildrenSplit, findBySurname, normalizeName } from '../lib/fuzzySearch'
 import { uploadPhoto } from '../lib/photo'
 import { CategoryBadge } from '../components/ui/CategoryBadge'
+import { AssignedMaestroField } from '../components/ui/AssignedMaestroField'
 import { PhotoCapture, PhotoAvatar } from '../components/ui/PhotoCapture'
 import { ChildContacts } from '../components/ui/ChildContacts'
 import { QuickCheckIn } from '../components/ui/QuickCheckIn'
@@ -34,6 +35,8 @@ type ChildDetail = {
   comments: string | null
   toilet_trained: boolean | null
   photo_url: string | null
+  assigned_maestro_id: string | null
+  assigned_maestro?: { nombre: string; apellido: string } | null
   attendance: { count: number }[]
 }
 
@@ -99,7 +102,7 @@ function ChildEditForm({
   onCancel,
 }: {
   child: ChildDetail
-  onSave: (data: Omit<Partial<ChildDetail>, 'id' | 'parent_id' | 'attendance'>) => Promise<void>
+  onSave: (data: Omit<Partial<ChildDetail>, 'id' | 'parent_id' | 'attendance' | 'assigned_maestro'>) => Promise<void>
   onCancel: () => void
 }) {
   const [name, setName]         = useState(child.full_name)
@@ -109,6 +112,7 @@ function ChildEditForm({
   const [relationship, setRelationship] = useState<GuardianRelationship | ''>(child.guardian_relationship ?? '')
   const [comments, setComments] = useState(child.comments ?? '')
   const [toiletTrained, setToiletTrained] = useState<boolean | null>(child.toilet_trained)
+  const [assignedMaestroId, setAssignedMaestroId] = useState<string | null>(child.assigned_maestro_id)
   const [manualCategory, setManualCategory] = useState<Category | ''>(child.category ?? '')
   const [photoBlob, setPhotoBlob] = useState<Blob | null>(null)
   const [saving, setSaving]     = useState(false)
@@ -117,17 +121,22 @@ function ChildEditForm({
   const previewCategory = birthDate ? getCategoryFromBirthDate(birthDate) : null
   const previewAge = getAgeLabel(birthDate)
 
-  // Category normally follows birth date, but a coordinator can override it by
-  // hand (e.g. a child who's aged past what the category allows but stays put
-  // for another reason) — only re-sync to the computed category when the
-  // birth date itself changes, so a manual override made afterward sticks.
-  useEffect(() => {
-    if (birthDate) {
-      const computed = getCategoryFromBirthDate(birthDate)
-      if (computed) setManualCategory(computed)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [birthDate])
+  // Category normally follows birth date, but a coordinator can override it
+  // by hand, and a stored category must never move on its own — only a
+  // deliberate edit to the birth date field itself (handled in that input's
+  // onChange below) re-suggests a category. This used to be a useEffect
+  // keyed on `birthDate`, which also fires on the form's initial mount (that
+  // effect's dependency starts already set from child.birth_date) — meaning
+  // just opening any child's edit screen and hitting "Guardar cambios",
+  // without touching anything, silently overwrote their stored category to
+  // whatever birth_date now computes. Real bug, found after widening the
+  // Corderitos age ranges made that computed value disagree with what was
+  // stored for most kids at once.
+  function handleBirthDateChange(value: string) {
+    setBirthDate(value)
+    const computed = value ? getCategoryFromBirthDate(value) : null
+    if (computed) setManualCategory(computed)
+  }
 
   async function handleSave() {
     if (!name.trim()) { setError('El nombre es requerido'); return }
@@ -146,6 +155,7 @@ function ChildEditForm({
       guardian_relationship: relationship || null,
       comments: comments.trim() || null,
       toilet_trained: toiletTrained,
+      assigned_maestro_id: assignedMaestroId,
       photo_url,
     })
     setSaving(false)
@@ -164,7 +174,7 @@ function ChildEditForm({
         <label className="block text-xs font-medium text-gray-500 mb-1">Fecha de nacimiento</label>
         <div className="flex items-center gap-2">
           <input type="date" value={birthDate ?? ''} max={new Date().toISOString().split('T')[0]}
-            onChange={(e) => setBirthDate(e.target.value)}
+            onChange={(e) => handleBirthDateChange(e.target.value)}
             className="flex-1 px-3 py-2.5 border-2 border-gray-200 rounded-lg focus:border-indigo-500 focus:outline-none text-sm" />
           <div className="flex items-center gap-1.5 shrink-0">
             <CategoryBadge category={manualCategory || previewCategory || child.category} size="sm" />
@@ -211,6 +221,9 @@ function ChildEditForm({
             ))}
           </div>
         </div>
+      )}
+      {isCorderitos(manualCategory || previewCategory || child.category) && (
+        <AssignedMaestroField value={assignedMaestroId} onChange={setAssignedMaestroId} compact />
       )}
       <div>
         <label className="block text-xs font-medium text-gray-500 mb-1">Parentesco del responsable</label>
@@ -265,6 +278,7 @@ function NewChildForm({ parentId, prefill, onSaved, onCancel }: { parentId: stri
   const [relationship, setRelationship] = useState<GuardianRelationship | ''>(prefill?.guardian_relationship ?? '')
   const [comments, setComments] = useState(prefill?.comments ?? '')
   const [toiletTrained, setToiletTrained] = useState<boolean | null>(prefill?.toilet_trained ?? null)
+  const [assignedMaestroId, setAssignedMaestroId] = useState<string | null>(null)
   const [photoBlob, setPhotoBlob] = useState<Blob | null>(null)
   const [saving, setSaving]     = useState(false)
   const [error, setError]       = useState<string | null>(null)
@@ -281,7 +295,7 @@ function NewChildForm({ parentId, prefill, onSaved, onCancel }: { parentId: stri
       category: getCategoryFromBirthDate(birthDate),
       allergies: allergies.trim() || null, medical_notes: notes.trim() || null,
       guardian_relationship: relationship || null, comments: comments.trim() || null,
-      toilet_trained: toiletTrained,
+      toilet_trained: toiletTrained, assigned_maestro_id: assignedMaestroId,
     }).select().single()
     if (err || !data) { setSaving(false); setError('Error al guardar.'); return }
     if (photoBlob) {
@@ -340,6 +354,9 @@ function NewChildForm({ parentId, prefill, onSaved, onCancel }: { parentId: stri
             ))}
           </div>
         </div>
+      )}
+      {isCorderitos(previewCategory) && (
+        <AssignedMaestroField value={assignedMaestroId} onChange={setAssignedMaestroId} compact />
       )}
       <div>
         <label className="block text-xs font-medium text-gray-500 mb-1">Parentesco del responsable</label>
@@ -439,7 +456,7 @@ function FamilyDetailPanel({
     onRefresh()
   }
 
-  async function saveChild(childId: string, data: Omit<Partial<ChildDetail>, 'id' | 'parent_id' | 'attendance'>) {
+  async function saveChild(childId: string, data: Omit<Partial<ChildDetail>, 'id' | 'parent_id' | 'attendance' | 'assigned_maestro'>) {
     const { data: updated, error } = await supabase.from('children').update(data).eq('id', childId).select('id')
     if (error || !updated || updated.length === 0) { setDeleteError('No se pudo guardar. Intenta de nuevo.'); return }
     setEditingChildId(null)
@@ -605,9 +622,9 @@ function FamilyDetailPanel({
                         <span className="text-xs text-gray-400">·</span>
                         <span className="text-xs font-semibold text-indigo-600">{visits} visita{visits !== 1 ? 's' : ''}</span>
                       </div>
-                      {categoryChanged && category && child.category && NEXT_CATEGORY[child.category] === category && (
+                      {categoryChanged && child.category && NEXT_CATEGORY[child.category] && (
                         <span className="inline-block text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">
-                          🎉 Ya cumplió años, puede pasar a {CATEGORY_LABELS[category]}
+                          🎉 Ya cumplió años, puede pasar a {CATEGORY_LABELS[NEXT_CATEGORY[child.category]!]}
                         </span>
                       )}
                       {child.guardian_relationship && (
@@ -647,6 +664,12 @@ function FamilyDetailPanel({
                 {isCorderitos(category) && child.toilet_trained !== null && !isEditing && (
                   <p className="text-xs text-gray-500 bg-gray-50 rounded-lg px-3 py-2">
                     🚼 {child.toilet_trained ? 'Ya va solo al baño' : 'Aún usa pañal / no va solo al baño'}
+                  </p>
+                )}
+
+                {isCorderitos(category) && child.assigned_maestro && !isEditing && (
+                  <p className="text-xs text-gray-500 bg-gray-50 rounded-lg px-3 py-2">
+                    🧑‍🏫 Maestro responsable: {child.assigned_maestro.nombre} {child.assigned_maestro.apellido}
                   </p>
                 )}
 
@@ -784,7 +807,7 @@ function RosterRow({ child, onChanged }: { child: RosterChild; onChanged: () => 
     onChanged()
   }
 
-  async function saveChild(data: Omit<Partial<ChildDetail>, 'id' | 'parent_id' | 'attendance'>) {
+  async function saveChild(data: Omit<Partial<ChildDetail>, 'id' | 'parent_id' | 'attendance' | 'assigned_maestro'>) {
     const { data: updated, error } = await supabase.from('children').update(data).eq('id', child.id).select('id')
     if (error || !updated || updated.length === 0) { setDeleteError('No se pudo guardar. Intenta de nuevo.'); return }
     setEditing(false)
@@ -895,7 +918,7 @@ function RosterPanel({ onClose, initialFilter, onLinkToFamily }: {
     setLoading(true)
     const { data } = await supabase
       .from('children')
-      .select('*, parents(id, full_name, phone), attendance(count)')
+      .select('*, parents(id, full_name, phone), attendance(count), assigned_maestro:maestros(nombre, apellido)')
       .is('deleted_at', null)
       .order('full_name')
     setChildren((data as RosterChild[]) ?? [])
@@ -1093,7 +1116,7 @@ export default function FamiliesPage() {
     setLoadingAll(true)
     const { data } = await supabase
       .from('parents')
-      .select('*, children(*, attendance(count))')
+      .select('*, children(*, attendance(count), assigned_maestro:maestros(nombre, apellido))')
       .is('deleted_at', null)
       .is('children.deleted_at', null)
       .order('full_name')
@@ -1152,7 +1175,7 @@ export default function FamiliesPage() {
   const fetchFamily = useCallback(async (id: string): Promise<FamilyDetail | null> => {
     const { data } = await supabase
       .from('parents')
-      .select('*, children(*, attendance(count))')
+      .select('*, children(*, attendance(count), assigned_maestro:maestros(nombre, apellido))')
       .is('children.deleted_at', null)
       .eq('id', id)
       .single()
