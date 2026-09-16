@@ -18,20 +18,28 @@ export function isCorderitos(category: Category | null): boolean {
 }
 
 export const CATEGORY_LABELS: Record<Category, string> = {
-  corderitos_0_2: 'Corderitos 0-2 años',
-  corderitos_2_4: 'Corderitos 2-4 años',
+  corderitos_0_2: 'Corderitos 1-2 años',
+  corderitos_2_4: 'Corderitos 3-4 años',
   hormiguitas: 'Hormiguitas',
   saltamontes: 'Saltamontes',
   exploradores: 'Exploradores',
 }
 
+// Hormiguitas overlaps with Corderitos 3-4 on purpose (edad 4) — es una zona
+// de transición. getCategoryFromBirthDate (categoryUtils.ts) resuelve ese
+// solape prefiriendo el grupo más joven; el coordinador decide a mano cuándo
+// graduar a un niño de 4 años a Hormiguitas durante el registro.
 export const CATEGORY_AGE_RANGES: Record<Category, { min: number; max: number }> = {
-  corderitos_0_2: { min: 0, max: 1 },
-  corderitos_2_4: { min: 2, max: 3 },
+  corderitos_0_2: { min: 1, max: 2 },
+  corderitos_2_4: { min: 3, max: 4 },
   hormiguitas: { min: 4, max: 6 },
   saltamontes: { min: 7, max: 9 },
   exploradores: { min: 10, max: 12 },
 }
+
+// Orden de las categorías de menor a mayor edad — usado para resolver la
+// categoría sugerida a partir de la fecha de nacimiento (ver categoryUtils.ts).
+export const CATEGORY_ORDER: Category[] = ['corderitos_0_2', 'corderitos_2_4', 'hormiguitas', 'saltamontes', 'exploradores']
 
 export const NEXT_CATEGORY: Record<Category, Category | null> = {
   corderitos_0_2: 'corderitos_2_4',
@@ -65,11 +73,11 @@ export interface Profile {
 }
 
 export const CATEGORY_COLORS: Record<Category, string> = {
-  corderitos_0_2: 'bg-pink-100 text-pink-800 border-pink-200',
-  corderitos_2_4: 'bg-rose-100 text-rose-800 border-rose-200',
-  hormiguitas: 'bg-yellow-100 text-yellow-800 border-yellow-200',
+  corderitos_0_2: 'bg-sky-100 text-sky-800 border-sky-200',
+  corderitos_2_4: 'bg-blue-100 text-blue-800 border-blue-200',
+  hormiguitas: 'bg-red-100 text-red-800 border-red-200',
   saltamontes: 'bg-green-100 text-green-800 border-green-200',
-  exploradores: 'bg-blue-100 text-blue-800 border-blue-200',
+  exploradores: 'bg-orange-100 text-orange-800 border-orange-200',
 }
 
 // Carries a child's already-known details across the "turns out this family
@@ -118,7 +126,9 @@ export interface Child {
   toilet_trained: boolean | null
   photo_url: string | null
   created_at: string
+  assigned_maestro_id: string | null
   parent?: Parent
+  assigned_maestro?: { nombre: string; apellido: string } | null
 }
 
 export interface AttendanceRecord {
@@ -157,6 +167,8 @@ export interface ChildRow {
   toilet_trained: boolean | null
   photo_url: string | null
   created_at: string
+  assigned_maestro_id: string | null
+  assigned_maestro?: { nombre: string; apellido: string } | null
   attendance: AttendanceToday[]
 }
 

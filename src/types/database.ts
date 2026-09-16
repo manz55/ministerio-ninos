@@ -157,6 +157,7 @@ export type Database = {
       children: {
         Row: {
           allergies: string | null
+          assigned_maestro_id: string | null
           birth_date: string | null
           category: string | null
           comments: string | null
@@ -173,6 +174,7 @@ export type Database = {
         }
         Insert: {
           allergies?: string | null
+          assigned_maestro_id?: string | null
           birth_date?: string | null
           category?: string | null
           comments?: string | null
@@ -189,6 +191,7 @@ export type Database = {
         }
         Update: {
           allergies?: string | null
+          assigned_maestro_id?: string | null
           birth_date?: string | null
           category?: string | null
           comments?: string | null
@@ -204,6 +207,13 @@ export type Database = {
           toilet_trained?: boolean | null
         }
         Relationships: [
+          {
+            foreignKeyName: "children_assigned_maestro_id_fkey"
+            columns: ["assigned_maestro_id"]
+            isOneToOne: false
+            referencedRelation: "maestros"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "children_deleted_by_fkey"
             columns: ["deleted_by"]
@@ -579,6 +589,11 @@ export type Database = {
     }
     Functions: {
       assign_attendance_teacher: {
+        // p_teacher_id is genuinely nullable (passing null unassigns) — the
+        // SQL function has no DEFAULT on it, so the Supabase type generator
+        // infers a non-null `string` even though the function body branches
+        // on `p_teacher_id is not null`. Corrected by hand; re-check this
+        // after any future `generate_typescript_types` regenerate.
         Args: { p_attendance_id: string; p_teacher_id: string | null }
         Returns: undefined
       }
@@ -608,7 +623,7 @@ export type Database = {
 
 type DatabaseWithoutInternals = Omit<Database, "__InternalSupabase">
 
-type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "public">]
+type DefaultSchema = DatabaseWithoutInternals["public"]
 
 export type Tables<
   DefaultSchemaTableNameOrOptions extends
