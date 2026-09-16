@@ -8,7 +8,9 @@ import {
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { CATEGORY_LABELS, CATEGORY_COLORS, ACTIVE_CATEGORIES, NEXT_CATEGORY, type Category } from '../types/domain'
-import { hasCategoryChanged, getCategoryFromBirthDate } from '../lib/categoryUtils'
+import { hasCategoryChanged } from '../lib/categoryUtils'
+import { computeAbsence, absenceMessage, type AbsenceTier } from '../lib/absenceUtils'
+import { graduationMessage } from '../lib/graduationMessages'
 import { DatePicker } from '../components/ui/DatePicker'
 import { AnimatedBlobBackground } from '../components/ui/AnimatedBlobBackground'
 import { fetchAttendanceRange, fetchDailyStaffing, exportRangeCSV, exportRangePDF, toCSV } from '../lib/exportUtils'
@@ -56,6 +58,15 @@ type RosterChild = {
   parents: { full_name: string; phone: string } | null
 }
 
+type AbsentChild = {
+  id: string
+  full_name: string
+  parentName: string
+  parentPhone: string | null
+  missed: number
+  tier: AbsenceTier
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const todayStr = format(new Date(), 'yyyy-MM-dd')
@@ -74,12 +85,16 @@ function downloadCSV(content: string, filename: string) {
 
 // ─── Category config for display ─────────────────────────────────────────────
 
+// Misma paleta que CATEGORY_COLORS (types/domain.ts) — Corderitos azul,
+// Hormiguitas rojo, Saltamontes verde, Exploradores naranja. Reportes tiene
+// su propio mapeo (icon/bg/border/bar, no solo el chip de CategoryBadge) así
+// que hay que mantenerlo sincronizado a mano si la paleta vuelve a cambiar.
 const CAT_CONFIG: Record<string, { icon: React.ComponentType<{ className?: string }>, color: string, bg: string, border: string, bar: string }> = {
-  corderitos_0_2: { icon: Baby,           color: 'text-pink-600', bg: 'bg-pink-50', border: 'border-pink-200', bar: 'bg-pink-500' },
-  corderitos_2_4: { icon: PersonStanding, color: 'text-rose-600', bg: 'bg-rose-50', border: 'border-rose-200', bar: 'bg-rose-500' },
-  hormiguitas: { icon: Bug,     color: 'text-emerald-600', bg: 'bg-emerald-50',  border: 'border-emerald-200', bar: 'bg-emerald-500' },
-  saltamontes: { icon: Zap,     color: 'text-amber-600',   bg: 'bg-amber-50',    border: 'border-amber-200',   bar: 'bg-amber-500'   },
-  exploradores:{ icon: Compass, color: 'text-sky-600',     bg: 'bg-sky-50',      border: 'border-sky-200',     bar: 'bg-sky-500'     },
+  corderitos_0_2: { icon: Baby,           color: 'text-sky-600',   bg: 'bg-sky-50',   border: 'border-sky-200',   bar: 'bg-sky-500'   },
+  corderitos_2_4: { icon: PersonStanding, color: 'text-blue-600',  bg: 'bg-blue-50',  border: 'border-blue-200',  bar: 'bg-blue-500'  },
+  hormiguitas: { icon: Bug,     color: 'text-red-600',    bg: 'bg-red-50',    border: 'border-red-200',    bar: 'bg-red-500'    },
+  saltamontes: { icon: Zap,     color: 'text-green-600',  bg: 'bg-green-50',  border: 'border-green-200',  bar: 'bg-green-500'  },
+  exploradores:{ icon: Compass, color: 'text-orange-600', bg: 'bg-orange-50', border: 'border-orange-200', bar: 'bg-orange-500' },
 }
 
 // ─── SVG Weekly Chart ─────────────────────────────────────────────────────────
@@ -188,6 +203,8 @@ export default function ReportsPage() {
   const [showMedical, setShowMedical]   = useState(false)
   const [graduatingChildren, setGraduatingChildren] = useState<RosterChild[]>([])
   const [showGraduating, setShowGraduating] = useState(false)
+  const [absentChildren, setAbsentChildren] = useState<AbsentChild[]>([])
+  const [showAbsences, setShowAbsences] = useState(false)
   const [catFilter, setCatFilter]       = useState<Category | 'all'>('all')
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
   const [deleting, setDeleting]         = useState(false)
@@ -265,6 +282,42 @@ export default function ReportsPage() {
     setGraduatingChildren(roster.filter((c) => hasCategoryChanged(c)))
   }, [])
 
+  // Alertas de inasistencia: cuenta domingos con servicio (fechas ya
+  // presentes en `attendance`, no el calendario) transcurridos desde el
+  // último check-in de cada niño — ver absenceUtils.ts para el porqué.
+  const fetchAbsences = useCallback(async () => {
+    const [{ data: children }, { data: attendance }] = await Promise.all([
+      supabase.from('children').select('id, full_name, created_at, parents(full_name, phone)').is('deleted_at', null),
+      supabase.from('attendance').select('child_id, session_date').is('deleted_at', null),
+    ])
+    if (!children || !attendance) return
+
+    const lastSeenByChild = new Map<string, string>()
+    const globalDatesSet = new Set<string>()
+    for (const row of attendance as { child_id: string; session_date: string }[]) {
+      globalDatesSet.add(row.session_date)
+      const current = lastSeenByChild.get(row.child_id)
+      if (!current || row.session_date > current) lastSeenByChild.set(row.child_id, row.session_date)
+    }
+    const globalDates = [...globalDatesSet]
+
+    const results: AbsentChild[] = []
+    for (const c of children as unknown as (RosterChild & { created_at: string })[]) {
+      const info = computeAbsence(c.created_at, lastSeenByChild.get(c.id) ?? null, globalDates)
+      if (!info.tier) continue
+      results.push({
+        id: c.id,
+        full_name: c.full_name,
+        parentName: c.parents?.full_name ?? 'Sin responsable',
+        parentPhone: c.parents?.phone ?? null,
+        missed: info.missed,
+        tier: info.tier,
+      })
+    }
+    results.sort((a, b) => b.missed - a.missed)
+    setAbsentChildren(results)
+  }, [])
+
   const fetchHistory = useCallback(async () => {
     setLoadingHistory(true)
     const since = format(subWeeks(new Date(), 10), 'yyyy-MM-dd')
@@ -304,7 +357,7 @@ export default function ReportsPage() {
   }, [])
 
   useEffect(() => {
-    fetchLive(); fetchHistory(); fetchMedical()
+    fetchLive(); fetchHistory(); fetchMedical(); fetchAbsences()
 
     const channel = supabase
       .channel('attendance-live')
@@ -316,7 +369,7 @@ export default function ReportsPage() {
       supabase.removeChannel(channel)
       if (intervalRef.current) clearInterval(intervalRef.current)
     }
-  }, [fetchLive, fetchHistory, fetchMedical])
+  }, [fetchLive, fetchHistory, fetchMedical, fetchAbsences])
 
   // Generates the real attendance-report PDF for the selected day — the same
   // export pipeline the date-range "PDF" button uses (fetchAttendanceRange +
@@ -425,7 +478,7 @@ export default function ReportsPage() {
           </div>
           <div className="flex items-center gap-2">
             <button
-              onClick={() => { fetchLive(); fetchHistory(); fetchMedical() }}
+              onClick={() => { fetchLive(); fetchHistory(); fetchMedical(); fetchAbsences() }}
               className="flex items-center gap-1.5 px-3 py-2 text-sm text-gray-600 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
             >
               <RefreshCw size={13} /> Actualizar
@@ -864,30 +917,99 @@ export default function ReportsPage() {
               )}
               <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-2 items-start">
               {graduatingChildren.map((child) => {
-                const nextCat = child.category ? NEXT_CATEGORY[child.category] : null
-                const computedCat = getCategoryFromBirthDate(child.birth_date)
+                // El objetivo siempre es "lo que sigue después de donde ya
+                // está" — hasCategoryChanged (categoryUtils.ts) ya validó
+                // que la edad alcanza para ese siguiente paso.
+                const toCat = child.category ? NEXT_CATEGORY[child.category] : null
                 return (
-                  <div key={child.id} className="bg-white rounded-xl border-2 border-amber-200 p-4 flex items-center justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="font-bold text-gray-900 text-sm truncate">{child.full_name}</p>
-                      <p className="text-xs text-gray-500">{child.parents?.full_name ?? 'Sin responsable'}</p>
+                  <div key={child.id} className="bg-white rounded-xl border-2 border-amber-200 p-4 space-y-2">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="font-bold text-gray-900 text-sm truncate">{child.full_name}</p>
+                        <p className="text-xs text-gray-500">{child.parents?.full_name ?? 'Sin responsable'}</p>
+                      </div>
+                      <div className="flex items-center gap-1.5 text-xs font-semibold shrink-0">
+                        {child.category && (
+                          <span className={`px-2 py-0.5 whitespace-nowrap rounded-full border ${CATEGORY_COLORS[child.category]}`}>
+                            {CATEGORY_LABELS[child.category]}
+                          </span>
+                        )}
+                        <span className="text-amber-500">→</span>
+                        {toCat && (
+                          <span className={`px-2 py-0.5 whitespace-nowrap rounded-full border ${CATEGORY_COLORS[toCat]}`}>
+                            {CATEGORY_LABELS[toCat]}
+                          </span>
+                        )}
+                      </div>
                     </div>
-                    <div className="flex items-center gap-1.5 text-xs font-semibold shrink-0">
-                      {child.category && (
-                        <span className={`px-2 py-0.5 whitespace-nowrap rounded-full border ${CATEGORY_COLORS[child.category]}`}>
-                          {CATEGORY_LABELS[child.category]}
-                        </span>
-                      )}
-                      <span className="text-amber-500">→</span>
-                      {(computedCat ?? nextCat) && (
-                        <span className={`px-2 py-0.5 whitespace-nowrap rounded-full border ${CATEGORY_COLORS[(computedCat ?? nextCat)!]}`}>
-                          {CATEGORY_LABELS[(computedCat ?? nextCat)!]}
-                        </span>
-                      )}
-                    </div>
+                    {toCat && (
+                      <p className="text-xs text-gray-500">{graduationMessage(child.full_name, CATEGORY_LABELS[toCat])}</p>
+                    )}
                   </div>
                 )
               })}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </section>
+
+      {/* ── Inasistencias ── */}
+      <section className="space-y-3">
+        <button
+          onClick={() => setShowAbsences((v) => !v)}
+          className="w-full flex items-center justify-between p-4 bg-red-50 border border-red-200 rounded-2xl hover:bg-red-100 transition-colors"
+        >
+          <div className="flex items-center gap-2 text-red-700">
+            <AlertTriangle size={15} />
+            <span className="font-semibold text-sm">
+              Inasistencias
+              {absentChildren.length > 0 && (
+                <span className="ml-2 bg-red-200 text-red-800 text-xs font-bold px-2 py-0.5 rounded-full">
+                  {absentChildren.length}
+                </span>
+              )}
+            </span>
+          </div>
+          {showAbsences ? <ChevronUp size={14} className="text-red-400" /> : <ChevronDown size={14} className="text-red-400" />}
+        </button>
+
+        <AnimatePresence>
+          {showAbsences && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              className="overflow-hidden"
+            >
+              {absentChildren.length === 0 && (
+                <p className="text-sm text-gray-400 text-center py-4">Nadie con inasistencias por ahora.</p>
+              )}
+              <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-2 items-start">
+                {absentChildren.map((child) => {
+                  const tierStyle = child.tier === 'roja'
+                    ? 'border-red-200 bg-red-50/60'
+                    : child.tier === 'amarilla'
+                    ? 'border-amber-200 bg-amber-50/60'
+                    : 'border-gray-200 bg-white'
+                  return (
+                    <div key={child.id} className={`rounded-xl border-2 p-4 space-y-1.5 ${tierStyle}`}>
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="font-bold text-gray-900 text-sm truncate">{child.full_name}</p>
+                        <span className="text-xs font-bold text-gray-400 shrink-0">{child.missed} domingos</span>
+                      </div>
+                      <p className="text-xs text-gray-500">{absenceMessage(child.full_name, { missed: child.missed, lastSeen: null, tier: child.tier })}</p>
+                      <div className="flex items-center justify-between gap-2 pt-0.5">
+                        <span className="text-xs text-gray-400 truncate">{child.parentName}</span>
+                        {child.parentPhone && (
+                          <a href={`tel:${child.parentPhone}`} className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 shrink-0">
+                            {child.parentPhone}
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
             </motion.div>
           )}
