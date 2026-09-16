@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { Link } from 'react-router-dom'
 import { format, subWeeks, startOfWeek, endOfWeek } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Users, RefreshCw, Download, AlertTriangle, FileText, FileSpreadsheet, PartyPopper, Check, Pencil,
   Bug, Zap, Compass, Baby, PersonStanding, TrendingUp, ChevronDown, ChevronUp, User, Trash2, X, CalendarRange, Monitor,
+  FileWarning, ArrowRight,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { CATEGORY_LABELS, CATEGORY_COLORS, ACTIVE_CATEGORIES, NEXT_CATEGORY, type Category } from '../types/domain'
@@ -205,6 +207,7 @@ export default function ReportsPage() {
   const [showGraduating, setShowGraduating] = useState(false)
   const [absentChildren, setAbsentChildren] = useState<AbsentChild[]>([])
   const [showAbsences, setShowAbsences] = useState(false)
+  const [missingBirthDateCount, setMissingBirthDateCount] = useState(0)
   const [catFilter, setCatFilter]       = useState<Category | 'all'>('all')
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
   const [deleting, setDeleting]         = useState(false)
@@ -318,6 +321,18 @@ export default function ReportsPage() {
     setAbsentChildren(results)
   }, [])
 
+  // Sin birth_date, un niño nunca dispara ni las alertas de inasistencia por
+  // graduación ni el cómputo de edad en ningún otro lado de la app -- este
+  // aviso es lo que reemplaza el viejo nudge que traía "Coder" (ya no existe).
+  const fetchMissingBirthDate = useCallback(async () => {
+    const { count } = await supabase
+      .from('children')
+      .select('id', { count: 'exact', head: true })
+      .is('deleted_at', null)
+      .is('birth_date', null)
+    setMissingBirthDateCount(count ?? 0)
+  }, [])
+
   const fetchHistory = useCallback(async () => {
     setLoadingHistory(true)
     const since = format(subWeeks(new Date(), 10), 'yyyy-MM-dd')
@@ -357,7 +372,7 @@ export default function ReportsPage() {
   }, [])
 
   useEffect(() => {
-    fetchLive(); fetchHistory(); fetchMedical(); fetchAbsences()
+    fetchLive(); fetchHistory(); fetchMedical(); fetchAbsences(); fetchMissingBirthDate()
 
     const channel = supabase
       .channel('attendance-live')
@@ -369,7 +384,7 @@ export default function ReportsPage() {
       supabase.removeChannel(channel)
       if (intervalRef.current) clearInterval(intervalRef.current)
     }
-  }, [fetchLive, fetchHistory, fetchMedical, fetchAbsences])
+  }, [fetchLive, fetchHistory, fetchMedical, fetchAbsences, fetchMissingBirthDate])
 
   // Generates the real attendance-report PDF for the selected day — the same
   // export pipeline the date-range "PDF" button uses (fetchAttendanceRange +
@@ -478,7 +493,7 @@ export default function ReportsPage() {
           </div>
           <div className="flex items-center gap-2">
             <button
-              onClick={() => { fetchLive(); fetchHistory(); fetchMedical(); fetchAbsences() }}
+              onClick={() => { fetchLive(); fetchHistory(); fetchMedical(); fetchAbsences(); fetchMissingBirthDate() }}
               className="flex items-center gap-1.5 px-3 py-2 text-sm text-gray-600 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
             >
               <RefreshCw size={13} /> Actualizar
@@ -824,6 +839,25 @@ export default function ReportsPage() {
           </div>
         )}
       </section>
+
+      {/* ── Aviso: niños sin fecha de nacimiento ── */}
+      {missingBirthDateCount > 0 && (
+        <Link
+          to="/familias?roster=sin_fecha_nacimiento"
+          className="flex items-center justify-between gap-3 p-4 bg-amber-50 border border-amber-200 rounded-2xl hover:bg-amber-100 transition-colors"
+        >
+          <div className="flex items-center gap-2 text-amber-700 min-w-0">
+            <FileWarning size={15} className="shrink-0" />
+            <span className="font-semibold text-sm">
+              {missingBirthDateCount} niño{missingBirthDateCount !== 1 ? 's' : ''} sin fecha de nacimiento
+              <span className="hidden sm:inline text-amber-600 font-normal"> — sin eso no les funcionan las alertas de edad</span>
+            </span>
+          </div>
+          <span className="flex items-center gap-1 text-xs font-bold text-amber-700 shrink-0">
+            Ir a Familias <ArrowRight size={13} />
+          </span>
+        </Link>
+      )}
 
       {/* ── Directorio de alertas médicas ── */}
       <section className="space-y-3">

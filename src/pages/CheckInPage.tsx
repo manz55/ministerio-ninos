@@ -8,7 +8,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { getEffectiveCategory, hasCategoryChanged, getAgeLabel, requiresBadge, requiresPager } from '../lib/categoryUtils'
 import { markRequestResolved } from '../lib/coordinatorRequests'
-import { createChildSearcher, searchChildrenSplit } from '../lib/fuzzySearch'
+import { createChildSearcher, searchChildrenSplit, normalizeName } from '../lib/fuzzySearch'
 import { CATEGORY_LABELS, CATEGORY_COLORS, NEXT_CATEGORY, ACTIVE_CATEGORIES, isCorderitos, type Category, type TeamColor, type ParentRow, type GuardianRelationship } from '../types/domain'
 import { CategoryBadge } from '../components/ui/CategoryBadge'
 import { ChildContacts } from '../components/ui/ChildContacts'
@@ -285,6 +285,28 @@ function ObservationsPanel({
   )
 }
 
+// Carries the persistent "maestro responsable" (children.assigned_maestro_id,
+// picked from the `maestros` roster) forward into today's per-day claim
+// (attendance.assigned_teacher_id, which points at `profiles` — app logins,
+// a different table) so a coordinator doesn't have to re-pick the same
+// person right after check-in. The two tables aren't linked by an FK, so
+// this only fires on an exact, unambiguous name match — anything less
+// certain and it just leaves the "Asignar maestro" button for a manual
+// pick, same as before this existed. Fire-and-forget: never blocks or
+// fails the check-in itself.
+async function autoAssignTodayTeacher(attendanceId: string, maestroId: string) {
+  const { data: maestro } = await supabase.from('maestros').select('nombre, apellido').eq('id', maestroId).single()
+  if (!maestro) return
+  const target = normalizeName(`${maestro.nombre} ${maestro.apellido}`)
+
+  const { data: profiles } = await supabase.from('profiles').select('id, full_name').eq('active', true)
+  if (!profiles) return
+  const matches = profiles.filter((p) => normalizeName(p.full_name) === target)
+  if (matches.length !== 1) return
+
+  await supabase.rpc('assign_attendance_teacher', { p_attendance_id: attendanceId, p_teacher_id: matches[0].id })
+}
+
 // Who's personally responsible for a corderito right now (e.g. taking them
 // to the bathroom) — restricted to corderitos categories only, since that's
 // the age group where one adult needs to be directly accountable.
@@ -433,14 +455,14 @@ function ChildCard({
     if (!category) { setError('Este niño no tiene categoría asignada. Complétala en Familias.'); return }
     setSubmitting(true)
     setError(null)
-    const { error: err } = await supabase.from('attendance').insert({
+    const { data: inserted, error: err } = await supabase.from('attendance').insert({
       child_id: child.id,
       session_date: today,
       team_color: teamColor,
       category,
       badge_number: badgeNumber,
       pager_number: pagerNumber,
-    })
+    }).select('id').single()
     if (err) {
       setSubmitting(false)
       if (err.code === '23505' && err.message.includes('attendance_badge_category_unique')) {
@@ -463,6 +485,9 @@ function ChildCard({
     setBadge('')
     setPager('')
     setShowStamp(true)
+    if (inserted && isCorderitos(category) && child.assigned_maestro_id) {
+      autoAssignTodayTeacher(inserted.id, child.assigned_maestro_id)
+    }
     setTimeout(() => {
       setShowStamp(false)
       onRegistered(child.id, badgeNumber)
