@@ -13,6 +13,7 @@ import { CATEGORY_LABELS, CATEGORY_COLORS, NEXT_CATEGORY, ACTIVE_CATEGORIES, isC
 import { CategoryBadge } from '../components/ui/CategoryBadge'
 import { ChildContacts } from '../components/ui/ChildContacts'
 import { EditChildModal, type EditableChild } from '../components/ui/EditChildModal'
+import { AssignedMaestroField } from '../components/ui/AssignedMaestroField'
 import { NewFamilyStep } from '../components/checkin/NewFamilyStep'
 import { useDebounce } from '../hooks/useDebounce'
 import { BalloonBackground } from '../components/ui/BalloonBackground'
@@ -434,6 +435,11 @@ function ChildCard({
 
   const [badge, setBadge] = useState('')
   const [pager, setPager] = useState('')
+  // Maestro responsable, editable inline en el paso de confirmar Corderitos
+  // — evita un viaje aparte a "Editar niño" justo cuando ya se nota que
+  // nadie se lo ha puesto. Se guarda en `children` junto con el check-in.
+  const [maestroId, setMaestroId] = useState<string | null>(child.assigned_maestro_id)
+  const [maestroName, setMaestroName] = useState<string | null>(child.assigned_maestro_name)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showStamp, setShowStamp] = useState(false)
@@ -486,8 +492,17 @@ function ChildCard({
     setBadge('')
     setPager('')
     setShowStamp(true)
-    if (inserted && isCorderitos(category) && child.assigned_maestro_id) {
-      autoAssignTodayTeacher(inserted.id, child.assigned_maestro_id)
+    if (inserted && isCorderitos(category)) {
+      // El maestro responsable pudo haberse puesto o cambiado justo aquí en
+      // el paso de confirmar (ver el bloque de Corderitos más abajo) — se
+      // guarda junto con el check-in en vez de forzar un viaje aparte a
+      // "Editar niño".
+      const maestroChanged = maestroId !== child.assigned_maestro_id || maestroName !== child.assigned_maestro_name
+      if (maestroChanged) {
+        await supabase.from('children').update({ assigned_maestro_id: maestroId, assigned_maestro_name: maestroName }).eq('id', child.id)
+        onEdited(child.id, { assigned_maestro_id: maestroId, assigned_maestro_name: maestroName })
+      }
+      if (maestroId) autoAssignTodayTeacher(inserted.id, maestroId)
     }
     setTimeout(() => {
       setShowStamp(false)
@@ -774,6 +789,16 @@ function ChildCard({
               ? 'Aún usa pañal / no va solo al baño'
               : 'Sin especificar si ya va al baño'}
           </div>
+
+          {isAdmin && (
+            <AssignedMaestroField
+              value={maestroId}
+              onChange={setMaestroId}
+              freeTextValue={maestroName}
+              onFreeTextChange={setMaestroName}
+              compact
+            />
+          )}
 
           <div>
             <label className="block text-sm font-semibold text-gray-600 mb-1.5">
