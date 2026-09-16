@@ -6,14 +6,14 @@
 // que se abre el panel.
 const TEMPLATES: ((nombre: string, to: string) => string)[] = [
   (n, to) => `🎂 ${n} ya cumplió y le tocaría pasar a ${to} — ustedes deciden cuándo.`,
-  (n, to) => `📈 ${n} ya tiene edad para ${to}. Cámbienlo cuando gusten.`,
+  (n, to) => `📈 ${n} ya tiene edad para ${to}. Cámbienl@ cuando gusten.`,
   (n, to) => `🐑➡️🐜 ${n} se nos creció — ya podría estar en ${to}.`,
   (n, to) => `🎈 ¡Feliz cumple atrasado, ${n}! Ya le tocaría ${to}.`,
-  (n, to) => `👀 Ojo: ${n} ya cumple para ${to}, cuando quieran lo mueven.`,
-  (n, to) => `🚀 ${n} está listo para ${to} cuando ustedes digan.`,
-  (n, to) => `🧒 ${n} ya no es tan chiquito — hora de pensar en ${to}.`,
-  (n, to) => `✨ ${n} se graduó de edad para ${to} — muévanlo cuando quieran.`,
-  (n, to) => `🎓 ${n} está listo para el salto a ${to}.`,
+  (n, to) => `👀 Ojo: ${n} ya cumple para ${to}, cuando quieran l@ mueven.`,
+  (n, to) => `🚀 ${n} está list@ para ${to} cuando ustedes digan.`,
+  (n, to) => `🧒 ${n} ya no es tan chiquit@ — hora de pensar en ${to}.`,
+  (n, to) => `✨ ${n} se graduó de edad para ${to} — muévanl@ cuando quieran.`,
+  (n, to) => `🎓 ${n} está list@ para el salto a ${to}.`,
   (n, to) => `🎊 ¡Otro año más! ${n} ya podría ir a ${to}.`,
 ]
 

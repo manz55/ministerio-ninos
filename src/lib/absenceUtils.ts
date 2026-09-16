@@ -39,10 +39,10 @@ export function computeAbsence(
 const TIER_EMOJI: Record<AbsenceTier, string> = { chill: '👀', amarilla: '🟡', roja: '🔴' }
 
 const BODY_TEMPLATES: ((n: string, m: number) => string)[] = [
-  (n, m) => `¿Y ${n}? Ya van ${m} domingos sin verlo por aquí.`,
+  (n, m) => `¿Y ${n}? Ya van ${m} domingos sin verl@ por aquí.`,
   (n, m) => `${n} se nos perdió — lleva ${m} domingos sin venir.`,
   (n, m) => `${m} domingos sin noticias de ${n}…`,
-  (n, m) => `${n} anda perdido — ${m} domingos sin aparecer.`,
+  (n, m) => `${n} anda perdid@ — ${m} domingos sin aparecer.`,
   (n, m) => `¿Alguien sabe de ${n}? Van ${m} domingos sin venir.`,
   (n, m) => `${n} lleva ${m} domingos sin venir — vale la pena preguntar qué pasó.`,
   (n, m) => `Se extraña a ${n} — ${m} domingos sin asistir.`,
@@ -57,7 +57,7 @@ const BODY_TEMPLATES: ((n: string, m: number) => string)[] = [
   (n, m) => `${n} lleva ${m} domingos de ausencia — ¿le avisamos a la familia?`,
   (n, m) => `El lugar de ${n} sigue vacío, van ${m} domingos.`,
   (n, m) => `Cero registros de ${n} en los últimos ${m} domingos.`,
-  (n, m) => `¿Cómo estará ${n}? ${m} domingos sin verlo por aquí.`,
+  (n, m) => `¿Cómo estará ${n}? ${m} domingos sin verl@ por aquí.`,
   (n, m) => `${m} domingos y ${n} sigue sin aparecer — quizás valga una llamada.`,
 ]
 
