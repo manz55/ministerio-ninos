@@ -3,7 +3,7 @@ import { useSearchParams, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
-import { Search, CheckCircle2, UserPlus, AlertTriangle, ChevronLeft, ChevronDown, Bug, Zap, Compass, Baby, PersonStanding, User, Pencil, LogIn, Trash2, X, Users, Lock, Check, FileWarning, Monitor } from 'lucide-react'
+import { Search, CheckCircle2, UserPlus, AlertTriangle, ChevronLeft, ChevronDown, Bug, Zap, Compass, Baby, PersonStanding, User, Pencil, LogIn, Trash2, X, Users, Check, FileWarning, Monitor } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { getEffectiveCategory, hasCategoryChanged, getAgeLabel, requiresBadge, requiresPager } from '../lib/categoryUtils'
@@ -27,6 +27,7 @@ import { SoftGradientBackground } from '../components/ui/SoftGradientBackground'
 
 type TodayRecord = {
   id: string
+  child_id: string
   category: Category
   badge_number: number | null
   pager_number: number | null
@@ -154,16 +155,17 @@ const TILES = [
 
 function TeamPickerScreen({
   onConfirm,
-  isAdmin,
   initialCoordinator,
+  initialComputerOperator,
 }: {
-  onConfirm: (color: TeamColor, coordinator: string) => void
-  isAdmin: boolean
+  onConfirm: (color: TeamColor, coordinator: string, computerOperator: string) => void
   initialCoordinator: string
+  initialComputerOperator: string
 }) {
   const [coordinator, setCoordinator] = useState(initialCoordinator)
   useEffect(() => setCoordinator(initialCoordinator), [initialCoordinator])
-  const coordinatorLocked = !isAdmin && coordinator.trim().length > 0
+  const [computerOperator, setComputerOperator] = useState(initialComputerOperator)
+  useEffect(() => setComputerOperator(initialComputerOperator), [initialComputerOperator])
 
   const TEAMS: { color: TeamColor; hover: string }[] = [
     { color: 'rojo',     hover: 'hover:brightness-110' },
@@ -196,23 +198,26 @@ function TeamPickerScreen({
           <User size={12} />
           ¿Quién está de encargado hoy?
         </label>
-        {coordinatorLocked ? (
-          <div className="w-full px-4 py-3 bg-gray-50 border-2 border-gray-200 rounded-2xl text-base font-medium text-gray-600 flex items-center justify-between gap-2">
-            <span>{coordinator}</span>
-            <span className="flex items-center gap-1 text-xs text-gray-400 shrink-0">
-              <Lock size={12} /> Solo un coordinador lo cambia
-            </span>
-          </div>
-        ) : (
-          <input
-            type="text"
-            value={coordinator}
-            onChange={(e) => setCoordinator(e.target.value)}
-            placeholder="Tu nombre…"
-            autoComplete="off"
-            className="w-full px-4 py-3 bg-white border-2 border-gray-200 rounded-2xl text-base font-medium text-gray-800 placeholder:text-gray-300 focus:border-indigo-400 focus:outline-none shadow-sm"
-          />
-        )}
+        <input
+          type="text"
+          value={coordinator}
+          onChange={(e) => setCoordinator(e.target.value)}
+          placeholder="Nombre del encargado…"
+          autoComplete="off"
+          className="w-full px-4 py-3 bg-white border-2 border-gray-200 rounded-2xl text-base font-medium text-gray-800 placeholder:text-gray-300 focus:border-indigo-400 focus:outline-none shadow-sm"
+        />
+        <label className="flex items-center gap-1.5 text-xs font-semibold text-gray-400 uppercase tracking-widest px-1 pt-2">
+          <Monitor size={12} />
+          ¿Quién está en la compu hoy?
+        </label>
+        <input
+          type="text"
+          value={computerOperator}
+          onChange={(e) => setComputerOperator(e.target.value)}
+          placeholder="Nombre del encargado de compu…"
+          autoComplete="off"
+          className="w-full px-4 py-3 bg-white border-2 border-gray-200 rounded-2xl text-base font-medium text-gray-800 placeholder:text-gray-300 focus:border-indigo-400 focus:outline-none shadow-sm"
+        />
       </div>
 
       {/* Prompt */}
@@ -228,7 +233,7 @@ function TeamPickerScreen({
           return (
             <motion.button
               key={color}
-              onClick={() => onConfirm(color, coordinator.trim())}
+              onClick={() => onConfirm(color, coordinator.trim(), computerOperator.trim())}
               whileTap={{ scale: 0.94 }}
               whileHover={{ scale: 1.04 }}
               className={`${m.bg} ${hover} ${m.text} rounded-3xl py-8 flex flex-col items-center gap-4 shadow-lg font-bold transition-all`}
@@ -954,7 +959,7 @@ export default function CheckInPage() {
     // zero was reported.
     const { data, error } = await supabase
       .from('attendance')
-      .select('id, category, badge_number, pager_number, checked_in_at, checked_out_at, assigned_teacher_id, assigned_teacher:profiles!attendance_assigned_teacher_id_fkey(full_name), children(full_name, allergies, medical_notes, toilet_trained, comments)')
+      .select('id, child_id, category, badge_number, pager_number, checked_in_at, checked_out_at, assigned_teacher_id, assigned_teacher:profiles!attendance_assigned_teacher_id_fkey(full_name), children(full_name, allergies, medical_notes, toilet_trained, comments)')
       .eq('session_date', today)
       .is('deleted_at', null)
       .order('checked_in_at', { ascending: false })
@@ -971,6 +976,19 @@ export default function CheckInPage() {
   }, [])
 
   useEffect(() => { fetchCounts() }, [fetchCounts])
+
+  // `today` se calcula una sola vez al cargar — si la tablet/celular dejó la
+  // app abierta desde el domingo pasado (o desde anoche), todo seguía
+  // escribiendo y leyendo en la fecha vieja y borrar un registro "de hoy"
+  // fallaba para los maestros. Al cambiar de día se recarga la página.
+  useEffect(() => {
+    const checkDay = () => {
+      if (format(new Date(), 'yyyy-MM-dd') !== today) window.location.reload()
+    }
+    const interval = setInterval(checkDay, 60_000)
+    document.addEventListener('visibilitychange', checkDay)
+    return () => { clearInterval(interval); document.removeEventListener('visibilitychange', checkDay) }
+  }, [])
 
   // Keeps every maestro's screen in sync — a check-in (or its deletion) made
   // from any other device today shows up here without needing to refresh.
@@ -990,8 +1008,14 @@ export default function CheckInPage() {
                 : c
             setChildren((prev) => prev.map(mark))
             setAllChildren((prev) => prev.map(mark))
-          } else if (payload.eventType === 'DELETE') {
-            const childId = (payload.old as { child_id: string }).child_id
+          } else if (
+            payload.eventType === 'DELETE' ||
+            // "Borrar" es un soft-delete (UPDATE de deleted_at), no un DELETE —
+            // sin esto los demás dispositivos seguían viendo al niño como
+            // registrado y no lo dejaban volver a registrar.
+            (payload.eventType === 'UPDATE' && (payload.new as { deleted_at: string | null }).deleted_at)
+          ) {
+            const childId = ((payload.eventType === 'DELETE' ? payload.old : payload.new) as { child_id: string }).child_id
             const unmark = (c: ChildResult) =>
               c.id === childId ? { ...c, attendance: c.attendance.filter((a) => a.session_date !== today) } : c
             setChildren((prev) => prev.map(unmark))
@@ -1191,18 +1215,14 @@ export default function CheckInPage() {
     fetchRoster()
   }
 
-  async function confirmTeam(color: TeamColor, coordinator: string) {
+  async function confirmTeam(color: TeamColor, coordinator: string, computerOperator: string) {
     setTeamColor(color)
     setTeamConfirmed(true)
     persistTeam(color)
-    // Only actually write it if it's new/changed — re-submitting the same
-    // already-set name (the normal case once it's locked for non-admins)
-    // would otherwise hit the RPC's "only a coordinator can change it"
-    // rejection for no reason.
-    if (coordinator && coordinator !== coordinatorName) {
-      const { error } = await supabase.rpc('set_daily_coordinator', { p_session_date: today, p_name: coordinator })
-      if (!error) setCoordinatorName(coordinator)
-    }
+    // Solo se escribe si es nuevo/cambió — evita una llamada inútil cuando
+    // el nombre ya estaba puesto desde otro dispositivo.
+    if (coordinator && coordinator !== coordinatorName) saveCoordinator(coordinator)
+    if (computerOperator && computerOperator !== computerOperatorName) saveComputerOperator(computerOperator)
   }
 
   async function deleteAttendanceRecord(id: string) {
@@ -1225,6 +1245,14 @@ export default function CheckInPage() {
       return
     }
     setTodayRecords((prev) => prev.filter((r) => r.id !== id))
+    // El niño vuelve a quedar disponible para registrarse (con el gafete
+    // correcto) en este mismo dispositivo, sin esperar a recargar.
+    if (rec) {
+      const unmark = (c: ChildResult) =>
+        c.id === rec.child_id ? { ...c, attendance: c.attendance.filter((a) => a.session_date !== today) } : c
+      setChildren((prev) => prev.map(unmark))
+      setAllChildren((prev) => prev.map(unmark))
+    }
     if (rec) {
       setTodayCounts((prev) => ({
         ...prev,
@@ -1270,7 +1298,7 @@ export default function CheckInPage() {
     setCoordinatorError(null)
     const { error } = await supabase.rpc('set_daily_coordinator', { p_session_date: today, p_name: name })
     if (!error) setCoordinatorName(name)
-    else setCoordinatorError('Solo un coordinador puede cambiar quién está de encargado.')
+    else setCoordinatorError('No se pudo guardar el encargado. Revisa la conexión e intenta de nuevo.')
   }
 
   async function saveComputerOperator(name: string) {
@@ -1279,7 +1307,7 @@ export default function CheckInPage() {
     setComputerOperatorError(null)
     const { error } = await supabase.rpc('set_daily_computer_operator', { p_session_date: today, p_name: name })
     if (!error) setComputerOperatorName(name)
-    else setComputerOperatorError('Solo un coordinador puede cambiar quién está en la computadora.')
+    else setComputerOperatorError('No se pudo guardar el encargado de compu. Revisa la conexión e intenta de nuevo.')
   }
 
   // Already-registered-today children float to the top (sorted by badge
@@ -1321,7 +1349,7 @@ export default function CheckInPage() {
 
   // Team must be confirmed before anything else each day
   if (!teamConfirmed) {
-    return <TeamPickerScreen onConfirm={confirmTeam} isAdmin={isAdmin} initialCoordinator={coordinatorName} />
+    return <TeamPickerScreen onConfirm={confirmTeam} initialCoordinator={coordinatorName} initialComputerOperator={computerOperatorName} />
   }
 
   if (showNewFamily) {
@@ -1521,25 +1549,18 @@ export default function CheckInPage() {
                     if (e.key === 'Enter') saveCoordinator((e.target as HTMLInputElement).value.trim())
                     if (e.key === 'Escape') setEditingCoordinator(false)
                   }}
-                  placeholder="Tu nombre…"
+                  placeholder="Nombre…"
                   className="text-sm border-b-2 border-indigo-400 focus:outline-none font-medium text-gray-700 bg-transparent w-36"
                 />
-              ) : !isAdmin && coordinatorName ? (
-                <span className="flex items-center gap-1.5 text-sm text-gray-700 font-semibold">
-                  {coordinatorName}
-                  <span title="Solo un coordinador puede cambiar esto">
-                    <Lock size={11} className="text-gray-300" />
-                  </span>
-                </span>
               ) : (
                 <button
                   onClick={() => setEditingCoordinator(true)}
                   className="flex items-center gap-1 text-sm text-gray-500 hover:text-indigo-600 transition-colors group"
                 >
-                  <span className={coordinatorName ? 'font-semibold text-gray-700' : 'italic text-gray-300'}>
+                  <span className={coordinatorName ? 'font-semibold text-gray-700' : 'italic text-gray-400 underline decoration-dotted'}>
                     {coordinatorName || 'Agregar encargado…'}
                   </span>
-                  <Pencil size={11} className="opacity-0 group-hover:opacity-50 transition-opacity" />
+                  <Pencil size={11} className="opacity-40 group-hover:opacity-70 transition-opacity" />
                 </button>
               )}
             </div>
@@ -1558,7 +1579,7 @@ export default function CheckInPage() {
                     if (e.key === 'Enter') saveComputerOperator((e.target as HTMLInputElement).value.trim())
                     if (e.key === 'Escape') setEditingComputerOperator(false)
                   }}
-                  placeholder="Tu nombre…"
+                  placeholder="Nombre…"
                   className="text-sm border-b-2 border-indigo-400 focus:outline-none font-medium text-gray-700 bg-transparent w-36"
                 />
               ) : (
@@ -1566,10 +1587,10 @@ export default function CheckInPage() {
                   onClick={() => setEditingComputerOperator(true)}
                   className="flex items-center gap-1 text-sm text-gray-500 hover:text-indigo-600 transition-colors group"
                 >
-                  <span className={computerOperatorName ? 'font-semibold text-gray-700' : 'italic text-gray-300'}>
+                  <span className={computerOperatorName ? 'font-semibold text-gray-700' : 'italic text-gray-400 underline decoration-dotted'}>
                     {computerOperatorName || 'Agregar encargado de compu…'}
                   </span>
-                  <Pencil size={11} className="opacity-0 group-hover:opacity-50 transition-opacity" />
+                  <Pencil size={11} className="opacity-40 group-hover:opacity-70 transition-opacity" />
                 </button>
               )}
             </div>
@@ -1892,7 +1913,7 @@ export default function CheckInPage() {
                             <X size={13} />
                           </button>
                         </span>
-                      ) : rec.badge_number && isAdmin ? (
+                      ) : rec.badge_number ? (
                         <button
                           onClick={() => startBadgeEdit(rec)}
                           className="flex items-center gap-1 pl-2 pr-1.5 py-0.5 text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-full hover:bg-indigo-100 hover:border-indigo-300 active:scale-95 transition-all"
@@ -1901,13 +1922,6 @@ export default function CheckInPage() {
                           #{rec.badge_number}
                           <Pencil size={10} className="text-indigo-400" />
                         </button>
-                      ) : rec.badge_number ? (
-                        <span
-                          className="flex items-center gap-1 pl-2 pr-1.5 py-0.5 text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-full"
-                          title="Solo un coordinador puede cambiar el gafete"
-                        >
-                          #{rec.badge_number}
-                        </span>
                       ) : null}
                       {rec.pager_number && (
                         <span className="text-xs text-gray-400 font-medium">

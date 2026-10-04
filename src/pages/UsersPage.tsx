@@ -255,8 +255,16 @@ function TrashSection({ isOwner }: { isOwner: boolean }) {
 
   async function restore(item: TrashedRecord) {
     setBusyId(item.id)
-    await supabase.from(item.table_name).update({ deleted_at: null, deleted_by: null }).eq('id', item.id)
+    const { error } = await supabase.from(item.table_name).update({ deleted_at: null, deleted_by: null }).eq('id', item.id)
     setBusyId(null)
+    // Un registro de asistencia borrado ya no bloquea su gafete ni al niño,
+    // así que si ya se volvió a registrar (o alguien más tomó ese gafete),
+    // restaurarlo choca con el registro nuevo.
+    if (error?.code === '23505') {
+      alert('No se puede restaurar: ese niño ya fue registrado de nuevo ese día, o su gafete/bíper ya lo tiene otro niño.')
+    } else if (error) {
+      alert('No se pudo restaurar. Intenta de nuevo.')
+    }
     load()
   }
 
