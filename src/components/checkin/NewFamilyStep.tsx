@@ -1,10 +1,11 @@
 import { useMemo, useState } from 'react'
-import { ChevronLeft, Plus, Trash2, AlertTriangle, Users } from 'lucide-react'
+import { Plus, Trash2, AlertTriangle, Users } from 'lucide-react'
 import { differenceInYears } from 'date-fns'
 import { getCategoryFromBirthDate } from '../../lib/categoryUtils'
 import { saveFamily, newId, type ChildInsert } from '../../lib/offline'
 import { createChildSearcher, searchChildrenSplit, findBySurname, type SearchableChild } from '../../lib/fuzzySearch'
 import { CategoryBadge } from '../ui/CategoryBadge'
+import { PageHeader } from '../ui/PageHeader'
 import { AssignedMaestroField } from '../ui/AssignedMaestroField'
 import { PhotoCapture } from '../ui/PhotoCapture'
 import { GUARDIAN_RELATIONSHIP_LABELS, isCorderitos, type Category, type GuardianRelationship, type ParentRow, type ChildRow, type ChildPrefill } from '../../types/domain'
@@ -183,23 +184,11 @@ export function NewFamilyStep({
   // ── Render ──────────────────────────────────────────────────────────────────
   return (
     <form onSubmit={handleSubmit} className="space-y-7">
-      <div>
-        <button
-          type="button"
-          onClick={onCancel}
-          className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-800 mb-3 transition-colors"
-        >
-          <ChevronLeft size={15} /> Volver a la búsqueda
-        </button>
-        <h2 className="text-3xl font-semibold text-gray-900">Nueva familia</h2>
-        <p className="text-gray-500 mt-0.5">Completa los datos para registrarla</p>
-      </div>
+      <PageHeader onBack={onCancel} eyebrow="Primera vez" title="Nueva familia" subtitle="Los datos de quien trae a los niños y de cada niño" />
 
       {/* ── Padre / madre ── */}
       <section className="bg-white rounded-3xl border border-gray-200/70 shadow-sm p-5 space-y-4">
-        <h3 className="font-semibold text-gray-700 text-sm uppercase tracking-wider">
-          Padre o madre
-        </h3>
+        <h3 className="text-xl font-bold text-gray-900">Padre, madre o responsable</h3>
 
         <PhotoCapture onFileReady={setParentPhotoBlob} />
 
@@ -212,7 +201,7 @@ export function NewFamilyStep({
             value={parentName}
             onChange={(e) => setParentName(e.target.value)}
             placeholder="Ej. María González"
-            className={`w-full px-4 py-3 border-2 rounded-xl focus:outline-none text-base ${
+            className={`w-full px-4 py-3 border-2 rounded-2xl bg-white focus:outline-none text-base transition-colors ${
               errors.parentName
                 ? 'border-red-300 focus:border-red-500'
                 : 'border-gray-200 focus:border-indigo-500'
@@ -234,7 +223,7 @@ export function NewFamilyStep({
             value={parentPhone}
             onChange={(e) => setParentPhone(e.target.value)}
             placeholder="Ej. 55 1234 5678"
-            className={`w-full px-4 py-3 border-2 rounded-xl focus:outline-none text-base ${
+            className={`w-full px-4 py-3 border-2 rounded-2xl bg-white focus:outline-none text-base transition-colors ${
               errors.parentPhone
                 ? 'border-red-300 focus:border-red-500'
                 : 'border-gray-200 focus:border-indigo-500'
@@ -248,9 +237,7 @@ export function NewFamilyStep({
 
       {/* ── Niños ── */}
       <section className="space-y-3">
-        <h3 className="font-semibold text-gray-700 text-sm uppercase tracking-wider">
-          Niños
-        </h3>
+        <h3 className="text-xl font-bold text-gray-900 px-1">Niños</h3>
 
         {children.map((child, i) => {
           const hasDate = !!child.birth_date
@@ -287,7 +274,7 @@ export function NewFamilyStep({
                   value={child.full_name}
                   onChange={(e) => updateChild(child.key, 'full_name', e.target.value)}
                   placeholder="Nombre del niño"
-                  className={`w-full px-4 py-3 border-2 rounded-xl focus:outline-none text-base ${
+                  className={`w-full px-4 py-3 border-2 rounded-2xl bg-white focus:outline-none text-base transition-colors ${
                     errors[`name_${i}`]
                       ? 'border-red-300 focus:border-red-500'
                       : 'border-gray-200 focus:border-indigo-500'
@@ -491,7 +478,7 @@ export function NewFamilyStep({
       <button
         type="submit"
         disabled={saving}
-        className="w-full py-4 text-lg font-semibold bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 active:bg-indigo-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        className="w-full py-4 font-display text-xl font-bold bg-indigo-600 text-white rounded-2xl shadow-lg shadow-indigo-900/15 hover:bg-indigo-700 active:bg-indigo-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
       >
         {saving ? 'Guardando…' : 'Guardar familia y continuar'}
       </button>

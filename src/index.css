@@ -5,12 +5,12 @@
    rojo, triángulo amarillo) sobre niños en tonos cálidos. Acento = azul
    tinta del círculo (reemplaza al índigo genérico en TODA la app, porque
    las pantallas usan las clases indigo-*); neutros con un poco de calidez
-   en vez de gris frío. Fredoka (redondeada, juguetona) para títulos y
-   nombres; Figtree para todo lo demás. Ambas van empaquetadas con la app
+   en vez de gris frío. Baloo 2 (gordita y alegre) para títulos, nombres y
+   números; Nunito (redondeada, muy legible) para todo lo demás. Ambas van empaquetadas con la app
    (@fontsource) para que funcionen sin internet y con la CSP de Netlify. */
 @theme {
-  --font-sans: "Figtree Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-display: "Fredoka Variable", "Figtree Variable", ui-rounded, system-ui, sans-serif;
+  --font-sans: "Nunito Variable", ui-rounded, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: "Baloo 2 Variable", "Nunito Variable", ui-rounded, system-ui, sans-serif;
 
   --color-indigo-50:  oklch(0.972 0.016 258);
   --color-indigo-100: oklch(0.938 0.035 258);
@@ -84,7 +84,6 @@
   body {
     font-family: var(--font-sans);
     color: var(--color-gray-900);
-    font-feature-settings: "ss01";
     /* Prevent rubber-band scroll that reveals gray background */
     overscroll-behavior-y: none;
     background-color: var(--color-canvas);

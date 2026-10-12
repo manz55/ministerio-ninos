@@ -1,47 +1,53 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { motion } from 'framer-motion'
-import { itemVariants } from '../components/motion/presets'
-import { Search, Plus, ChevronLeft, Trash2, Droplet, Wind } from 'lucide-react'
+import { motion, LayoutGroup, AnimatePresence } from 'framer-motion'
+import { Plus, Trash2, Droplet, Wind, Phone, Contact } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { uploadPhoto } from '../lib/photo'
 import { PhotoCapture, PhotoAvatar } from '../components/ui/PhotoCapture'
+import { Sheet, SkeletonRow } from '../components/motion'
+import { PageHeader, BTN_PRIMARY } from '../components/ui/PageHeader'
+import { SearchField } from '../components/ui/SearchField'
+import { Segmented } from '../components/ui/Segmented'
+import { ConfirmSheet } from '../components/ui/ConfirmSheet'
+import { EmptyState } from '../components/ui/EmptyState'
+import { Field, ChoiceChips, FormError, INPUT } from '../components/ui/form'
+import { useMediaQuery, DESKTOP_QUERY } from '../hooks/useMediaQuery'
 import type { Maestro, TeamColor } from '../types/domain'
 import { TEAM_COLOR_LABELS } from '../types/domain'
+import { initials } from './checkin/shared'
 
-// Same palette CheckInPage's own team picker uses (TEAM_META there) — kept
-// as a small local const here rather than shared, since the two screens
-// otherwise have nothing to do with each other.
 const TEAM_ORDER: TeamColor[] = ['rojo', 'amarillo', 'azul']
-const TEAM_DOT: Record<TeamColor, string> = { rojo: 'bg-red-500', amarillo: 'bg-yellow-400', azul: 'bg-blue-500' }
+const TEAM_STYLE: Record<TeamColor, { dot: string; head: string; soft: string; ring: string }> = {
+  rojo: { dot: 'bg-red-500', head: 'text-red-700', soft: 'bg-red-50', ring: 'ring-red-300' },
+  amarillo: { dot: 'bg-yellow-400', head: 'text-yellow-800', soft: 'bg-yellow-50', ring: 'ring-yellow-300' },
+  azul: { dot: 'bg-blue-500', head: 'text-blue-700', soft: 'bg-blue-50', ring: 'ring-blue-300' },
+}
 
-// Admin-only directory of teachers/volunteers (name, discipulador, baptism
-// status, DPI…) — a separate table from `profiles` since not everyone here
-// necessarily has an app login, and this tracks church-membership info
-// profiles was never meant to hold.
+// Directorio de maestros y voluntarios (separado de `profiles`: no todos
+// tienen cuenta en la app, y aquí van datos de membresía que profiles no
+// guarda). Tablero por equipo: en compu, tres columnas; en celular, pestañas.
 export default function MaestrosPage() {
+  const desktop = useMediaQuery(DESKTOP_QUERY)
   const [maestros, setMaestros] = useState<Maestro[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
+  const [teamTab, setTeamTab] = useState<TeamColor | 'todos'>('todos')
   const [editing, setEditing] = useState<Maestro | 'new' | null>(null)
 
   const fetchMaestros = useCallback(async () => {
-    setLoading(true)
     const { data } = await supabase.from('maestros').select('*').order('nombre')
     setMaestros((data ?? []) as Maestro[])
     setLoading(false)
   }, [])
-
   useEffect(() => { fetchMaestros() }, [fetchMaestros])
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
-    if (!q) return maestros
-    return maestros.filter((m) => `${m.nombre} ${m.apellido}`.toLowerCase().includes(q))
+    return q ? maestros.filter((m) => `${m.nombre} ${m.apellido}`.toLowerCase().includes(q)) : maestros
   }, [maestros, search])
 
-  // Optimistic update — the coordinator moving people between teams before
-  // service shouldn't wait on a round-trip per tap. Reverts if the write
-  // fails so the UI doesn't silently drift from the database.
+  // Optimista: mover gente de equipo antes del culto no debe esperar a la
+  // red por cada toque. Si falla, se regresa.
   async function moveTeam(id: string, team_color: TeamColor) {
     const prev = maestros
     setMaestros((cur) => cur.map((m) => (m.id === id ? { ...m, team_color } : m)))
@@ -49,157 +55,120 @@ export default function MaestrosPage() {
     if (error) setMaestros(prev)
   }
 
-  if (editing) {
-    return (
-      <MaestroForm
-        maestro={editing === 'new' ? null : editing}
-        onSaved={() => { setEditing(null); fetchMaestros() }}
-        onCancel={() => setEditing(null)}
-      />
-    )
-  }
+  const columns = desktop ? TEAM_ORDER : teamTab === 'todos' ? TEAM_ORDER : [teamTab]
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <h1 className="text-3xl font-semibold text-gray-900 leading-tight">Maestros</h1>
-          <p className="text-sm text-gray-400 leading-tight">
-            {maestros.length} {maestros.length === 1 ? 'registrado' : 'registrados'}
-          </p>
-        </div>
-        <button
-          onClick={() => setEditing('new')}
-          className="flex items-center gap-1.5 px-4 py-2.5 text-sm font-bold text-white bg-indigo-600 rounded-xl hover:bg-indigo-700 transition-colors shrink-0"
-        >
-          <Plus size={16} />
-          Agregar maestro
-        </button>
-      </div>
+      <PageHeader
+        title="Maestros"
+        subtitle={loading ? 'Cargando…' : `${maestros.length} en el equipo de servicio`}
+        actions={
+          <motion.button whileTap={{ scale: 0.97 }} onClick={() => setEditing('new')} className={BTN_PRIMARY}>
+            <Plus size={17} /> Agregar maestro
+          </motion.button>
+        }
+      />
 
-      <div className="relative">
-        <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-300" />
-        <input
-          type="text"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Buscar por nombre…"
-          className="w-full pl-10 pr-4 py-3 text-sm border-2 border-gray-200 rounded-2xl focus:border-indigo-500 focus:outline-none placeholder:text-gray-300"
-        />
+      <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
+        <div className="flex-1"><SearchField value={search} onChange={setSearch} placeholder="Buscar por nombre…" /></div>
+        {!desktop && (
+          <Segmented
+            value={teamTab}
+            onChange={setTeamTab}
+            options={[{ value: 'todos', label: 'Todos' }, ...TEAM_ORDER.map((t) => ({ value: t, label: TEAM_COLOR_LABELS[t], count: maestros.filter((m) => m.team_color === t).length }))]}
+          />
+        )}
       </div>
 
       {loading ? (
-        <p className="text-sm text-gray-400 text-center py-10">Cargando…</p>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">{[0, 1, 2].map((i) => <SkeletonRow key={i} />)}</div>
       ) : filtered.length === 0 ? (
-        <div className="bg-white rounded-2xl border-2 border-gray-100 py-10 text-center">
-          <p className="text-sm text-gray-400">
-            {search ? 'Nadie coincide con esa búsqueda.' : 'Aún no hay maestros registrados.'}
-          </p>
-        </div>
+        <EmptyState icon={Plus} text={search ? 'Nadie coincide con esa búsqueda.' : 'Aún no hay maestros registrados.'} actionLabel="Agregar maestro" action={() => setEditing('new')} />
       ) : (
-        <div className="space-y-6">
-          {TEAM_ORDER.map((team) => {
-            const members = filtered.filter((m) => m.team_color === team)
-            if (members.length === 0) return null
-            return (
-              <div key={team}>
-                <div className="flex items-center gap-2 mb-2.5 px-1">
-                  <span className={`w-2.5 h-2.5 rounded-full ${TEAM_DOT[team]}`} />
-                  <h2 className="text-sm font-bold text-gray-700">Equipo {TEAM_COLOR_LABELS[team]}</h2>
-                  <span className="text-xs text-gray-400">{members.length}</span>
-                </div>
-                <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-3">
-                  {members.map((m, i) => (
-                    <motion.div
-                      key={m.id}
-                      variants={itemVariants} initial="hidden" animate="show" custom={i}
-                      className="bg-white rounded-3xl border border-gray-200/70 shadow-sm hover:border-indigo-300 p-4 flex items-center gap-3 transition-colors"
-                    >
-                      <button onClick={() => setEditing(m)} className="text-left flex items-center gap-3 min-w-0 flex-1">
-                        <PhotoAvatar path={m.photo_url} size={48} />
-                        <div className="min-w-0 flex-1">
-                          <p className="font-bold text-gray-900 truncate">{m.nombre} {m.apellido}</p>
-                          <p className="text-xs text-gray-400 truncate">
-                            {m.discipulador ? `Discípulo de ${m.discipulador}` : 'Sin discipulador'}
-                          </p>
-                          <div className="flex items-center gap-2 mt-1">
-                            {m.bautizado_aguas && (
-                              <span title="Bautizado en aguas" className="text-sky-500 shrink-0"><Droplet size={13} /></span>
-                            )}
-                            {m.bautizado_espiritu && (
-                              <span title="Bautizado en el Espíritu" className="text-amber-500 shrink-0"><Wind size={13} /></span>
-                            )}
-                            {m.celular && <span className="text-xs text-gray-400 truncate">{m.celular}</span>}
-                          </div>
-                        </div>
-                      </button>
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        {TEAM_ORDER.map((t) => (
-                          <button
-                            key={t}
-                            title={`Mover a ${TEAM_COLOR_LABELS[t]}`}
-                            onClick={(e) => { e.stopPropagation(); moveTeam(m.id, t) }}
-                            className={`w-4 h-4 rounded-full ${TEAM_DOT[t]} ${t === m.team_color ? 'ring-2 ring-offset-1 ring-gray-400' : 'opacity-30 hover:opacity-70'} transition-opacity`}
-                          />
-                        ))}
-                      </div>
-                    </motion.div>
-                  ))}
-                </div>
-              </div>
-            )
-          })}
-        </div>
+        <LayoutGroup>
+          <div className={`grid gap-4 ${desktop ? 'grid-cols-3' : 'grid-cols-1'}`}>
+            {columns.map((team) => {
+              const members = filtered.filter((m) => m.team_color === team)
+              const st = TEAM_STYLE[team]
+              if (!desktop && members.length === 0) return null
+              return (
+                <section key={team} className={`rounded-3xl ${desktop ? `${st.soft} p-3` : ''} space-y-2.5`}>
+                  <header className="flex items-center gap-2 px-2 pt-1">
+                    <span className={`w-3 h-3 rounded-full ${st.dot}`} />
+                    <h2 className={`text-lg font-bold ${st.head}`}>Equipo {TEAM_COLOR_LABELS[team]}</h2>
+                    <span className="ml-auto text-sm font-semibold text-gray-500 tabular-nums">{members.length}</span>
+                  </header>
+                  <AnimatePresence initial={false}>
+                    {members.map((m) => <MaestroCard key={m.id} maestro={m} onOpen={() => setEditing(m)} onMove={(t) => moveTeam(m.id, t)} />)}
+                  </AnimatePresence>
+                  {desktop && members.length === 0 && (
+                    <p className="text-sm text-gray-500 text-center py-6 rounded-2xl border-2 border-dashed border-gray-300/60">Nadie en este equipo todavía.</p>
+                  )}
+                </section>
+              )
+            })}
+          </div>
+        </LayoutGroup>
       )}
+
+      <Sheet open={!!editing} onClose={() => setEditing(null)} title={editing === 'new' ? 'Nuevo maestro' : 'Maestro'} wide>
+        {editing && (
+          <MaestroForm
+            key={editing === 'new' ? 'new' : editing.id}
+            maestro={editing === 'new' ? null : editing}
+            onSaved={() => { setEditing(null); fetchMaestros() }}
+            onCancel={() => setEditing(null)}
+          />
+        )}
+      </Sheet>
     </div>
   )
 }
 
-function BoolToggle({
-  label,
-  value,
-  onChange,
-}: {
-  label: string
-  value: boolean | null
-  onChange: (v: boolean) => void
-}) {
+function MaestroCard({ maestro: m, onOpen, onMove }: { maestro: Maestro; onOpen: () => void; onMove: (t: TeamColor) => void }) {
   return (
-    <div>
-      <label className="block text-sm font-medium text-gray-700 mb-1.5">{label}</label>
-      <div className="grid grid-cols-2 gap-2">
-        <button
-          type="button"
-          onClick={() => onChange(true)}
-          className={`py-2.5 rounded-xl text-sm font-semibold border-2 transition-colors ${
-            value === true ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300'
-          }`}
-        >
-          Sí
-        </button>
-        <button
-          type="button"
-          onClick={() => onChange(false)}
-          className={`py-2.5 rounded-xl text-sm font-semibold border-2 transition-colors ${
-            value === false ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300'
-          }`}
-        >
-          No
-        </button>
+    <motion.div
+      layout
+      layoutId={`maestro-${m.id}`}
+      initial={{ opacity: 0, scale: 0.96 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.96 }}
+      transition={{ type: 'spring', stiffness: 380, damping: 32 }}
+      className="group rounded-2xl bg-white shadow-sm shadow-gray-900/5 border border-transparent hover:border-indigo-200 hover:shadow-md transition-[border-color,box-shadow]"
+    >
+      <button onClick={onOpen} className="w-full text-left flex items-center gap-3 p-3.5 pb-2">
+        {m.photo_url ? <PhotoAvatar path={m.photo_url} size={48} /> : (
+          <span className="w-12 h-12 rounded-full bg-indigo-50 text-indigo-700 font-display font-bold text-base flex items-center justify-center shrink-0">{initials(`${m.nombre} ${m.apellido}`)}</span>
+        )}
+        <span className="min-w-0 flex-1">
+          <span className="block font-display font-bold text-lg leading-tight text-gray-900 truncate">{m.nombre} {m.apellido}</span>
+          <span className="block text-sm text-gray-500 truncate">{m.discipulador ? `Discípulo de ${m.discipulador}` : 'Sin discipulador'}</span>
+        </span>
+      </button>
+      <div className="flex items-center gap-2 px-3.5 pb-3">
+        <div className="flex items-center gap-1.5 min-w-0 flex-1 text-xs text-gray-500">
+          {m.bautizado_aguas && <span title="Bautizado en aguas" className="inline-flex items-center gap-0.5 text-sky-600"><Droplet size={13} /></span>}
+          {m.bautizado_espiritu && <span title="Bautizado en el Espíritu" className="inline-flex items-center gap-0.5 text-amber-600"><Wind size={13} /></span>}
+          {m.celular && <span className="inline-flex items-center gap-1 truncate"><Phone size={12} /> {m.celular}</span>}
+        </div>
+        {/* Cambiar de equipo con un toque */}
+        <div className="flex items-center gap-1 rounded-full bg-gray-50 p-1">
+          {TEAM_ORDER.map((t) => (
+            <button
+              key={t}
+              title={`Mover a ${TEAM_COLOR_LABELS[t]}`}
+              aria-label={`Mover a ${TEAM_COLOR_LABELS[t]}`}
+              onClick={() => t !== m.team_color && onMove(t)}
+              className={`w-5 h-5 rounded-full ${TEAM_STYLE[t].dot} transition ${t === m.team_color ? `ring-2 ring-offset-1 ${TEAM_STYLE[t].ring}` : 'opacity-30 hover:opacity-80 hover:scale-110'}`}
+            />
+          ))}
+        </div>
       </div>
-    </div>
+    </motion.div>
   )
 }
 
-function MaestroForm({
-  maestro,
-  onSaved,
-  onCancel,
-}: {
-  maestro: Maestro | null
-  onSaved: () => void
-  onCancel: () => void
-}) {
+function MaestroForm({ maestro, onSaved, onCancel }: { maestro: Maestro | null; onSaved: () => void; onCancel: () => void }) {
   const [nombre, setNombre] = useState(maestro?.nombre ?? '')
   const [apellido, setApellido] = useState(maestro?.apellido ?? '')
   const [discipulador, setDiscipulador] = useState(maestro?.discipulador ?? '')
@@ -216,40 +185,30 @@ function MaestroForm({
   const [error, setError] = useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
 
-  async function handleSave() {
-    if (!nombre.trim() || !apellido.trim()) { setError('Nombre y apellido son requeridos.'); return }
+  async function handleSave(e: React.FormEvent) {
+    e.preventDefault()
+    if (!nombre.trim() || !apellido.trim()) { setError('Nombre y apellido son necesarios.'); return }
     setSaving(true)
     setError(null)
-
     const payload = {
-      nombre: nombre.trim(),
-      apellido: apellido.trim(),
-      discipulador: discipulador.trim() || null,
-      fecha_nacimiento: fechaNacimiento || null,
-      dpi: dpi.trim() || null,
-      celular: celular.trim() || null,
-      tiempo_asistencia: tiempoAsistencia.trim() || null,
-      bautizado_aguas: bautizadoAguas,
-      bautizado_espiritu: bautizadoEspiritu,
-      profesion: profesion.trim() || null,
-      team_color: teamColor,
+      nombre: nombre.trim(), apellido: apellido.trim(), discipulador: discipulador.trim() || null,
+      fecha_nacimiento: fechaNacimiento || null, dpi: dpi.trim() || null, celular: celular.trim() || null,
+      tiempo_asistencia: tiempoAsistencia.trim() || null, bautizado_aguas: bautizadoAguas,
+      bautizado_espiritu: bautizadoEspiritu, profesion: profesion.trim() || null, team_color: teamColor,
     }
-
     let id = maestro?.id
     if (maestro) {
       const { error: err } = await supabase.from('maestros').update(payload).eq('id', maestro.id)
-      if (err) { setError('Error al guardar. Intenta de nuevo.'); setSaving(false); return }
+      if (err) { setError('No se pudo guardar. Intenta de nuevo.'); setSaving(false); return }
     } else {
       const { data, error: err } = await supabase.from('maestros').insert(payload).select().single()
-      if (err || !data) { setError('Error al guardar. Intenta de nuevo.'); setSaving(false); return }
+      if (err || !data) { setError('No se pudo guardar. Intenta de nuevo.'); setSaving(false); return }
       id = data.id
     }
-
     if (photoBlob && id) {
       const path = await uploadPhoto(`maestros/${id}.jpg`, photoBlob)
       if (path) await supabase.from('maestros').update({ photo_url: path }).eq('id', id)
     }
-
     setSaving(false)
     onSaved()
   }
@@ -259,175 +218,77 @@ function MaestroForm({
     setSaving(true)
     await supabase.from('maestros').delete().eq('id', maestro.id)
     setSaving(false)
+    setConfirmDelete(false)
     onSaved()
   }
 
   return (
-    <div className="space-y-5">
-      <button
-        onClick={onCancel}
-        className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-800 transition-colors"
-      >
-        <ChevronLeft size={15} /> Volver a Maestros
-      </button>
-
-      <div className="bg-white rounded-3xl border border-gray-200/70 shadow-sm p-5 space-y-4">
-        <PhotoCapture existingPath={maestro?.photo_url} onFileReady={setPhotoBlob} />
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">
-              Nombre <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="text"
-              value={nombre}
-              onChange={(e) => setNombre(e.target.value)}
-              autoFocus
-              className="w-full px-4 py-3 border-2 border-gray-200 rounded-2xl focus:border-indigo-500 focus:outline-none text-base"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">
-              Apellido <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="text"
-              value={apellido}
-              onChange={(e) => setApellido(e.target.value)}
-              className="w-full px-4 py-3 border-2 border-gray-200 rounded-2xl focus:border-indigo-500 focus:outline-none text-base"
-            />
-          </div>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1.5">
-            Discipulador <span className="text-gray-400 font-normal">(opcional)</span>
-          </label>
-          <input
-            type="text"
-            value={discipulador}
-            onChange={(e) => setDiscipulador(e.target.value)}
-            className="w-full px-4 py-3 border-2 border-gray-200 rounded-2xl focus:border-indigo-500 focus:outline-none text-base"
-          />
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Fecha de nacimiento</label>
-            <input
-              type="date"
-              value={fechaNacimiento}
-              max={new Date().toISOString().slice(0, 10)}
-              onChange={(e) => setFechaNacimiento(e.target.value)}
-              className="w-full px-4 py-3 border-2 border-gray-200 rounded-2xl focus:border-indigo-500 focus:outline-none text-base"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">
-              DPI <span className="text-gray-400 font-normal">(si es mayor de edad)</span>
-            </label>
-            <input
-              type="text"
-              inputMode="numeric"
-              value={dpi}
-              onChange={(e) => setDpi(e.target.value)}
-              className="w-full px-4 py-3 border-2 border-gray-200 rounded-2xl focus:border-indigo-500 focus:outline-none text-base"
-            />
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Número de celular</label>
-            <input
-              type="tel"
-              inputMode="tel"
-              value={celular}
-              onChange={(e) => setCelular(e.target.value)}
-              className="w-full px-4 py-3 border-2 border-gray-200 rounded-2xl focus:border-indigo-500 focus:outline-none text-base"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Tiempo de asistir a la Iglesia</label>
-            <input
-              type="text"
-              value={tiempoAsistencia}
-              onChange={(e) => setTiempoAsistencia(e.target.value)}
-              placeholder="Ej. 3 años"
-              className="w-full px-4 py-3 border-2 border-gray-200 rounded-2xl focus:border-indigo-500 focus:outline-none text-base placeholder:text-gray-300"
-            />
-          </div>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1.5">
-            Profesión u oficio <span className="text-gray-400 font-normal">(opcional)</span>
-          </label>
-          <input
-            type="text"
-            value={profesion}
-            onChange={(e) => setProfesion(e.target.value)}
-            className="w-full px-4 py-3 border-2 border-gray-200 rounded-2xl focus:border-indigo-500 focus:outline-none text-base"
-          />
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <BoolToggle label="¿Está bautizado en aguas?" value={bautizadoAguas} onChange={setBautizadoAguas} />
-          <BoolToggle label="¿Está bautizado en el Espíritu?" value={bautizadoEspiritu} onChange={setBautizadoEspiritu} />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1.5">Equipo</label>
-          <div className="grid grid-cols-3 gap-2">
-            {TEAM_ORDER.map((t) => (
-              <button
-                key={t}
-                type="button"
-                onClick={() => setTeamColor(t)}
-                className={`flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-sm font-semibold border-2 transition-colors ${
-                  teamColor === t ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300'
-                }`}
-              >
-                <span className={`w-2.5 h-2.5 rounded-full ${TEAM_DOT[t]}`} />
-                {TEAM_COLOR_LABELS[t]}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {error && (
-          <p className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-xl px-4 py-3">{error}</p>
-        )}
-
-        <div className="flex gap-2 pt-1">
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="flex-1 py-3 text-sm font-bold text-white bg-indigo-600 rounded-xl hover:bg-indigo-700 disabled:opacity-50 transition-colors"
-          >
-            {saving ? 'Guardando…' : 'Guardar'}
-          </button>
-          {maestro && (
-            confirmDelete ? (
-              <button
-                onClick={handleDelete}
-                disabled={saving}
-                className="px-4 py-3 text-sm font-bold text-white bg-red-600 rounded-xl hover:bg-red-700 disabled:opacity-50 transition-colors"
-              >
-                ¿Seguro? Confirmar
-              </button>
-            ) : (
-              <button
-                onClick={() => setConfirmDelete(true)}
-                className="px-4 py-3 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors"
-              >
-                <Trash2 size={18} />
-              </button>
-            )
-          )}
-        </div>
+    <form onSubmit={handleSave} className="px-5 sm:px-7 pt-3 sm:pt-7 pb-6 space-y-5">
+      <div className="flex items-center gap-3 pr-10">
+        <span className="w-11 h-11 rounded-2xl bg-indigo-50 text-indigo-700 flex items-center justify-center"><Contact size={20} /></span>
+        <h2 className="text-2xl font-bold text-gray-900">{maestro ? `${maestro.nombre} ${maestro.apellido}` : 'Nuevo maestro'}</h2>
       </div>
-    </div>
+
+      <PhotoCapture existingPath={maestro?.photo_url} onFileReady={setPhotoBlob} size={76} />
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <Field label="Nombre" required><input value={nombre} onChange={(e) => setNombre(e.target.value)} autoFocus={!maestro} className={INPUT} /></Field>
+        <Field label="Apellido" required><input value={apellido} onChange={(e) => setApellido(e.target.value)} className={INPUT} /></Field>
+      </div>
+
+      <Field label="Equipo">
+        <div className="grid grid-cols-3 gap-2">
+          {TEAM_ORDER.map((t) => (
+            <motion.button key={t} type="button" whileTap={{ scale: 0.96 }} onClick={() => setTeamColor(t)}
+              className={`flex items-center justify-center gap-2 py-3 rounded-2xl text-sm font-semibold border-2 transition-colors ${teamColor === t ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'}`}>
+              <span className={`w-3 h-3 rounded-full ${TEAM_STYLE[t].dot}`} /> {TEAM_COLOR_LABELS[t]}
+            </motion.button>
+          ))}
+        </div>
+      </Field>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <Field label="Celular"><input type="tel" inputMode="tel" value={celular} onChange={(e) => setCelular(e.target.value)} className={INPUT} /></Field>
+        <Field label="Discipulador" hint="(opcional)"><input value={discipulador} onChange={(e) => setDiscipulador(e.target.value)} className={INPUT} /></Field>
+        <Field label="Fecha de nacimiento"><input type="date" value={fechaNacimiento} max={new Date().toISOString().slice(0, 10)} onChange={(e) => setFechaNacimiento(e.target.value)} className={INPUT} /></Field>
+        <Field label="DPI" hint="(si es mayor de edad)"><input inputMode="numeric" value={dpi} onChange={(e) => setDpi(e.target.value)} className={INPUT} /></Field>
+        <Field label="Tiempo en la iglesia"><input value={tiempoAsistencia} onChange={(e) => setTiempoAsistencia(e.target.value)} placeholder="Ej. 3 años" className={INPUT} /></Field>
+        <Field label="Profesión u oficio" hint="(opcional)"><input value={profesion} onChange={(e) => setProfesion(e.target.value)} className={INPUT} /></Field>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <Field label="¿Bautizado en aguas?">
+          <ChoiceChips value={bautizadoAguas} onChange={setBautizadoAguas} options={[{ value: true, label: 'Sí' }, { value: false, label: 'No' }]} />
+        </Field>
+        <Field label="¿Bautizado en el Espíritu?">
+          <ChoiceChips value={bautizadoEspiritu} onChange={setBautizadoEspiritu} options={[{ value: true, label: 'Sí' }, { value: false, label: 'No' }]} />
+        </Field>
+      </div>
+
+      <FormError error={error} />
+
+      <div className="flex gap-2 pt-1">
+        {maestro && (
+          <button type="button" onClick={() => setConfirmDelete(true)} className="px-4 py-3.5 rounded-2xl bg-gray-100 text-gray-500 hover:bg-red-50 hover:text-red-700 transition-colors" aria-label="Eliminar maestro">
+            <Trash2 size={18} />
+          </button>
+        )}
+        <button type="button" onClick={onCancel} className="flex-1 py-3.5 rounded-2xl bg-gray-100 text-gray-700 font-semibold hover:bg-gray-200">Cancelar</button>
+        <motion.button type="submit" disabled={saving} whileTap={{ scale: 0.97 }} className="flex-[2] py-3.5 rounded-2xl bg-indigo-600 text-white font-display font-bold text-lg hover:bg-indigo-700 disabled:opacity-60">
+          {saving ? 'Guardando…' : 'Guardar'}
+        </motion.button>
+      </div>
+
+      <ConfirmSheet
+        open={confirmDelete}
+        title={`¿Eliminar a ${maestro?.nombre ?? ''}?`}
+        message="Se quita del directorio de maestros. Esto no borra su cuenta de la app, si tiene."
+        confirmLabel="Sí, eliminar"
+        destructive
+        busy={saving}
+        onConfirm={handleDelete}
+        onClose={() => setConfirmDelete(false)}
+      />
+    </form>
   )
 }

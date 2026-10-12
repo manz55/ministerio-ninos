@@ -66,7 +66,7 @@ export function DatePicker({ value, onChange, disableFuture = true, disableSunda
         className="flex items-center gap-2 px-4 py-2.5 bg-white border-2 border-gray-200 rounded-2xl font-medium text-gray-700 hover:border-indigo-400 transition-colors shadow-sm text-sm"
       >
         <Calendar size={15} className="text-indigo-500" />
-        <span className="capitalize">
+        <span className="inline-block first-letter:uppercase">
           {format(value, "d 'de' MMMM yyyy", { locale: es })}
         </span>
       </button>
@@ -88,7 +88,7 @@ export function DatePicker({ value, onChange, disableFuture = true, disableSunda
               >
                 <ChevronLeft size={16} />
               </button>
-              <span className="font-bold text-gray-900 text-sm capitalize">
+              <span className="font-bold text-gray-900 text-sm inline-block first-letter:uppercase">
                 {format(view, 'MMMM yyyy', { locale: es })}
               </span>
               <button

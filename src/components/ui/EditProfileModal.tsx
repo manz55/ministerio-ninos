@@ -1,18 +1,21 @@
 import { useState } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
-import { UserRound, X, Check } from 'lucide-react'
+import { UserRound } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import type { Profile } from '../../types/domain'
+import { Sheet, DrawnCheck } from '../motion'
+import { Field, FormError, INPUT } from './form'
 
-/** Deja a un coordinador corregir su propio nombre (typo al registrarlo, cambio de apellido, etc.) sin pedirle a otro admin que lo haga por Usuarios. */
+/** Para corregir el propio nombre (un error al registrarlo, cambio de
+ * apellido…) sin pedirle a otro coordinador que lo haga por Usuarios. */
 export function EditProfileModal({ profile, onClose, onSaved }: { profile: Profile; onClose: () => void; onSaved: (fullName: string) => void }) {
   const [fullName, setFullName] = useState(profile.full_name)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [done, setDone] = useState(false)
 
-  async function handleSave() {
-    if (!fullName.trim()) { setError('El nombre es requerido.'); return }
+  async function submit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!fullName.trim()) { setError('Escribe tu nombre.'); return }
     setSaving(true)
     setError(null)
     const { error: err } = await supabase.from('profiles').update({ full_name: fullName.trim() }).eq('id', profile.id)
@@ -20,61 +23,27 @@ export function EditProfileModal({ profile, onClose, onSaved }: { profile: Profi
     if (err) { setError('No se pudo guardar. Intenta de nuevo.'); return }
     setDone(true)
     onSaved(fullName.trim())
-    setTimeout(onClose, 1000)
+    setTimeout(onClose, 1100)
   }
 
   return (
-    <AnimatePresence>
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/30 backdrop-blur-sm"
-        onClick={onClose}
-      >
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          exit={{ opacity: 0, scale: 0.95 }}
-          onClick={(e) => e.stopPropagation()}
-          className="bg-white rounded-2xl shadow-xl p-6 max-w-sm w-full space-y-4"
-        >
-          <div className="flex items-center justify-between">
-            <h3 className="font-bold text-gray-900 flex items-center gap-2">
-              <UserRound size={16} className="text-indigo-500" /> Mis datos
-            </h3>
-            <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
-              <X size={18} />
-            </button>
-          </div>
-
-          {done ? (
-            <p className="text-sm font-semibold text-emerald-600 bg-emerald-50 rounded-xl px-4 py-3 text-center">
-              ✓ Datos actualizados
-            </p>
-          ) : (
-            <>
-              {error && <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>}
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">Nombre completo</label>
-                <input type="text" value={fullName} onChange={(e) => setFullName(e.target.value)} autoFocus
-                  className="w-full px-3 py-2.5 border-2 border-gray-200 rounded-lg focus:border-indigo-500 focus:outline-none text-sm" />
-              </div>
-              {profile.email && (
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1">Correo</label>
-                  <p className="text-sm text-gray-400 px-3 py-2.5 bg-gray-50 rounded-lg">{profile.email}</p>
-                </div>
-              )}
-              <button onClick={handleSave} disabled={saving}
-                className="w-full flex items-center justify-center gap-1.5 py-2.5 text-sm font-semibold text-white bg-indigo-600 rounded-xl hover:bg-indigo-700 disabled:opacity-50 transition-colors">
-                <Check size={14} />
-                {saving ? 'Guardando…' : 'Guardar'}
-              </button>
-            </>
-          )}
-        </motion.div>
-      </motion.div>
-    </AnimatePresence>
+    <Sheet open onClose={onClose} title="Mis datos">
+      {done ? (
+        <div className="px-6 py-12 flex flex-col items-center gap-3 text-center">
+          <DrawnCheck size={72} className="text-emerald-500" />
+          <p className="font-display text-xl font-bold text-gray-900">Datos actualizados</p>
+        </div>
+      ) : (
+        <form onSubmit={submit} className="px-6 pt-3 sm:pt-7 pb-6 space-y-5">
+          <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2 pr-10"><UserRound size={22} className="text-indigo-600" /> Mis datos</h2>
+          <Field label="Nombre completo"><input value={fullName} onChange={(e) => setFullName(e.target.value)} autoFocus className={INPUT} /></Field>
+          {profile.email && <Field label="Correo"><p className="px-4 py-3 rounded-2xl bg-gray-50 text-gray-500">{profile.email}</p></Field>}
+          <FormError error={error} />
+          <button type="submit" disabled={saving} className="w-full py-3.5 rounded-2xl bg-indigo-600 text-white font-display font-bold text-lg hover:bg-indigo-700 disabled:opacity-60">
+            {saving ? 'Guardando…' : 'Guardar'}
+          </button>
+        </form>
+      )}
+    </Sheet>
   )
 }
