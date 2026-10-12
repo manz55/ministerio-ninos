@@ -191,12 +191,12 @@ export function NewFamilyStep({
         >
           <ChevronLeft size={15} /> Volver a la búsqueda
         </button>
-        <h2 className="text-2xl font-bold text-gray-900">Nueva familia</h2>
+        <h2 className="text-3xl font-semibold text-gray-900">Nueva familia</h2>
         <p className="text-gray-500 mt-0.5">Completa los datos para registrarla</p>
       </div>
 
       {/* ── Padre / madre ── */}
-      <section className="bg-white rounded-xl border-2 border-gray-200 p-5 space-y-4">
+      <section className="bg-white rounded-3xl border border-gray-200/70 shadow-sm p-5 space-y-4">
         <h3 className="font-semibold text-gray-700 text-sm uppercase tracking-wider">
           Padre o madre
         </h3>
@@ -260,7 +260,7 @@ export function NewFamilyStep({
           const sameSurnameFamilies = findSameSurnameFamilies(child.full_name)
 
           return (
-            <div key={child.key} className="bg-white rounded-xl border-2 border-gray-200 p-5 space-y-4">
+            <div key={child.key} className="bg-white rounded-3xl border border-gray-200/70 shadow-sm p-5 space-y-4">
               <div className="flex items-center justify-between">
                 <span className="text-sm font-semibold text-gray-600">
                   Niño {i + 1}
@@ -418,7 +418,7 @@ export function NewFamilyStep({
                 <select
                   value={child.guardian_relationship}
                   onChange={(e) => updateChild(child.key, 'guardian_relationship', e.target.value as GuardianRelationship | '')}
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-indigo-500 focus:outline-none text-base bg-white"
+                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-2xl focus:border-indigo-500 focus:outline-none text-base bg-white"
                 >
                   <option value="">Sin especificar</option>
                   {Object.entries(GUARDIAN_RELATIONSHIP_LABELS).map(([value, label]) => (
@@ -437,7 +437,7 @@ export function NewFamilyStep({
                   value={child.allergies}
                   onChange={(e) => updateChild(child.key, 'allergies', e.target.value)}
                   placeholder="Ej. maní, polvo, penicilina…"
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-indigo-500 focus:outline-none text-base"
+                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-2xl focus:border-indigo-500 focus:outline-none text-base"
                 />
               </div>
 
@@ -451,7 +451,7 @@ export function NewFamilyStep({
                   value={child.medical_notes}
                   onChange={(e) => updateChild(child.key, 'medical_notes', e.target.value)}
                   placeholder="Ej. asma, epilepsia controlada…"
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-indigo-500 focus:outline-none text-base"
+                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-2xl focus:border-indigo-500 focus:outline-none text-base"
                 />
               </div>
 
@@ -465,7 +465,7 @@ export function NewFamilyStep({
                   onChange={(e) => updateChild(child.key, 'comments', e.target.value)}
                   placeholder="Ej. ya va solo al baño, le teme a los globos…"
                   rows={2}
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-indigo-500 focus:outline-none text-base resize-none"
+                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-2xl focus:border-indigo-500 focus:outline-none text-base resize-none"
                 />
               </div>
             </div>

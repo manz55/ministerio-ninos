@@ -25,7 +25,7 @@ export class ErrorBoundary extends Component<Props, State> {
             <span className="text-4xl">⚠️</span>
           </div>
           <div className="space-y-2">
-            <h1 className="text-xl font-black text-gray-900">Algo salió mal</h1>
+            <h1 className="text-xl font-display font-semibold text-gray-900">Algo salió mal</h1>
             <p className="text-sm text-gray-500 max-w-xs">Intenta recargar la página. Si sigue pasando, avísale al administrador.</p>
           </div>
           <button

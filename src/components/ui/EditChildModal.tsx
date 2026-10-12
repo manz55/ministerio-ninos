@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Check, Trash2 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
@@ -103,13 +104,15 @@ export function EditChildModal({
     onDeleted()
   }
 
-  return (
+  // Portal: se puede abrir desde dentro del panel de registro, que está
+  // animado con transform — ahí un `fixed` quedaría atrapado dentro del panel.
+  return createPortal(
     <AnimatePresence>
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/30 backdrop-blur-sm"
+        className="fixed inset-0 z-[80] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/30 backdrop-blur-sm"
         onClick={onClose}
       >
         <motion.div
@@ -258,6 +261,7 @@ export function EditChildModal({
           </div>
         </motion.div>
       </motion.div>
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body
   )
 }

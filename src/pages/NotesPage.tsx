@@ -1,4 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
+import { motion } from 'framer-motion'
+import { itemVariants } from '../components/motion/presets'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { Search, X, User, Send, Users, Calendar, Filter } from 'lucide-react'
@@ -109,7 +111,7 @@ function NoteComposer({ onSaved }: { onSaved: () => void }) {
   const dateLabel = sessionDate === todayStr ? null : format(new Date(sessionDate + 'T12:00:00'), "d MMM", { locale: es })
 
   return (
-    <div className="bg-white rounded-2xl border-2 border-gray-200 p-3 space-y-2.5">
+    <div className="bg-white rounded-3xl border border-gray-200/70 shadow-sm p-3 space-y-2.5">
       {(dateLabel || teamColor || selectedChild) && (
         <div className="flex flex-wrap gap-1.5">
           {dateLabel && (
@@ -135,7 +137,7 @@ function NoteComposer({ onSaved }: { onSaved: () => void }) {
         onChange={(e) => setNote(e.target.value)}
         rows={2}
         placeholder="Escribe una nota del turno…"
-        className="w-full px-3 py-2.5 border-2 border-gray-200 rounded-xl focus:border-indigo-500 focus:outline-none text-sm resize-none placeholder:text-gray-300"
+        className="w-full px-3 py-2.5 border-2 border-gray-200 rounded-2xl focus:border-indigo-500 focus:outline-none text-sm resize-none placeholder:text-gray-300"
       />
 
       {panel === 'date' && (
@@ -256,7 +258,7 @@ export default function NotesPage() {
   return (
     <div className="space-y-5">
       <div>
-        <h2 className="text-2xl font-bold text-gray-900">Notas del turno</h2>
+        <h2 className="text-3xl font-semibold text-gray-900">Notas del turno</h2>
         <p className="text-gray-500 text-sm mt-0.5">Registro de actividades, incidentes y notas por niño</p>
       </div>
 
@@ -291,7 +293,7 @@ export default function NotesPage() {
               <input
                 type="text" value={childFilter} onChange={(e) => setChildFilter(e.target.value)}
                 placeholder="Filtrar por nombre de niño…"
-                className="w-full pl-9 pr-3 py-2 border-2 border-gray-200 rounded-xl focus:border-indigo-500 focus:outline-none text-sm bg-white"
+                className="w-full pl-9 pr-3 py-2 border-2 border-gray-200 rounded-2xl focus:border-indigo-500 focus:outline-none text-sm bg-white"
               />
             </div>
             {filtersActive && (
@@ -317,8 +319,8 @@ export default function NotesPage() {
               {g.date === todayStr ? 'Hoy' : format(new Date(g.date + 'T12:00:00'), "d 'de' MMMM", { locale: es })}
             </p>
             <div className="space-y-2">
-              {g.items.map((n) => (
-                <div key={n.id} className="bg-white rounded-xl border border-gray-200 p-3.5 space-y-1.5">
+              {g.items.map((n, i) => (
+                <motion.div key={n.id} variants={itemVariants} initial="hidden" animate="show" custom={i} className="bg-white rounded-2xl border border-gray-200/70 shadow-sm p-4 space-y-1.5">
                   <div className="flex items-center justify-between gap-2 flex-wrap">
                     <div className="flex items-center gap-1.5 flex-wrap">
                       {n.team_color && (
@@ -335,7 +337,7 @@ export default function NotesPage() {
                     <span className="text-[10px] text-gray-400">{n.profiles?.full_name ?? 'Autor desconocido'}</span>
                   </div>
                   <p className="text-sm text-gray-700 whitespace-pre-wrap">{n.note}</p>
-                </div>
+                </motion.div>
               ))}
             </div>
           </div>

@@ -55,15 +55,18 @@ export default function Dock({ items }: DockProps) {
                 whileTap={{ scale: 0.9 }}
                 className="relative flex flex-col items-center gap-1 px-2 sm:px-5 py-1 min-w-[52px] sm:min-w-[60px]"
               >
-                <div
-                  className={[
-                    'relative rounded-2xl p-2 sm:p-2.5 transition-colors',
-                    isActive ? 'bg-indigo-50' : 'bg-transparent',
-                  ].join(' ')}
-                >
+                <div className="relative rounded-2xl p-2 sm:p-2.5">
+                  {/* La pastilla de fondo se desliza a la sección activa. */}
+                  {isActive && (
+                    <motion.span
+                      layoutId="dock-pill"
+                      className="absolute inset-0 rounded-2xl bg-indigo-50"
+                      transition={{ type: 'spring', stiffness: 500, damping: 36 }}
+                    />
+                  )}
                   <item.icon
                     className={[
-                      'h-5 w-5 sm:h-6 sm:w-6 transition-colors',
+                      'relative h-5 w-5 sm:h-6 sm:w-6 transition-colors',
                       isActive ? 'text-indigo-600' : 'text-gray-500',
                     ].join(' ')}
                   />

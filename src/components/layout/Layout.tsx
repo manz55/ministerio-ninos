@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { Outlet, useOutletContext } from 'react-router-dom'
+import { Outlet, useLocation, useOutletContext } from 'react-router-dom'
+import { motion } from 'framer-motion'
 import { ClipboardList, BarChart3, Users, NotebookPen, UserCog, Contact, LogOut, KeyRound, UserRound } from 'lucide-react'
 import Dock from '../ui/Dock'
 import { ChurchLogo } from '../ui/ChurchLogo'
@@ -28,6 +29,7 @@ export default function Layout({ isAdmin, profile }: { isAdmin: boolean; profile
         { icon: ClipboardList,  label: 'Registro', to: '/registro' },
         { icon: NotebookPen,    label: 'Notas',    to: '/notas' },
       ]
+  const location = useLocation()
   const [showChangePassword, setShowChangePassword] = useState(false)
   const [showEditProfile, setShowEditProfile] = useState(false)
   // Local override so the header updates the instant the name is saved,
@@ -129,7 +131,11 @@ export default function Layout({ isAdmin, profile }: { isAdmin: boolean; profile
         className={`${CONTAINER} px-4 py-6`}
         style={{ paddingBottom: 'max(8rem, calc(6rem + env(safe-area-inset-bottom)))' }}
       >
-        <Outlet context={profile} />
+        {/* Cada página entra con un fundido suave. Solo opacidad: un
+            transform aquí rompería los fondos `fixed` de las páginas. */}
+        <motion.div key={location.pathname} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.25 }}>
+          <Outlet context={profile} />
+        </motion.div>
       </main>
 
       <Dock items={navItems} />

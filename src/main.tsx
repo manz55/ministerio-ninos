@@ -1,4 +1,5 @@
 import { StrictMode } from 'react'
+import { MotionConfig } from 'framer-motion'
 import { createRoot } from 'react-dom/client'
 import '@fontsource-variable/figtree'
 import '@fontsource-variable/fredoka'
@@ -20,8 +21,12 @@ if (import.meta.env.PROD && import.meta.env.VITE_DEMO !== '1' && 'serviceWorker'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <ErrorBoundary>
-      <App />
-    </ErrorBoundary>
+    {/* "Reducir movimiento" del sistema apaga desplazamientos y rebotes en
+        toda la app; solo quedan los cambios de opacidad. */}
+    <MotionConfig reducedMotion="user">
+      <ErrorBoundary>
+        <App />
+      </ErrorBoundary>
+    </MotionConfig>
   </StrictMode>,
 )

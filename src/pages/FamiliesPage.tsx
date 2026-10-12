@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useSearchParams, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
+import { listVariants, itemVariants } from '../components/motion/presets'
 import {
   Search, ChevronRight, Edit2, Check, X, Plus, Phone,
   AlertTriangle, UserPlus, Trash2, Users, ChevronLeft,
@@ -19,7 +20,6 @@ import { QuickCheckIn } from '../components/ui/QuickCheckIn'
 import { useDebounce } from '../hooks/useDebounce'
 import { NewFamilyStep } from '../components/checkin/NewFamilyStep'
 import { CATEGORY_LABELS, CATEGORY_COLORS, GUARDIAN_RELATIONSHIP_LABELS, NEXT_CATEGORY, isCorderitos, type ParentRow, type Category, type GuardianRelationship, type ChildPrefill } from '../types/domain'
-import { BackgroundRadialViolet } from '../components/ui/BackgroundRadialViolet'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -558,7 +558,7 @@ function FamilyDetailPanel({
         )}
 
         {/* Padre / madre */}
-        <section className="bg-white rounded-xl border-2 border-gray-200 p-5 space-y-3">
+        <section className="bg-white rounded-3xl border border-gray-200/70 shadow-sm p-5 space-y-3">
           <div className="flex items-center justify-between">
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Padre o madre</p>
             {!editingParent && (
@@ -743,7 +743,7 @@ function FamilyDetailPanel({
 
 // ─── Family list item ─────────────────────────────────────────────────────────
 
-function FamilyListItem({ family, onSelect }: { family: FamilyDetail; onSelect: () => void }) {
+function FamilyListItem({ family, onSelect, index = 0 }: { family: FamilyDetail; onSelect: () => void; index?: number }) {
   const anyAlert = family.children?.some((c) => c.allergies || c.medical_notes)
   const initials = family.full_name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase()
   // Los niños van en su propia fila debajo, uno por chip con su nombre y su
@@ -751,9 +751,12 @@ function FamilyListItem({ family, onSelect }: { family: FamilyDetail; onSelect: 
   // fila que el nombre y en celular se salían de la tarjeta y tapaban el
   // nombre y el teléfono.
   return (
-    <button
+    <motion.button
+      variants={itemVariants}
+      custom={index}
+      whileTap={{ scale: 0.985 }}
       onClick={onSelect}
-      className="w-full text-left p-4 bg-white rounded-2xl border border-gray-200/80 shadow-sm hover:border-indigo-300 hover:shadow-md transition-all group"
+      className="w-full text-left p-4 bg-white rounded-2xl border border-gray-200/80 shadow-sm hover:border-indigo-300 hover:shadow-md transition-[border-color,box-shadow] group"
     >
       <div className="flex items-start gap-3">
         <span className="w-10 h-10 rounded-full bg-indigo-50 text-indigo-700 font-display font-semibold flex items-center justify-center shrink-0">
@@ -790,7 +793,7 @@ function FamilyListItem({ family, onSelect }: { family: FamilyDetail; onSelect: 
         </div>
         <ChevronRight className="self-center text-gray-300 group-hover:text-indigo-500 transition-colors shrink-0" size={18} />
       </div>
-    </button>
+    </motion.button>
   )
 }
 
@@ -888,7 +891,7 @@ function RosterRow({ child, onChanged }: { child: RosterChild; onChanged: () => 
           />
         )}
       </AnimatePresence>
-      <div className="bg-white rounded-xl border-2 border-gray-200 p-4 space-y-2">
+      <div className="bg-white rounded-3xl border border-gray-200/70 shadow-sm p-4 space-y-2">
         {deleteError && <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">{deleteError}</p>}
         <div className="flex items-start justify-between gap-2">
           <div className="flex items-start gap-3 min-w-0">
@@ -1024,7 +1027,7 @@ function RosterPanel({ onClose, initialFilter, onLinkToFamily }: {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Buscar niño por nombre…"
-          className="w-full pl-11 pr-4 py-3 text-base border-2 border-gray-200 rounded-xl focus:border-indigo-500 focus:outline-none bg-white"
+          className="w-full pl-11 pr-4 py-3 text-base border-2 border-gray-200 rounded-2xl focus:border-indigo-500 focus:outline-none bg-white"
         />
         {query && (
           <button onClick={() => setQuery('')}
@@ -1301,12 +1304,11 @@ export default function FamiliesPage() {
 
   return (
     <>
-    <BackgroundRadialViolet />
     <div className="relative z-[2] space-y-5">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900">Familias</h2>
+          <h2 className="text-3xl font-semibold text-gray-900">Familias</h2>
           <p className="text-gray-500 text-sm mt-0.5">
             {totalFamilies !== null ? `${totalFamilies} familias registradas` : 'Cargando…'}
           </p>
@@ -1314,7 +1316,7 @@ export default function FamiliesPage() {
         <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap sm:shrink-0">
           <button
             onClick={() => setShowRoster(true)}
-            className="flex items-center gap-2 px-3.5 py-2.5 text-sm font-semibold text-gray-600 bg-white border-2 border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
+            className="flex items-center gap-2 px-3.5 py-2.5 text-sm font-semibold text-gray-600 bg-white border-2 border-gray-200 rounded-2xl hover:bg-gray-50 transition-colors"
           >
             Buscar por niño
           </button>
@@ -1341,7 +1343,7 @@ export default function FamiliesPage() {
           value={query}
           onChange={(e) => { setQuery(e.target.value); setShowAll(false) }}
           placeholder="Buscar por nombre o teléfono…"
-          className="w-full pl-11 pr-4 py-3.5 text-base border-2 border-gray-200 rounded-xl focus:border-indigo-500 focus:outline-none bg-white"
+          className="w-full pl-11 pr-4 py-3.5 text-base border-2 border-gray-200 rounded-2xl focus:border-indigo-500 focus:outline-none bg-white"
         />
         {query && (
           <button onClick={() => setQuery('')}
@@ -1356,7 +1358,7 @@ export default function FamiliesPage() {
         <button
           onClick={() => setShowAll(true)}
           disabled={loadingAll}
-          className="w-full flex items-center justify-center gap-2 py-3 text-sm font-medium text-gray-600 bg-white border-2 border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
+          className="w-full flex items-center justify-center gap-2 py-3 text-sm font-medium text-gray-600 bg-white border-2 border-gray-200 rounded-2xl hover:bg-gray-50 transition-colors"
         >
           <Users size={15} />
           {loadingAll ? 'Cargando…' : `Ver todas las familias (${totalFamilies ?? allFamilies.length})`}
@@ -1418,12 +1420,13 @@ export default function FamiliesPage() {
 
       {!loadingAll && displayList.length > 0 && (
         <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
+          variants={listVariants}
+          initial="hidden"
+          animate="show"
           className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-2 items-start"
         >
-          {displayList.map((family) => (
-            <FamilyListItem key={family.id} family={family} onSelect={() => setSelected(family)} />
+          {displayList.map((family, i) => (
+            <FamilyListItem key={family.id} family={family} index={i} onSelect={() => setSelected(family)} />
           ))}
         </motion.div>
       )}

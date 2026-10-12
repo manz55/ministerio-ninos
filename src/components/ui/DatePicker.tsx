@@ -63,7 +63,7 @@ export function DatePicker({ value, onChange, disableFuture = true, disableSunda
       {/* Trigger button */}
       <button
         onClick={() => setOpen((o) => !o)}
-        className="flex items-center gap-2 px-4 py-2.5 bg-white border-2 border-gray-200 rounded-xl font-medium text-gray-700 hover:border-indigo-400 transition-colors shadow-sm text-sm"
+        className="flex items-center gap-2 px-4 py-2.5 bg-white border-2 border-gray-200 rounded-2xl font-medium text-gray-700 hover:border-indigo-400 transition-colors shadow-sm text-sm"
       >
         <Calendar size={15} className="text-indigo-500" />
         <span className="capitalize">

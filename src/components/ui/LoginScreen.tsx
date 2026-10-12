@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { ShieldCheck, Mail } from 'lucide-react'
 import { signIn, requestPasswordReset } from '../../lib/auth'
-import { ChurchLogo } from './ChurchLogo'
+import { AuthShell } from './AuthShell'
 
 export function LoginScreen() {
   const [email, setEmail] = useState('')
@@ -41,17 +41,10 @@ export function LoginScreen() {
 
   if (showReset) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 p-8 gap-8">
-        <div className="text-center space-y-3">
-          <div className="w-20 h-20 bg-indigo-100 rounded-3xl flex items-center justify-center mx-auto shadow-sm">
-            <ChurchLogo size={44} />
-          </div>
-          <h1 className="text-2xl font-black text-gray-900">Recuperar contraseña</h1>
-          <p className="text-sm text-gray-500">Te enviamos un enlace a tu correo para elegir una nueva</p>
-        </div>
+      <AuthShell title="Recuperar contraseña" subtitle="Te enviamos un enlace a tu correo para elegir una nueva">
 
         {resetSent ? (
-          <div className="w-full max-w-xs space-y-3 text-center">
+          <div className="w-full space-y-3.5 text-center">
             <p className="text-sm font-semibold text-emerald-600 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3">
               ✓ Si ese correo está registrado, te llegará un enlace en unos minutos.
             </p>
@@ -64,9 +57,9 @@ export function LoginScreen() {
             </button>
           </div>
         ) : (
-          <form onSubmit={handleResetSubmit} className="w-full max-w-xs space-y-3">
+          <form onSubmit={handleResetSubmit} className="w-full space-y-3.5">
             <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">Correo</label>
+              <label className="block text-sm font-semibold text-gray-700 mb-1.5">Correo</label>
               <input
                 type="email"
                 value={resetEmail}
@@ -74,7 +67,7 @@ export function LoginScreen() {
                 autoComplete="username"
                 autoFocus
                 required
-                className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-indigo-500 focus:outline-none text-base bg-white"
+                className="w-full px-4 py-3.5 border-2 border-gray-200 rounded-2xl focus:border-indigo-500 focus:outline-none text-base bg-white transition-colors"
               />
             </div>
             {resetError && (
@@ -85,7 +78,7 @@ export function LoginScreen() {
             <button
               type="submit"
               disabled={resetSending || !resetEmail}
-              className="w-full flex items-center justify-center gap-2 py-3 text-sm font-bold text-white bg-indigo-600 rounded-xl hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+              className="w-full flex items-center justify-center gap-2 py-3.5 font-display text-lg font-semibold text-white bg-indigo-600 rounded-2xl shadow-lg shadow-indigo-900/15 hover:bg-indigo-700 active:scale-[0.98] disabled:opacity-50 transition"
             >
               <Mail size={16} />
               {resetSending ? 'Enviando…' : 'Enviar enlace'}
@@ -99,23 +92,16 @@ export function LoginScreen() {
             </button>
           </form>
         )}
-      </div>
+      </AuthShell>
     )
   }
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 p-8 gap-8">
-      <div className="text-center space-y-3">
-        <div className="w-20 h-20 bg-indigo-100 rounded-3xl flex items-center justify-center mx-auto shadow-sm">
-          <ChurchLogo size={44} />
-        </div>
-        <h1 className="text-2xl font-black text-gray-900">Maestros de Niños</h1>
-        <p className="text-sm text-gray-500">Inicia sesión para continuar</p>
-      </div>
+    <AuthShell title="Maestros de Niños" subtitle="Inicia sesión para continuar">
 
-      <form onSubmit={handleSubmit} className="w-full max-w-xs space-y-3">
+      <form onSubmit={handleSubmit} className="w-full space-y-3.5">
         <div>
-          <label className="block text-xs font-medium text-gray-500 mb-1">Correo</label>
+          <label className="block text-sm font-semibold text-gray-700 mb-1.5">Correo</label>
           <input
             type="email"
             value={email}
@@ -123,18 +109,18 @@ export function LoginScreen() {
             autoComplete="username"
             autoFocus
             required
-            className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-indigo-500 focus:outline-none text-base bg-white"
+            className="w-full px-4 py-3.5 border-2 border-gray-200 rounded-2xl focus:border-indigo-500 focus:outline-none text-base bg-white transition-colors"
           />
         </div>
         <div>
-          <label className="block text-xs font-medium text-gray-500 mb-1">Contraseña</label>
+          <label className="block text-sm font-semibold text-gray-700 mb-1.5">Contraseña</label>
           <input
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             autoComplete="current-password"
             required
-            className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-indigo-500 focus:outline-none text-base bg-white"
+            className="w-full px-4 py-3.5 border-2 border-gray-200 rounded-2xl focus:border-indigo-500 focus:outline-none text-base bg-white transition-colors"
           />
         </div>
 
@@ -147,7 +133,7 @@ export function LoginScreen() {
         <button
           type="submit"
           disabled={submitting || !email || !password}
-          className="w-full flex items-center justify-center gap-2 py-3 text-sm font-bold text-white bg-indigo-600 rounded-xl hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+          className="w-full flex items-center justify-center gap-2 py-3.5 font-display text-lg font-semibold text-white bg-indigo-600 rounded-2xl shadow-lg shadow-indigo-900/15 hover:bg-indigo-700 active:scale-[0.98] disabled:opacity-50 transition"
         >
           <ShieldCheck size={16} />
           {submitting ? 'Entrando…' : 'Entrar'}
@@ -160,6 +146,6 @@ export function LoginScreen() {
           ¿Olvidaste tu contraseña?
         </button>
       </form>
-    </div>
+    </AuthShell>
   )
 }

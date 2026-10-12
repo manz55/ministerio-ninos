@@ -1,4 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
+import { motion } from 'framer-motion'
+import { itemVariants } from '../components/motion/presets'
 import { Search, Plus, ChevronLeft, Trash2, Droplet, Wind } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { uploadPhoto } from '../lib/photo'
@@ -61,7 +63,7 @@ export default function MaestrosPage() {
     <div className="space-y-5">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-black text-gray-900 leading-tight">Maestros</h1>
+          <h1 className="text-3xl font-semibold text-gray-900 leading-tight">Maestros</h1>
           <p className="text-sm text-gray-400 leading-tight">
             {maestros.length} {maestros.length === 1 ? 'registrado' : 'registrados'}
           </p>
@@ -82,7 +84,7 @@ export default function MaestrosPage() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Buscar por nombre…"
-          className="w-full pl-10 pr-4 py-3 text-sm border-2 border-gray-200 rounded-xl focus:border-indigo-500 focus:outline-none placeholder:text-gray-300"
+          className="w-full pl-10 pr-4 py-3 text-sm border-2 border-gray-200 rounded-2xl focus:border-indigo-500 focus:outline-none placeholder:text-gray-300"
         />
       </div>
 
@@ -107,10 +109,11 @@ export default function MaestrosPage() {
                   <span className="text-xs text-gray-400">{members.length}</span>
                 </div>
                 <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-3">
-                  {members.map((m) => (
-                    <div
+                  {members.map((m, i) => (
+                    <motion.div
                       key={m.id}
-                      className="bg-white rounded-2xl border-2 border-gray-200 hover:border-indigo-300 p-4 flex items-center gap-3 transition-colors"
+                      variants={itemVariants} initial="hidden" animate="show" custom={i}
+                      className="bg-white rounded-3xl border border-gray-200/70 shadow-sm hover:border-indigo-300 p-4 flex items-center gap-3 transition-colors"
                     >
                       <button onClick={() => setEditing(m)} className="text-left flex items-center gap-3 min-w-0 flex-1">
                         <PhotoAvatar path={m.photo_url} size={48} />
@@ -140,7 +143,7 @@ export default function MaestrosPage() {
                           />
                         ))}
                       </div>
-                    </div>
+                    </motion.div>
                   ))}
                 </div>
               </div>
@@ -268,7 +271,7 @@ function MaestroForm({
         <ChevronLeft size={15} /> Volver a Maestros
       </button>
 
-      <div className="bg-white rounded-xl border-2 border-gray-200 p-5 space-y-4">
+      <div className="bg-white rounded-3xl border border-gray-200/70 shadow-sm p-5 space-y-4">
         <PhotoCapture existingPath={maestro?.photo_url} onFileReady={setPhotoBlob} />
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -281,7 +284,7 @@ function MaestroForm({
               value={nombre}
               onChange={(e) => setNombre(e.target.value)}
               autoFocus
-              className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-indigo-500 focus:outline-none text-base"
+              className="w-full px-4 py-3 border-2 border-gray-200 rounded-2xl focus:border-indigo-500 focus:outline-none text-base"
             />
           </div>
           <div>
@@ -292,7 +295,7 @@ function MaestroForm({
               type="text"
               value={apellido}
               onChange={(e) => setApellido(e.target.value)}
-              className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-indigo-500 focus:outline-none text-base"
+              className="w-full px-4 py-3 border-2 border-gray-200 rounded-2xl focus:border-indigo-500 focus:outline-none text-base"
             />
           </div>
         </div>
@@ -305,7 +308,7 @@ function MaestroForm({
             type="text"
             value={discipulador}
             onChange={(e) => setDiscipulador(e.target.value)}
-            className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-indigo-500 focus:outline-none text-base"
+            className="w-full px-4 py-3 border-2 border-gray-200 rounded-2xl focus:border-indigo-500 focus:outline-none text-base"
           />
         </div>
 
@@ -317,7 +320,7 @@ function MaestroForm({
               value={fechaNacimiento}
               max={new Date().toISOString().slice(0, 10)}
               onChange={(e) => setFechaNacimiento(e.target.value)}
-              className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-indigo-500 focus:outline-none text-base"
+              className="w-full px-4 py-3 border-2 border-gray-200 rounded-2xl focus:border-indigo-500 focus:outline-none text-base"
             />
           </div>
           <div>
@@ -329,7 +332,7 @@ function MaestroForm({
               inputMode="numeric"
               value={dpi}
               onChange={(e) => setDpi(e.target.value)}
-              className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-indigo-500 focus:outline-none text-base"
+              className="w-full px-4 py-3 border-2 border-gray-200 rounded-2xl focus:border-indigo-500 focus:outline-none text-base"
             />
           </div>
         </div>
@@ -342,7 +345,7 @@ function MaestroForm({
               inputMode="tel"
               value={celular}
               onChange={(e) => setCelular(e.target.value)}
-              className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-indigo-500 focus:outline-none text-base"
+              className="w-full px-4 py-3 border-2 border-gray-200 rounded-2xl focus:border-indigo-500 focus:outline-none text-base"
             />
           </div>
           <div>
@@ -352,7 +355,7 @@ function MaestroForm({
               value={tiempoAsistencia}
               onChange={(e) => setTiempoAsistencia(e.target.value)}
               placeholder="Ej. 3 años"
-              className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-indigo-500 focus:outline-none text-base placeholder:text-gray-300"
+              className="w-full px-4 py-3 border-2 border-gray-200 rounded-2xl focus:border-indigo-500 focus:outline-none text-base placeholder:text-gray-300"
             />
           </div>
         </div>
@@ -365,7 +368,7 @@ function MaestroForm({
             type="text"
             value={profesion}
             onChange={(e) => setProfesion(e.target.value)}
-            className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-indigo-500 focus:outline-none text-base"
+            className="w-full px-4 py-3 border-2 border-gray-200 rounded-2xl focus:border-indigo-500 focus:outline-none text-base"
           />
         </div>
 

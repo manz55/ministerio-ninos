@@ -10,7 +10,10 @@ const SHAPES: { kind: 'circle' | 'hex' | 'tri'; x: string; y: string; size: numb
   { kind: 'tri',    x: '52%', y: '30%', size: 30,  rot: 20,  color: 'oklch(0.62 0.2 27)' },
 ]
 
-function Shape({ kind, size, color }: { kind: string; size: number; color: string }) {
+import type { ShapeKind } from './logoColors'
+
+/** Una de las tres formas del logo, dibujada dentro de un cuadro de `size`. */
+export function Shape({ kind, size, color }: { kind: ShapeKind; size: number; color: string }) {
   if (kind === 'circle') return <circle cx={size / 2} cy={size / 2} r={size / 2} fill={color} />
   if (kind === 'hex') {
     const r = size / 2

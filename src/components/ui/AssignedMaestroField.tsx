@@ -47,7 +47,7 @@ export function AssignedMaestroField({ value, onChange, freeTextValue, onFreeTex
   const labelClass = compact ? 'block text-xs font-medium text-gray-500 mb-1' : 'block text-sm font-medium text-gray-700 mb-1.5'
   const inputClass = compact
     ? 'w-full px-3 py-2.5 border-2 border-gray-200 rounded-lg focus:border-indigo-500 focus:outline-none text-sm bg-white'
-    : 'w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-indigo-500 focus:outline-none text-base bg-white'
+    : 'w-full px-4 py-3 border-2 border-gray-200 rounded-2xl focus:border-indigo-500 focus:outline-none text-base bg-white'
 
   return (
     <div>

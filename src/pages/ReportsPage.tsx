@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { format, subWeeks, startOfWeek, endOfWeek } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { motion, AnimatePresence } from 'framer-motion'
+import { AnimatedNumber } from '../components/motion'
 import {
   Users, RefreshCw, Download, AlertTriangle, FileText, FileSpreadsheet, PartyPopper, Check, Pencil,
   Bug, Zap, Compass, Baby, PersonStanding, TrendingUp, ChevronDown, ChevronUp, User, Trash2, X, CalendarRange, Monitor,
@@ -14,7 +15,6 @@ import { hasCategoryChanged } from '../lib/categoryUtils'
 import { computeAbsence, absenceMessage, type AbsenceTier } from '../lib/absenceUtils'
 import { graduationMessage } from '../lib/graduationMessages'
 import { DatePicker } from '../components/ui/DatePicker'
-import { AnimatedBlobBackground } from '../components/ui/AnimatedBlobBackground'
 import { fetchAttendanceRange, fetchDailyStaffing, exportRangeCSV, exportRangePDF, toCSV } from '../lib/exportUtils'
 import { ReporteAsistenciaDescarga } from '../components/receipt-printer/ReporteAsistenciaDescarga'
 
@@ -517,14 +517,13 @@ export default function ReportsPage() {
 
   return (
     <>
-    <AnimatedBlobBackground />
     <div className="relative z-[2] space-y-6">
 
       {/* ── Header ── */}
       <div className="space-y-3">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <h2 className="text-2xl font-bold text-gray-900">Reportes</h2>
+            <h2 className="text-3xl font-semibold text-gray-900">Reportes</h2>
             <p className="text-gray-500 text-sm mt-0.5 capitalize">
               {format(selectedDate, "EEEE d 'de' MMMM yyyy", { locale: es })}
               {isToday && <span className="ml-1.5 text-emerald-600 font-semibold">(hoy)</span>}
@@ -572,7 +571,7 @@ export default function ReportsPage() {
         {/* Total hoy */}
         <div className="bg-white rounded-2xl border border-gray-200 p-4 space-y-1 shadow-sm">
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Hoy</p>
-          <p className="text-4xl font-black text-gray-900">{total}</p>
+          <p className="text-4xl font-display font-semibold text-gray-900"><AnimatedNumber value={total} /></p>
           <p className="text-xs text-gray-500">niños registrados</p>
           <div className="flex items-center gap-1 mt-1">
             <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
@@ -592,8 +591,8 @@ export default function ReportsPage() {
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Mayor grupo</p>
           {total > 0 ? (
             <>
-              <p className={`text-4xl font-black ${CAT_CONFIG[topCat]?.color ?? 'text-gray-900'}`}>
-                {byCategory[topCat]}
+              <p className={`text-4xl font-display font-semibold ${CAT_CONFIG[topCat]?.color ?? 'text-gray-900'}`}>
+                <AnimatedNumber value={byCategory[topCat]} />
               </p>
               <p className={`text-xs font-medium ${CAT_CONFIG[topCat]?.color ?? 'text-gray-500'}`}>
                 {CATEGORY_LABELS[topCat]}
@@ -601,7 +600,7 @@ export default function ReportsPage() {
             </>
           ) : (
             <>
-              <p className="text-4xl font-black text-gray-200">—</p>
+              <p className="text-4xl font-display font-semibold text-gray-200">—</p>
               <p className="text-xs text-gray-400">Sin datos</p>
             </>
           )}
@@ -610,7 +609,7 @@ export default function ReportsPage() {
         {/* Promedio semanal */}
         <div className="bg-indigo-50 rounded-2xl border border-indigo-100 p-4 space-y-1 shadow-sm">
           <p className="text-xs font-semibold text-indigo-400 uppercase tracking-wide">Promedio</p>
-          <p className="text-4xl font-black text-indigo-700">{avgWeek || '—'}</p>
+          <p className="text-4xl font-display font-semibold text-indigo-700">{avgWeek || '—'}</p>
           <p className="text-xs text-indigo-500">por semana</p>
         </div>
       </div>
@@ -629,7 +628,7 @@ export default function ReportsPage() {
                   <Icon className={`w-4 h-4 ${cfg.color}`} />
                   <span className={`text-xs font-bold ${cfg.color}`}>{pct}%</span>
                 </div>
-                <p className={`text-2xl font-black ${cfg.color}`}>{count}</p>
+                <p className={`text-2xl font-display font-semibold ${cfg.color}`}><AnimatedNumber value={count} /></p>
                 <div className="space-y-1">
                   <p className="text-xs text-gray-600 font-medium">{CATEGORY_LABELS[cat]}</p>
                   <div className="h-1 bg-white/60 rounded-full overflow-hidden">

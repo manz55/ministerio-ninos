@@ -457,7 +457,7 @@ export default function UsersPage() {
     <div className="space-y-5">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900">Usuarios</h2>
+          <h2 className="text-3xl font-semibold text-gray-900">Usuarios</h2>
           <p className="text-gray-500 text-sm mt-0.5">{users.length} cuenta{users.length !== 1 ? 's' : ''}</p>
         </div>
         {!showNew && (
