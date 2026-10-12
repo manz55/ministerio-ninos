@@ -1,13 +1,22 @@
 import { useState } from 'react'
 import { LogIn, Check, AlertTriangle } from 'lucide-react'
-import { supabase } from '../../lib/supabase'
+import { format } from 'date-fns'
+import { saveAttendance, newId } from '../../lib/offline'
 import { requiresBadge, requiresPager } from '../../lib/categoryUtils'
 import { CATEGORY_LABELS, isCorderitos, type Category, type TeamColor } from '../../types/domain'
 
 const TEAM_KEY = 'ministerio_team_session'
-const today = new Date().toISOString().slice(0, 10)
+
+// Fecha local, igual que Registro (CheckInPage). Antes era toISOString(),
+// que es la fecha en UTC: en Guatemala, de las 6 pm en adelante ya es
+// "mañana" en UTC, así que un culto de noche no encontraba el equipo del día
+// y el check-in se habría guardado con la fecha del día siguiente.
+function localToday() {
+  return format(new Date(), 'yyyy-MM-dd')
+}
 
 function getStoredTeamForToday(): TeamColor | null {
+  const today = localToday()
   try {
     const raw = localStorage.getItem(TEAM_KEY)
     if (!raw) return null
@@ -75,13 +84,15 @@ export function QuickCheckIn({ childId, category }: { childId: string; category:
     }
     setSubmitting(true)
     setError(null)
-    const { error: err } = await supabase.from('attendance').insert({
+    const { error: err } = await saveAttendance({
+      id: newId(),
       child_id: childId,
-      session_date: today,
+      session_date: localToday(),
       team_color: team,
       category: cat,
       badge_number: isCorderitos(cat) ? null : badgeNum,
       pager_number: needsPager && pager ? parseInt(pager, 10) : null,
+      checked_in_at: new Date().toISOString(),
     })
     setSubmitting(false)
     if (err) {

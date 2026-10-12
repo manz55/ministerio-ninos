@@ -1,6 +1,6 @@
 import { supabase } from './supabase'
 
-const BUCKET = 'fotos-ninos'
+export const PHOTO_BUCKET = 'fotos-ninos'
 const MAX_DIM = 400
 const JPEG_QUALITY = 0.72
 
@@ -33,7 +33,7 @@ export function resizeAndCompressImage(file: File): Promise<Blob> {
 
 /** path e.g. `children/{id}.jpg` or `parents/{id}.jpg`. Returns the stored path (not a URL — the bucket is private). */
 export async function uploadPhoto(path: string, blob: Blob): Promise<string | null> {
-  const { error } = await supabase.storage.from(BUCKET).upload(path, blob, {
+  const { error } = await supabase.storage.from(PHOTO_BUCKET).upload(path, blob, {
     contentType: 'image/jpeg',
     upsert: true,
   })
@@ -48,7 +48,7 @@ export async function getSignedPhotoUrl(path: string | null | undefined): Promis
   const cached = signedUrlCache.get(path)
   if (cached && cached.expires > Date.now()) return cached.url
 
-  const { data, error } = await supabase.storage.from(BUCKET).createSignedUrl(path, 3600)
+  const { data, error } = await supabase.storage.from(PHOTO_BUCKET).createSignedUrl(path, 3600)
   if (error || !data) return null
   signedUrlCache.set(path, { url: data.signedUrl, expires: Date.now() + 55 * 60 * 1000 })
   return data.signedUrl

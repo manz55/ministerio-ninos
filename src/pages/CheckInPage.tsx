@@ -5,6 +5,7 @@ import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { Search, CheckCircle2, UserPlus, AlertTriangle, ChevronLeft, ChevronDown, Bug, Zap, Compass, Baby, PersonStanding, User, Pencil, LogIn, Trash2, X, Users, Check, FileWarning, Monitor } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { saveAttendance, newId, getPendingItems, onSynced, readCache, writeCache, pruneDatedCache } from '../lib/offline'
 import { useAuth } from '../lib/auth'
 import { getEffectiveCategory, hasCategoryChanged, getAgeLabel, requiresBadge, requiresPager } from '../lib/categoryUtils'
 import { markRequestResolved } from '../lib/coordinatorRequests'
@@ -42,6 +43,8 @@ type TodayRecord = {
   }
   assigned_teacher_id: string | null
   assigned_teacher: { full_name: string } | null
+  /** Guardado solo en este dispositivo, esperando internet (lib/offline.ts). */
+  pending?: boolean
 }
 
 type ChildResult = {
@@ -63,6 +66,59 @@ type ChildResult = {
 }
 
 const CHILD_SELECT = 'id, full_name, birth_date, category, allergies, medical_notes, toilet_trained, comments, guardian_relationship, photo_url, assigned_maestro_id, assigned_maestro_name, parent_id, parents(full_name, phone)'
+
+type RosterChild = Omit<ChildResult, 'attendance'>
+type TodayAtt = { child_id: string; badge_number: number | null }
+
+/** Today's check-ins that were saved on this device without internet and
+ * haven't uploaded yet, shown in "Registrados hoy" with a "Sin subir" tag. */
+async function withPendingRecords(rows: TodayRecord[]): Promise<TodayRecord[]> {
+  const { attendance, families } = await getPendingItems()
+  if (attendance.length === 0) return rows
+  const roster = readCache<RosterChild[]>('roster') ?? []
+  const pendingKids = families.flatMap((f) => f.children)
+  const known = new Set(rows.map((r) => r.id))
+  const pendingRecords: TodayRecord[] = attendance
+    .filter((a) => a.session_date === today && !known.has(a.id))
+    .map((a) => {
+      const c = roster.find((r) => r.id === a.child_id) ?? pendingKids.find((k) => k.id === a.child_id)
+      return {
+        id: a.id, child_id: a.child_id, category: a.category, badge_number: a.badge_number, pager_number: a.pager_number,
+        checked_in_at: a.checked_in_at, checked_out_at: null, assigned_teacher_id: null, assigned_teacher: null, pending: true,
+        children: {
+          full_name: c?.full_name ?? 'Niño nuevo', allergies: c?.allergies ?? null, medical_notes: c?.medical_notes ?? null,
+          toilet_trained: c?.toilet_trained ?? null, comments: c?.comments ?? null,
+        },
+      }
+    })
+  return [...pendingRecords, ...rows]
+}
+
+/** Roster (server rows or the cached copy) plus whatever was registered on
+ * this device without internet and hasn't uploaded yet (lib/offline.ts). */
+async function buildRoster(rows: RosterChild[], todayAtt: TodayAtt[]): Promise<ChildResult[]> {
+  const pending = await getPendingItems()
+  const knownIds = new Set(rows.map((c) => c.id))
+  const pendingChildren: RosterChild[] = pending.families.flatMap((f) =>
+    f.children.filter((c) => !knownIds.has(c.id)).map((c) => ({
+      ...c,
+      guardian_relationship: c.guardian_relationship as GuardianRelationship | null,
+      photo_url: null,
+      parents: { full_name: f.parent.full_name, phone: f.parent.phone ?? '' },
+    }))
+  )
+  const all = pendingChildren.length
+    ? [...rows, ...pendingChildren].sort((a, b) => a.full_name.localeCompare(b.full_name))
+    : rows
+  const attMap = new Map([
+    ...todayAtt.map((a) => [a.child_id, a.badge_number] as const),
+    ...pending.attendance.filter((a) => a.session_date === today).map((a) => [a.child_id, a.badge_number] as const),
+  ])
+  return all.map((c) => ({
+    ...c,
+    attendance: attMap.has(c.id) ? [{ session_date: today, badge_number: attMap.get(c.id) }] : [],
+  }))
+}
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -467,14 +523,17 @@ function ChildCard({
     if (!category) { setError('Este niño no tiene categoría asignada. Complétala en Familias.'); return }
     setSubmitting(true)
     setError(null)
-    const { data: inserted, error: err } = await supabase.from('attendance').insert({
+    const attendanceId = newId()
+    const { queued, error: err } = await saveAttendance({
+      id: attendanceId,
       child_id: child.id,
       session_date: today,
       team_color: teamColor,
       category,
       badge_number: badgeNumber,
       pager_number: pagerNumber,
-    }).select('id').single()
+      checked_in_at: new Date().toISOString(),
+    }, child.full_name)
     if (err) {
       setSubmitting(false)
       if (err.code === '23505' && err.message.includes('attendance_badge_category_unique')) {
@@ -497,7 +556,9 @@ function ChildCard({
     setBadge('')
     setPager('')
     setShowStamp(true)
-    if (inserted && isCorderitos(category)) {
+    // Sin internet (queued) esto se omite: el check-in en sí ya quedó en
+    // cola, y el maestro responsable se puede poner después.
+    if (!queued && isCorderitos(category)) {
       // El maestro responsable pudo haberse puesto o cambiado justo aquí en
       // el paso de confirmar (ver el bloque de Corderitos más abajo) — se
       // guarda junto con el check-in en vez de forzar un viaje aparte a
@@ -507,7 +568,7 @@ function ChildCard({
         await supabase.from('children').update({ assigned_maestro_id: maestroId, assigned_maestro_name: maestroName }).eq('id', child.id)
         onEdited(child.id, { assigned_maestro_id: maestroId, assigned_maestro_name: maestroName })
       }
-      if (maestroId) autoAssignTodayTeacher(inserted.id, maestroId)
+      if (maestroId) autoAssignTodayTeacher(attendanceId, maestroId)
     }
     setTimeout(() => {
       setShowStamp(false)
@@ -948,7 +1009,25 @@ export default function CheckInPage() {
   const [loadingAllChildren, setLoadingAllChildren] = useState(false)
   const [showAllChildren, setShowAllChildren] = useState(false)
 
+  const countsShownFromCache = useRef(false)
   const fetchCounts = useCallback(async () => {
+    const cacheKey = `today_records:${today}`
+    const apply = async (rows: TodayRecord[]) => {
+      // Más los check-ins hechos sin internet que todavía no suben.
+      const records = await withPendingRecords(rows)
+      const counts: Partial<Record<Category, number>> = {}
+      for (const row of records) counts[row.category] = (counts[row.category] ?? 0) + 1
+      setTodayCounts(counts)
+      setTotalToday(records.length)
+      setTodayRecords(records)
+    }
+    // Igual que fetchRoster: la primera vez se pinta al instante lo último
+    // que se vio hoy en este dispositivo, sin esperar a la red.
+    const cached = readCache<TodayRecord[]>(cacheKey)
+    if (!countsShownFromCache.current && cached) {
+      countsShownFromCache.current = true
+      await apply(cached)
+    }
     // `assigned_teacher:profiles(...)` must name the exact FK — attendance
     // has two of them (assigned_teacher_id and deleted_by, added 2026-08-31
     // for the papelera feature), so a bare `profiles(...)` is ambiguous and
@@ -964,18 +1043,11 @@ export default function CheckInPage() {
       .is('deleted_at', null)
       .order('checked_in_at', { ascending: false })
     if (error) console.error('fetchCounts failed:', error)
-    if (!data) return
-    const counts: Partial<Record<Category, number>> = {}
-    for (const row of data) {
-      const cat = row.category as Category
-      counts[cat] = (counts[cat] ?? 0) + 1
-    }
-    setTodayCounts(counts)
-    setTotalToday(data.length)
-    setTodayRecords(data as unknown as TodayRecord[])
+    if (data) writeCache(cacheKey, data)
+    await apply((data as unknown as TodayRecord[] | null) ?? cached ?? [])
   }, [])
 
-  useEffect(() => { fetchCounts() }, [fetchCounts])
+  useEffect(() => { pruneDatedCache(today); fetchCounts() }, [fetchCounts])
 
   // `today` se calcula una sola vez al cargar — si la tablet/celular dejó la
   // app abierta desde el domingo pasado (o desde anoche), todo seguía
@@ -1069,9 +1141,22 @@ export default function CheckInPage() {
   // con ~170 niños es más simple y más rápido buscar en el navegador que
   // pegarle a Postgres por cada tecla, y de paso resuelve que `ilike` no
   // ignora tildes (buscar "jose" nunca encontraba "José").
+  // Con internet lento, la primera consulta puede tardar decenas de
+  // segundos (o nunca llegar). La primera vez se pinta de inmediato la
+  // última copia guardada en este dispositivo y luego se reemplaza con la
+  // del servidor si responde.
+  const rosterShownFromCache = useRef(false)
   const fetchRoster = useCallback(async () => {
     setLoadingAllChildren(true)
-    const [{ data: all }, { data: todayAtt }] = await Promise.all([
+    const attKey = `today_att:${today}`
+    const cachedRoster = readCache<RosterChild[]>('roster')
+    const cachedAtt = readCache<TodayAtt[]>(attKey) ?? []
+    if (!rosterShownFromCache.current && cachedRoster) {
+      rosterShownFromCache.current = true
+      setAllChildren(await buildRoster(cachedRoster, cachedAtt))
+      setLoadingAllChildren(false)
+    }
+    const [{ data: fetchedAll }, { data: fetchedTodayAtt }] = await Promise.all([
       supabase
         .from('children')
         .select(CHILD_SELECT)
@@ -1083,16 +1168,22 @@ export default function CheckInPage() {
         .eq('session_date', today)
         .is('deleted_at', null),
     ])
-    const attMap = new Map((todayAtt ?? []).map((a) => [a.child_id, a.badge_number]))
-    const mapped = ((all ?? []) as Omit<ChildResult, 'attendance'>[]).map((c) => ({
-      ...c,
-      attendance: attMap.has(c.id) ? [{ session_date: today, badge_number: attMap.get(c.id) }] : [],
-    })) as ChildResult[]
-    setAllChildren(mapped)
+    // Sin internet se usa la última copia guardada. Una lista vacía tampoco
+    // la pisa: pasa cuando el token venció y la consulta salió como anónima
+    // (RLS devuelve [] sin error).
+    const all = (fetchedAll as RosterChild[] | null)?.length ? (fetchedAll as RosterChild[]) : cachedRoster ?? []
+    if (fetchedAll?.length) writeCache('roster', fetchedAll)
+    const todayAtt = fetchedTodayAtt ?? cachedAtt
+    if (fetchedTodayAtt) writeCache(attKey, fetchedTodayAtt)
+    setAllChildren(await buildRoster(all, todayAtt))
     setLoadingAllChildren(false)
   }, [])
 
   useEffect(() => { fetchRoster() }, [fetchRoster])
+
+  // Cuando la cola sin conexión termina de subir, se recargan las listas
+  // para cambiar las copias locales por los registros reales.
+  useEffect(() => onSynced(() => { fetchRoster(); fetchCounts() }), [fetchRoster, fetchCounts])
 
   function loadAllChildren() {
     setShowAllChildren(true)
@@ -1913,6 +2004,10 @@ export default function CheckInPage() {
                             <X size={13} />
                           </button>
                         </span>
+                      ) : rec.badge_number && rec.pending ? (
+                        <span className="pl-2 pr-1.5 py-0.5 text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-full">
+                          #{rec.badge_number}
+                        </span>
                       ) : rec.badge_number ? (
                         <button
                           onClick={() => startBadgeEdit(rec)}
@@ -1955,14 +2050,20 @@ export default function CheckInPage() {
                         <span className="text-xs text-gray-400 font-medium">
                           {format(new Date(rec.checked_in_at), 'HH:mm')}
                         </span>
-                        <button
-                          onClick={() => setConfirmDeleteRecordId(rec.id)}
-                          className="p-1 text-gray-300 hover:text-red-400 rounded-lg hover:bg-red-50 transition-colors"
-                        >
-                          <Trash2 size={13} />
-                        </button>
+                        {!rec.pending && (
+                          <button
+                            onClick={() => setConfirmDeleteRecordId(rec.id)}
+                            className="p-1 text-gray-300 hover:text-red-400 rounded-lg hover:bg-red-50 transition-colors"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        )}
                       </div>
-                      {rec.checked_out_at ? (
+                      {rec.pending ? (
+                        <span className="text-xs font-semibold text-amber-700 bg-amber-50 rounded-full px-2 py-0.5" title="Guardado en este dispositivo — se sube solo al volver el internet">
+                          Sin subir
+                        </span>
+                      ) : rec.checked_out_at ? (
                         <span className="text-xs font-semibold text-gray-400 bg-gray-100 rounded-full px-2 py-0.5">
                           Salió
                         </span>
@@ -1988,7 +2089,7 @@ export default function CheckInPage() {
                         {isExpanded ? 'Ocultar observaciones' : '+ Ver observaciones'}
                       </button>
                     )}
-                    {isCorderitos(rec.category) && (
+                    {isCorderitos(rec.category) && !rec.pending && (
                       <AssignedTeacherControl
                         attendanceId={rec.id}
                         assignedId={rec.assigned_teacher_id}

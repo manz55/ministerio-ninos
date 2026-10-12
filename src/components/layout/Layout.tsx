@@ -6,6 +6,8 @@ import { ChurchLogo } from '../ui/ChurchLogo'
 import { ChangePasswordModal } from '../ui/ChangePasswordModal'
 import { EditProfileModal } from '../ui/EditProfileModal'
 import { LivingBackground } from '../ui/LivingBackground'
+import { OfflineStatus } from '../ui/OfflineStatus'
+import { getOfflineState } from '../../lib/offline'
 import { signOut } from '../../lib/auth'
 import type { Profile } from '../../types/domain'
 
@@ -87,12 +89,22 @@ export default function Layout({ isAdmin, profile }: { isAdmin: boolean; profile
             <KeyRound size={18} />
           </button>
           <button
-            onClick={() => signOut()}
+            onClick={() => {
+              const { pending } = getOfflineState()
+              if (pending > 0 && !window.confirm(
+                `Hay ${pending} registro(s) sin subir por falta de internet. Se quedan guardados en este dispositivo y se suben cuando alguien vuelva a entrar aquí. ¿Cerrar sesión de todos modos?`
+              )) return
+              signOut()
+            }}
             className="p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors shrink-0"
             title="Cerrar sesión"
           >
             <LogOut size={18} />
           </button>
+        </div>
+        {/* Dentro del header para que quede pegado arriba junto con él. */}
+        <div className="-mx-4 -mb-3 mt-3 empty:hidden">
+          <OfflineStatus />
         </div>
       </header>
 

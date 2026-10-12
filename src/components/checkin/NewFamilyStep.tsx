@@ -1,9 +1,8 @@
 import { useMemo, useState } from 'react'
 import { ChevronLeft, Plus, Trash2, AlertTriangle, Users } from 'lucide-react'
 import { differenceInYears } from 'date-fns'
-import { supabase } from '../../lib/supabase'
 import { getCategoryFromBirthDate } from '../../lib/categoryUtils'
-import { uploadPhoto } from '../../lib/photo'
+import { saveFamily, newId, type ChildInsert } from '../../lib/offline'
 import { createChildSearcher, searchChildrenSplit, findBySurname, type SearchableChild } from '../../lib/fuzzySearch'
 import { CategoryBadge } from '../ui/CategoryBadge'
 import { AssignedMaestroField } from '../ui/AssignedMaestroField'
@@ -132,67 +131,51 @@ export function NewFamilyStep({
     setErrors({})
     setSaving(true)
 
-    // 1. Insert parent
-    const { data: parentData, error: parentErr } = await supabase
-      .from('parents')
-      .insert({ full_name: parentName.trim(), phone: parentPhone.trim() })
-      .select()
-      .single()
+    // Ids generados aquí (no por Postgres) para que la familia se pueda
+    // guardar igual sin internet y subirse después sin duplicarse.
+    const parent = { id: newId(), full_name: parentName.trim(), phone: parentPhone.trim() }
+    const childRows: ChildInsert[] = children.map((c) => ({
+      id: newId(),
+      parent_id: parent.id,
+      full_name: c.full_name.trim(),
+      birth_date: c.birth_date,
+      category: getCategoryFromBirthDate(c.birth_date),
+      allergies: c.allergies.trim() || null,
+      medical_notes: c.medical_notes.trim() || null,
+      guardian_relationship: c.guardian_relationship || null,
+      comments: c.comments.trim() || null,
+      toilet_trained: c.toilet_trained,
+      assigned_maestro_id: c.assigned_maestro_id,
+      assigned_maestro_name: c.assigned_maestro_name.trim() || null,
+    }))
 
-    if (parentErr || !parentData) {
-      setErrors({ global: 'Error al guardar el padre/madre. Intenta de nuevo.' })
-      setSaving(false)
-      return
-    }
-
-    // 2. Insert children
-    const { data: childrenData, error: childrenErr } = await supabase
-      .from('children')
-      .insert(
-        children.map((c) => ({
-          parent_id: parentData.id,
-          full_name: c.full_name.trim(),
-          birth_date: c.birth_date,
-          category: getCategoryFromBirthDate(c.birth_date),
-          allergies: c.allergies.trim() || null,
-          medical_notes: c.medical_notes.trim() || null,
-          guardian_relationship: c.guardian_relationship || null,
-          comments: c.comments.trim() || null,
-          toilet_trained: c.toilet_trained,
-          assigned_maestro_id: c.assigned_maestro_id,
-          assigned_maestro_name: c.assigned_maestro_name.trim() || null,
-        }))
-      )
-      .select()
-
-    if (childrenErr || !childrenData) {
-      setErrors({ global: 'Error al guardar los niños. Intenta de nuevo.' })
-      setSaving(false)
-      return
-    }
-
-    // 3. Upload photos (if any) now that we have real ids, then attach the paths
-    let parentPhotoUrl: string | null = null
-    if (parentPhotoBlob) {
-      parentPhotoUrl = await uploadPhoto(`parents/${parentData.id}.jpg`, parentPhotoBlob)
-      if (parentPhotoUrl) await supabase.from('parents').update({ photo_url: parentPhotoUrl }).eq('id', parentData.id)
-    }
-
-    const childrenWithPhotos = await Promise.all(
-      childrenData.map(async (row, i) => {
-        const blob = children[i]?.photoBlob
-        if (!blob) return row
-        const path = await uploadPhoto(`children/${row.id}.jpg`, blob)
-        if (path) await supabase.from('children').update({ photo_url: path }).eq('id', row.id)
-        return { ...row, photo_url: path ?? row.photo_url }
+    let saved: Awaited<ReturnType<typeof saveFamily>>
+    try {
+      saved = await saveFamily({
+        parent,
+        children: childRows,
+        parentPhoto: parentPhotoBlob,
+        childPhotos: children.map((c) => c.photoBlob),
       })
-    )
+    } catch {
+      setErrors({ global: 'Error al guardar la familia. Intenta de nuevo.' })
+      setSaving(false)
+      return
+    }
 
     // Construye ParentRow completo para pasar al siguiente paso
+    const createdAt = new Date().toISOString()
     const newParent: ParentRow = {
-      ...parentData,
-      photo_url: parentPhotoUrl,
-      children: childrenWithPhotos.map((c) => ({ ...c, category: c.category as Category | null, attendance: [] })) as ChildRow[],
+      ...parent,
+      created_at: createdAt,
+      photo_url: saved.parentPhotoPath,
+      children: childRows.map((c, i) => ({
+        ...c,
+        created_at: createdAt,
+        photo_url: saved.childPhotoPaths[i],
+        category: c.category as Category | null,
+        attendance: [],
+      })) as unknown as ChildRow[],
     }
     onSaved(newParent)
   }
