@@ -117,6 +117,17 @@ export function EditChildModal({
           animate={{ y: 0, opacity: 1 }}
           exit={{ y: 24, opacity: 0 }}
           onClick={(e) => e.stopPropagation()}
+          // Enter en cualquier campo de texto guarda (no en comentarios, que
+          // es multilínea) — antes Enter no hacía nada aquí.
+          onKeyDown={(e) => {
+            e.stopPropagation()
+            if (e.key === 'Escape') { onClose(); return }
+            const el = e.target as HTMLElement
+            if (e.key === 'Enter' && el.tagName === 'INPUT' && (el as HTMLInputElement).type !== 'file' && !saving) {
+              e.preventDefault()
+              handleSave()
+            }
+          }}
           className="bg-white w-full sm:max-w-md sm:rounded-2xl rounded-t-2xl shadow-xl max-h-[90vh] overflow-y-auto p-5 space-y-3"
         >
           <div className="flex items-center justify-between">

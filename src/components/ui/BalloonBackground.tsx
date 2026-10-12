@@ -30,7 +30,7 @@ export function BalloonBackground() {
     // and blurred, right behind "Maestros de Niños".
     <div
       className="fixed inset-x-0 bottom-0 overflow-hidden pointer-events-none z-0"
-      style={{ top: 'calc(4.5rem + env(safe-area-inset-top))' }}
+      style={{ top: 'var(--app-header-h, calc(4.5rem + env(safe-area-inset-top)))' }}
     >
       {BALLOONS.map((b, i) => (
         <div

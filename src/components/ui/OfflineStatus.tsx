@@ -2,7 +2,7 @@ import { useSyncExternalStore } from 'react'
 import { WifiOff, CloudUpload, RefreshCw, AlertTriangle, X } from 'lucide-react'
 import { getOfflineState, subscribeOffline, flushOutbox, dismissNotices } from '../../lib/offline'
 
-export function useOfflineState() {
+function useOfflineState() {
   return useSyncExternalStore(subscribeOffline, getOfflineState)
 }
 

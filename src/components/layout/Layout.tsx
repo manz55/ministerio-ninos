@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Outlet, useOutletContext } from 'react-router-dom'
 import { ClipboardList, BarChart3, Users, NotebookPen, UserCog, Contact, LogOut, KeyRound, UserRound } from 'lucide-react'
 import Dock from '../ui/Dock'
@@ -33,6 +33,20 @@ export default function Layout({ isAdmin, profile }: { isAdmin: boolean; profile
   // without waiting on useAuth() to notice the profiles row changed.
   const [displayName, setDisplayName] = useState(profile.full_name)
 
+  // La altura real del encabezado (cambia cuando aparece el aviso de "sin
+  // internet") en una variable CSS, para que lo que va pegado debajo
+  // (encabezado de cada categoría, fondos animados) nunca se le encime.
+  const headerRef = useRef<HTMLElement>(null)
+  useEffect(() => {
+    const el = headerRef.current
+    if (!el) return
+    const update = () => document.documentElement.style.setProperty('--app-header-h', `${el.offsetHeight}px`)
+    update()
+    const ro = new ResizeObserver(update)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+
   return (
     <div style={{ minHeight: '100dvh' }}>
       <LivingBackground />
@@ -46,6 +60,7 @@ export default function Layout({ isAdmin, profile }: { isAdmin: boolean; profile
       )}
 
       <header
+        ref={headerRef}
         className="sticky top-0 z-[3] bg-white/80 backdrop-blur-xl border-b border-gray-200/70 px-4 py-3"
         style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top))' }}
       >

@@ -24,7 +24,7 @@ export function SaltamontesBackground() {
     // top offset (not inset-0) keeps shapes below the sticky header — see BalloonBackground.tsx for why.
     <div
       className="fixed inset-x-0 bottom-0 overflow-hidden pointer-events-none z-0"
-      style={{ top: 'calc(4.5rem + env(safe-area-inset-top))' }}
+      style={{ top: 'var(--app-header-h, calc(4.5rem + env(safe-area-inset-top)))' }}
     >
       {ELS.map((el, i) => (
         <div

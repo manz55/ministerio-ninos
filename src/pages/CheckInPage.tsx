@@ -466,6 +466,9 @@ function ChildCard({
   onCategoryChanged,
   onEdited,
   onDeleted,
+  todayRecord,
+  onEditAttendance,
+  onRemoveAttendance,
 }: {
   child: ChildResult
   teamColor: TeamColor
@@ -477,6 +480,11 @@ function ChildCard({
   onCategoryChanged: (childId: string, newCategory: Category) => void
   onEdited: (childId: string, patch: Partial<EditableChild>) => void
   onDeleted: (childId: string) => void
+  /** Today's check-in for this child, if any — lets a tap on an
+   * already-registered card fix its gafete/bíper or undo it right here. */
+  todayRecord?: TodayRecord
+  onEditAttendance: (id: string, badge: number | null, pager: number | null) => Promise<string | null>
+  onRemoveAttendance: (id: string) => Promise<string | null>
 }) {
   // Overrides getEffectiveCategory() once a coordinator changes the category
   // right here — everything below (needsBadge/needsPager/the check-in insert
@@ -514,10 +522,49 @@ function ChildCard({
   const hasObservations = !!(child.allergies || child.medical_notes || child.comments || child.toilet_trained !== null)
 
   useEffect(() => {
-    if (isSelected && needsBadge) {
+    if (isSelected && needsBadge && !alreadyIn) {
       setTimeout(() => badgeRef.current?.focus(), 50)
     }
-  }, [isSelected, needsBadge])
+  }, [isSelected, needsBadge, alreadyIn])
+
+  // ── Ya registrado hoy: tocar la tarjeta abre corrección de gafete/bíper ──
+  const [editBadge, setEditBadge] = useState('')
+  const [editPager, setEditPager] = useState('')
+  const [editError, setEditError] = useState<string | null>(null)
+  const [savingEdit, setSavingEdit] = useState(false)
+  const [confirmRemove, setConfirmRemove] = useState(false)
+  useEffect(() => {
+    if (!isSelected || !alreadyIn) return
+    setEditBadge(todayRecord?.badge_number != null ? String(todayRecord.badge_number) : '')
+    setEditPager(todayRecord?.pager_number != null ? String(todayRecord.pager_number) : '')
+    setEditError(null)
+    setConfirmRemove(false)
+  }, [isSelected, alreadyIn, todayRecord?.badge_number, todayRecord?.pager_number])
+
+  async function saveRecordEdit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!todayRecord) return
+    const b = editBadge.trim() ? parseInt(editBadge, 10) : null
+    const pg = editPager.trim() ? parseInt(editPager, 10) : null
+    if (needsBadge && (b === null || isNaN(b) || b <= 0)) { setEditError('Ingresa un número de gafete válido.'); return }
+    if (pg !== null && (isNaN(pg) || pg <= 0)) { setEditError('Número de bíper inválido.'); return }
+    setSavingEdit(true)
+    setEditError(null)
+    const err = await onEditAttendance(todayRecord.id, needsBadge ? b : null, pg)
+    setSavingEdit(false)
+    if (err) { setEditError(err); return }
+    onDeselect()
+  }
+
+  async function removeRecord() {
+    if (!todayRecord) return
+    setSavingEdit(true)
+    setEditError(null)
+    const err = await onRemoveAttendance(todayRecord.id)
+    setSavingEdit(false)
+    if (err) { setEditError(err); return }
+    onDeselect()
+  }
 
   async function doCheckIn(badgeNumber: number | null, pagerNumber: number | null) {
     if (!category) { setError('Este niño no tiene categoría asignada. Complétala en Familias.'); return }
@@ -619,7 +666,8 @@ function ChildCard({
   // interactivo dentro (observaciones, contactos, cambiar categoría, editar
   // niño, el formulario de gafete/bíper) para la propagación del click para
   // no disparar selección/deselección de paso.
-  const canToggleSelect = !alreadyIn && !submitting && !!category
+  // Ya registrado también se puede tocar: abre la corrección de gafete/bíper.
+  const canToggleSelect = !submitting && !!category
   return (
     <div className="relative">
     <div
@@ -634,6 +682,10 @@ function ChildCard({
       tabIndex={canToggleSelect ? 0 : -1}
       onClick={canToggleSelect ? (isSelected ? onDeselect : onSelect) : undefined}
       onKeyDown={canToggleSelect ? (e) => {
+        // Solo cuando el foco está en la tarjeta misma. Antes el Enter del
+        // campo de gafete subía hasta aquí, cancelaba el envío del
+        // formulario y cerraba la tarjeta — "das enter y no registra".
+        if (e.target !== e.currentTarget) return
         if (e.key !== 'Enter' && e.key !== ' ') return
         e.preventDefault()
         if (isSelected) onDeselect(); else onSelect()
@@ -666,11 +718,14 @@ function ChildCard({
           </div>
 
           {alreadyIn && (
-            <div className="flex items-center gap-1.5 text-green-600 shrink-0">
-              <CheckCircle2 size={20} />
-              <span className="text-sm font-semibold">
-                {todayBadgeNumber ? `#${todayBadgeNumber}` : 'Registrado'}
-              </span>
+            <div className="flex flex-col items-end shrink-0">
+              <div className="flex items-center gap-1.5 text-green-600">
+                <CheckCircle2 size={20} />
+                <span className="text-sm font-semibold">
+                  {todayBadgeNumber ? `#${todayBadgeNumber}` : 'Registrado'}
+                </span>
+              </div>
+              {!isSelected && <span className="text-[11px] text-green-700/60 font-medium">Toca para corregir</span>}
             </div>
           )}
           {!alreadyIn && !needsBadge && isSelected && submitting && (
@@ -769,7 +824,7 @@ function ChildCard({
       )}
 
       {/* ── Inline badge form ── */}
-      {isSelected && needsBadge && (
+      {isSelected && needsBadge && !alreadyIn && (
         <form onSubmit={handleSubmit} onClick={(e) => e.stopPropagation()} className="px-5 pb-5 space-y-3 border-t border-gray-100 pt-4">
 
           {hasAlert && (
@@ -837,7 +892,11 @@ function ChildCard({
 
       {/* ── Corderitos: confirm step with baby-specific info before registering ── */}
       {isSelected && !needsBadge && isCorderitos(category) && !alreadyIn && (
-        <div className="px-5 pb-5 space-y-3 border-t border-gray-100 pt-4" onClick={(e) => e.stopPropagation()}>
+        <form
+          onSubmit={(e) => { e.preventDefault(); if (!submitting) doCheckIn(null, pager ? parseInt(pager, 10) : null) }}
+          className="px-5 pb-5 space-y-3 border-t border-gray-100 pt-4"
+          onClick={(e) => e.stopPropagation()}
+        >
           {hasAlert && (
             <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-3">
               <p className="text-xs font-bold text-red-700 uppercase tracking-wide mb-1">⚠ Alerta médica</p>
@@ -901,8 +960,7 @@ function ChildCard({
               Cancelar
             </button>
             <button
-              type="button"
-              onClick={() => doCheckIn(null, pager ? parseInt(pager, 10) : null)}
+              type="submit"
               disabled={submitting}
               className="flex-[2] py-3.5 text-base font-bold text-white bg-indigo-600 rounded-xl hover:bg-indigo-700 active:bg-indigo-800 disabled:opacity-40 transition-colors"
             >
@@ -915,7 +973,84 @@ function ChildCard({
               {error}
             </p>
           )}
-        </div>
+        </form>
+      )}
+
+      {/* ── Ya registrado: corregir gafete/bíper o quitar el registro ── */}
+      {isSelected && alreadyIn && (
+        <form onSubmit={saveRecordEdit} onClick={(e) => e.stopPropagation()} className="px-5 pb-5 space-y-3 border-t border-green-200/70 pt-4">
+          {!todayRecord ? (
+            <p className="text-sm text-gray-400">Cargando registro de hoy…</p>
+          ) : todayRecord.pending ? (
+            <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+              Este registro se hizo sin internet y todavía no se sube. Podrás corregirlo en cuanto se suba.
+            </p>
+          ) : (
+            <>
+              <p className="text-xs font-bold text-green-700 uppercase tracking-wider">Corregir registro de hoy</p>
+              {(needsBadge || needsPager) && (
+                <div className="flex gap-3 items-end">
+                  {needsBadge && (
+                    <div className="flex-1">
+                      <label className="block text-sm font-semibold text-gray-600 mb-1.5">Gafete</label>
+                      <input
+                        type="number" inputMode="numeric" min={1} autoFocus
+                        value={editBadge}
+                        onChange={(e) => { setEditBadge(e.target.value); setEditError(null) }}
+                        className="w-full px-3 py-3 text-2xl font-black border-2 border-gray-200 rounded-xl focus:border-indigo-500 focus:outline-none text-center bg-white"
+                      />
+                    </div>
+                  )}
+                  {needsPager && (
+                    <div className="flex-1">
+                      <label className="block text-sm font-semibold text-gray-600 mb-1.5">Bíper <span className="text-gray-300 font-normal">(op.)</span></label>
+                      <input
+                        type="number" inputMode="numeric" min={1}
+                        value={editPager}
+                        onChange={(e) => { setEditPager(e.target.value); setEditError(null) }}
+                        className="w-full px-3 py-3 text-2xl font-black border-2 border-gray-200 rounded-xl focus:border-indigo-500 focus:outline-none text-center bg-white"
+                      />
+                    </div>
+                  )}
+                  <button
+                    type="submit"
+                    disabled={savingEdit}
+                    className="px-5 py-3 bg-indigo-600 text-white rounded-xl font-bold text-xl hover:bg-indigo-700 active:bg-indigo-800 disabled:opacity-40 transition-colors"
+                    title="Guardar"
+                  >
+                    {savingEdit ? '…' : '✓'}
+                  </button>
+                </div>
+              )}
+              <div className="flex items-center justify-between gap-2 pt-1">
+                {confirmRemove ? (
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-red-700 font-medium">¿Quitar el registro de hoy?</span>
+                    <button type="button" onClick={removeRecord} disabled={savingEdit}
+                      className="px-3 py-1.5 text-xs font-bold text-white bg-red-500 rounded-lg hover:bg-red-600 disabled:opacity-50">
+                      Sí, quitar
+                    </button>
+                    <button type="button" onClick={() => setConfirmRemove(false)}
+                      className="px-2 py-1.5 text-xs font-semibold text-gray-500 hover:text-gray-700">
+                      No
+                    </button>
+                  </div>
+                ) : (
+                  <button type="button" onClick={() => setConfirmRemove(true)}
+                    className="flex items-center gap-1.5 text-xs font-semibold text-gray-400 hover:text-red-600 transition-colors">
+                    <Trash2 size={13} /> Quitar registro (fue un error)
+                  </button>
+                )}
+                <button type="button" onClick={onDeselect} className="text-xs font-semibold text-gray-400 hover:text-gray-600">
+                  Cerrar
+                </button>
+              </div>
+            </>
+          )}
+          {editError && (
+            <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-xl px-4 py-3">{editError}</p>
+          )}
+        </form>
       )}
     </div>
 
@@ -1146,14 +1281,19 @@ export default function CheckInPage() {
   // última copia guardada en este dispositivo y luego se reemplaza con la
   // del servidor si responde.
   const rosterShownFromCache = useRef(false)
+  const rosterLoaded = useRef(false)
   const fetchRoster = useCallback(async () => {
-    setLoadingAllChildren(true)
+    // Solo la primera carga muestra "Cargando…"; los refrescos posteriores
+    // (después de registrar, editar, etc.) van por detrás sin vaciar la
+    // lista ni cerrar la tarjeta abierta.
+    if (!rosterLoaded.current) setLoadingAllChildren(true)
     const attKey = `today_att:${today}`
     const cachedRoster = readCache<RosterChild[]>('roster')
     const cachedAtt = readCache<TodayAtt[]>(attKey) ?? []
     if (!rosterShownFromCache.current && cachedRoster) {
       rosterShownFromCache.current = true
       setAllChildren(await buildRoster(cachedRoster, cachedAtt))
+      rosterLoaded.current = true
       setLoadingAllChildren(false)
     }
     const [{ data: fetchedAll }, { data: fetchedTodayAtt }] = await Promise.all([
@@ -1176,6 +1316,7 @@ export default function CheckInPage() {
     const todayAtt = fetchedTodayAtt ?? cachedAtt
     if (fetchedTodayAtt) writeCache(attKey, fetchedTodayAtt)
     setAllChildren(await buildRoster(all, todayAtt))
+    rosterLoaded.current = true
     setLoadingAllChildren(false)
   }, [])
 
@@ -1184,6 +1325,27 @@ export default function CheckInPage() {
   // Cuando la cola sin conexión termina de subir, se recargan las listas
   // para cambiar las copias locales por los registros reales.
   useEffect(() => onSynced(() => { fetchRoster(); fetchCounts() }), [fetchRoster, fetchCounts])
+
+  // Auto-refresco: después de cualquier acción (registrar, corregir gafete,
+  // editar niño, cambiar categoría…) se vuelve a pedir todo por detrás,
+  // agrupando varias acciones seguidas en una sola consulta. Así lo que se
+  // ve siempre coincide con el servidor sin tener que salir y volver a entrar.
+  const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const scheduleRefresh = useCallback(() => {
+    if (refreshTimer.current) clearTimeout(refreshTimer.current)
+    refreshTimer.current = setTimeout(() => { fetchRoster(); fetchCounts() }, 600)
+  }, [fetchRoster, fetchCounts])
+  useEffect(() => () => { if (refreshTimer.current) clearTimeout(refreshTimer.current) }, [])
+
+  // Cambios a niños hechos desde otro dispositivo (Familias, otro maestro
+  // editando) también refrescan la lista de este.
+  useEffect(() => {
+    const channel = supabase
+      .channel('children-sync')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'children' }, () => scheduleRefresh())
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
+  }, [scheduleRefresh])
 
   function loadAllChildren() {
     setShowAllChildren(true)
@@ -1233,6 +1395,7 @@ export default function CheckInPage() {
   }
 
   function handleRegistered(childId: string, badgeNumber: number | null) {
+    scheduleRefresh()
     const mark = (c: ChildResult) =>
       c.id === childId ? { ...c, attendance: [...c.attendance, { session_date: today, badge_number: badgeNumber }] } : c
     setChildren((prev) => prev.map(mark))
@@ -1262,6 +1425,7 @@ export default function CheckInPage() {
   function handleCategoryChanged(childId: string, newCategory: Category) {
     const patch = (c: ChildResult) => (c.id === childId ? { ...c, category: newCategory } : c)
     setAllChildren((prev) => prev.map(patch))
+    scheduleRefresh()
   }
 
   // Same idea as handleCategoryChanged — allChildren is the source both
@@ -1269,10 +1433,12 @@ export default function CheckInPage() {
   // so patching/removing there is enough to update every list on screen.
   function handleChildEdited(childId: string, patch: Partial<ChildResult>) {
     setAllChildren((prev) => prev.map((c) => (c.id === childId ? { ...c, ...patch } : c)))
+    scheduleRefresh()
   }
 
   function handleChildDeleted(childId: string) {
     setAllChildren((prev) => prev.filter((c) => c.id !== childId))
+    scheduleRefresh()
   }
 
   // Refreshes whichever list(s) are currently on screen so a newly-added
@@ -1316,25 +1482,22 @@ export default function CheckInPage() {
     if (computerOperator && computerOperator !== computerOperatorName) saveComputerOperator(computerOperator)
   }
 
-  async function deleteAttendanceRecord(id: string) {
-    setDeleteRecordError(null)
-    // Capture the record before any state update to avoid closure staleness
+  // Quitar / corregir un registro de hoy — lo usan tanto la lista de
+  // "Registrados hoy" como la tarjeta del niño (tocar una tarjeta ya
+  // registrada). Devuelven el mensaje de error, o null si salió bien.
+  async function removeAttendance(id: string): Promise<string | null> {
     const rec = todayRecords.find((r) => r.id === id)
-    const { data: { user } } = await supabase.auth.getUser()
+    const { data: { session: s } } = await supabase.auth.getSession()
     // Marcar (no borrar): queda en la papelera (Usuarios) hasta que alguien
     // lo restaure o el dueño lo purgue de verdad.
     // .select() forces PostgREST to report which rows were actually
-    // marked — without it, an update silently blocked by RLS (only
-    // coordinators may do this) still returns no error, and the record
-    // would falsely look deleted here while reappearing on the next
-    // reload/refetch.
+    // marked — without it, an update silently blocked by RLS still returns
+    // no error, and the record would falsely look deleted here while
+    // reappearing on the next reload/refetch.
     const { data, error } = await supabase.from('attendance')
-      .update({ deleted_at: new Date().toISOString(), deleted_by: user?.id })
+      .update({ deleted_at: new Date().toISOString(), deleted_by: s?.user.id })
       .eq('id', id).select('id')
-    if (error || !data || data.length === 0) {
-      setDeleteRecordError('No se pudo borrar el registro. Intenta de nuevo.')
-      return
-    }
+    if (error || !data || data.length === 0) return 'No se pudo quitar el registro. Revisa la conexión e intenta de nuevo.'
     setTodayRecords((prev) => prev.filter((r) => r.id !== id))
     // El niño vuelve a quedar disponible para registrarse (con el gafete
     // correcto) en este mismo dispositivo, sin esperar a recargar.
@@ -1343,14 +1506,43 @@ export default function CheckInPage() {
         c.id === rec.child_id ? { ...c, attendance: c.attendance.filter((a) => a.session_date !== today) } : c
       setChildren((prev) => prev.map(unmark))
       setAllChildren((prev) => prev.map(unmark))
+      setTodayCounts((prev) => ({ ...prev, [rec.category]: Math.max(0, (prev[rec.category] ?? 0) - 1) }))
+      setTotalToday((n) => Math.max(0, n - 1))
     }
+    scheduleRefresh()
+    return null
+  }
+
+  async function editAttendanceNumbers(id: string, badge: number | null, pager: number | null): Promise<string | null> {
+    const rec = todayRecords.find((r) => r.id === id)
+    const { data, error } = await supabase
+      .from('attendance')
+      .update({ badge_number: badge, pager_number: pager })
+      .eq('id', id)
+      .select('id')
+    if (error || !data || data.length === 0) {
+      const cat = rec ? ` en ${CATEGORY_LABELS[rec.category]}` : ''
+      if (error?.code === '23505' && error.message.includes('attendance_badge_category_unique')) return `El gafete #${badge} ya está en uso hoy${cat}.`
+      if (error?.code === '23505' && error.message.includes('attendance_pager_category_unique')) return `El bíper #${pager} ya está en uso hoy${cat}.`
+      return 'No se pudo guardar. Revisa la conexión e intenta de nuevo.'
+    }
+    setTodayRecords((prev) => prev.map((r) => (r.id === id ? { ...r, badge_number: badge, pager_number: pager } : r)))
     if (rec) {
-      setTodayCounts((prev) => ({
-        ...prev,
-        [rec.category]: Math.max(0, (prev[rec.category] ?? 0) - 1),
-      }))
+      const patch = (c: ChildResult) =>
+        c.id === rec.child_id
+          ? { ...c, attendance: c.attendance.map((a) => (a.session_date === today ? { ...a, badge_number: badge } : a)) }
+          : c
+      setChildren((prev) => prev.map(patch))
+      setAllChildren((prev) => prev.map(patch))
     }
-    setTotalToday((n) => Math.max(0, n - 1))
+    scheduleRefresh()
+    return null
+  }
+
+  async function deleteAttendanceRecord(id: string) {
+    setDeleteRecordError(null)
+    const err = await removeAttendance(id)
+    if (err) { setDeleteRecordError(err); return }
     setConfirmDeleteRecordId(null)
   }
 
@@ -1363,24 +1555,36 @@ export default function CheckInPage() {
   async function saveBadgeEdit(id: string) {
     const num = parseInt(badgeEditValue, 10)
     if (!badgeEditValue || isNaN(num) || num <= 0) { setBadgeEditError('Número inválido.'); return }
+    const rec = todayRecords.find((r) => r.id === id)
     setSavingBadgeEdit(true)
     setBadgeEditError(null)
-    const { data, error } = await supabase
-      .from('attendance')
-      .update({ badge_number: num })
-      .eq('id', id)
-      .select('id')
+    const err = await editAttendanceNumbers(id, num, rec?.pager_number ?? null)
     setSavingBadgeEdit(false)
-    if (error || !data || data.length === 0) {
-      if (error?.code === '23505' && error.message.includes('attendance_badge_category_unique')) {
-        setBadgeEditError(`El gafete #${num} ya está en uso hoy en esa categoría.`)
-      } else {
-        setBadgeEditError('No se pudo guardar. Intenta de nuevo.')
-      }
-      return
-    }
-    setTodayRecords((prev) => prev.map((r) => (r.id === id ? { ...r, badge_number: num } : r)))
+    if (err) { setBadgeEditError(err); return }
     setEditingBadgeRecordId(null)
+  }
+
+  const recordByChild = useMemo(() => new Map(todayRecords.map((r) => [r.child_id, r])), [todayRecords])
+
+  function renderCard(child: ChildResult) {
+    return (
+      <ChildCard
+        key={child.id}
+        child={child}
+        teamColor={teamColor}
+        isAdmin={isAdmin}
+        onCategoryChanged={handleCategoryChanged}
+        onEdited={handleChildEdited}
+        onDeleted={handleChildDeleted}
+        isSelected={selectedId === child.id}
+        onSelect={() => setSelectedId(child.id)}
+        onDeselect={() => setSelectedId(null)}
+        onRegistered={handleRegistered}
+        todayRecord={recordByChild.get(child.id)}
+        onEditAttendance={editAttendanceNumbers}
+        onRemoveAttendance={removeAttendance}
+      />
+    )
   }
 
   async function saveCoordinator(name: string) {
@@ -1483,7 +1687,7 @@ export default function CheckInPage() {
             back button never scrolls out of reach. */}
         <div
           className="sticky z-10 flex items-center gap-3 bg-white rounded-2xl border border-gray-200 px-4 py-3 shadow-sm"
-          style={{ top: 'calc(4.5rem + env(safe-area-inset-top))' }}
+          style={{ top: 'calc(var(--app-header-h, calc(4.5rem + env(safe-area-inset-top))) + 0.5rem)' }}
         >
           <button
             onClick={handleBack}
@@ -1545,19 +1749,7 @@ export default function CheckInPage() {
             {filteredChildren.exact.length > 0 && (
               <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-2.5 items-start">
                 {filteredChildren.exact.map((child) => (
-                  <ChildCard
-                    key={child.id}
-                    child={child}
-                    teamColor={teamColor}
-                    isAdmin={isAdmin}
-                    onCategoryChanged={handleCategoryChanged}
-                    onEdited={handleChildEdited}
-                    onDeleted={handleChildDeleted}
-                    isSelected={selectedId === child.id}
-                    onSelect={() => setSelectedId(child.id)}
-                    onDeselect={() => setSelectedId(null)}
-                    onRegistered={handleRegistered}
-                  />
+                  renderCard(child)
                 ))}
               </div>
             )}
@@ -1566,19 +1758,7 @@ export default function CheckInPage() {
                 <p className="text-xs font-bold text-gray-400 uppercase tracking-widest px-1">¿Quisiste decir…?</p>
                 <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-2.5 items-start">
                   {filteredChildren.suggestions.map((child) => (
-                    <ChildCard
-                      key={child.id}
-                      child={child}
-                      teamColor={teamColor}
-                      isAdmin={isAdmin}
-                      onCategoryChanged={handleCategoryChanged}
-                      onEdited={handleChildEdited}
-                      onDeleted={handleChildDeleted}
-                      isSelected={selectedId === child.id}
-                      onSelect={() => setSelectedId(child.id)}
-                      onDeselect={() => setSelectedId(null)}
-                      onRegistered={handleRegistered}
-                    />
+                    renderCard(child)
                   ))}
                 </div>
               </div>
@@ -1761,19 +1941,7 @@ export default function CheckInPage() {
           {globalResults.exact.length > 0 && (
             <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-2.5 items-start">
               {globalResults.exact.map((child) => (
-                <ChildCard
-                  key={child.id}
-                  child={child}
-                  teamColor={teamColor}
-                  isAdmin={isAdmin}
-                  onCategoryChanged={handleCategoryChanged}
-                  onEdited={handleChildEdited}
-                  onDeleted={handleChildDeleted}
-                  isSelected={selectedId === child.id}
-                  onSelect={() => setSelectedId(child.id)}
-                  onDeselect={() => setSelectedId(null)}
-                  onRegistered={handleRegistered}
-                />
+                renderCard(child)
               ))}
             </div>
           )}
@@ -1782,19 +1950,7 @@ export default function CheckInPage() {
               <p className="text-xs font-bold text-gray-400 uppercase tracking-widest px-1">¿Quisiste decir…?</p>
               <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-2.5 items-start">
                 {globalResults.suggestions.map((child) => (
-                  <ChildCard
-                    key={child.id}
-                    child={child}
-                    teamColor={teamColor}
-                    isAdmin={isAdmin}
-                    onCategoryChanged={handleCategoryChanged}
-                    onEdited={handleChildEdited}
-                    onDeleted={handleChildDeleted}
-                    isSelected={selectedId === child.id}
-                    onSelect={() => setSelectedId(child.id)}
-                    onDeselect={() => setSelectedId(null)}
-                    onRegistered={handleRegistered}
-                  />
+                  renderCard(child)
                 ))}
               </div>
             </div>
@@ -1894,19 +2050,7 @@ export default function CheckInPage() {
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-2.5 items-start">
             {allChildren.map((child) => (
-              <ChildCard
-                key={child.id}
-                child={child}
-                teamColor={teamColor}
-                isAdmin={isAdmin}
-                onCategoryChanged={handleCategoryChanged}
-                onEdited={handleChildEdited}
-                onDeleted={handleChildDeleted}
-                isSelected={selectedId === child.id}
-                onSelect={() => setSelectedId(child.id)}
-                onDeselect={() => setSelectedId(null)}
-                onRegistered={handleRegistered}
-              />
+              renderCard(child)
             ))}
           </div>
         )}
@@ -1961,7 +2105,15 @@ export default function CheckInPage() {
                   key={rec.id}
                   initial={{ opacity: 0, y: 6 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className={`rounded-2xl border px-4 py-3 shadow-sm transition-colors ${
+                  // Toda la fila abre la corrección del gafete (antes solo
+                  // el pequeño "#12"). Los botones/campos de adentro hacen
+                  // lo suyo y no la disparan.
+                  onClick={(e) => {
+                    if ((e.target as HTMLElement).closest('button,input,select,textarea,a')) return
+                    if (rec.pending || !rec.badge_number || editingBadgeRecordId === rec.id || isConfirming) return
+                    startBadgeEdit(rec)
+                  }}
+                  className={`rounded-2xl border px-4 py-3 shadow-sm transition-colors ${!rec.pending && rec.badge_number ? 'cursor-pointer' : ''} ${
                     isConfirming ? 'bg-red-50 border-red-200' : 'bg-white border-gray-100'
                   }`}
                 >
