@@ -179,6 +179,8 @@ function MaestroForm({ maestro, onSaved, onCancel }: { maestro: Maestro | null; 
   const [bautizadoAguas, setBautizadoAguas] = useState<boolean | null>(maestro?.bautizado_aguas ?? null)
   const [bautizadoEspiritu, setBautizadoEspiritu] = useState<boolean | null>(maestro?.bautizado_espiritu ?? null)
   const [profesion, setProfesion] = useState(maestro?.profesion ?? '')
+  const [email, setEmail] = useState(maestro?.email ?? '')
+  const [disponibilidad, setDisponibilidad] = useState(maestro?.disponibilidad ?? '')
   const [teamColor, setTeamColor] = useState<TeamColor>(maestro?.team_color ?? 'amarillo')
   const [photoBlob, setPhotoBlob] = useState<Blob | null>(null)
   const [saving, setSaving] = useState(false)
@@ -195,6 +197,7 @@ function MaestroForm({ maestro, onSaved, onCancel }: { maestro: Maestro | null; 
       fecha_nacimiento: fechaNacimiento || null, dpi: dpi.trim() || null, celular: celular.trim() || null,
       tiempo_asistencia: tiempoAsistencia.trim() || null, bautizado_aguas: bautizadoAguas,
       bautizado_espiritu: bautizadoEspiritu, profesion: profesion.trim() || null, team_color: teamColor,
+      email: email.trim().toLowerCase() || null, disponibilidad: disponibilidad.trim() || null,
     }
     let id = maestro?.id
     if (maestro) {
@@ -254,7 +257,12 @@ function MaestroForm({ maestro, onSaved, onCancel }: { maestro: Maestro | null; 
         <Field label="DPI" hint="(si es mayor de edad)"><input inputMode="numeric" value={dpi} onChange={(e) => setDpi(e.target.value)} className={INPUT} /></Field>
         <Field label="Tiempo en la iglesia"><input value={tiempoAsistencia} onChange={(e) => setTiempoAsistencia(e.target.value)} placeholder="Ej. 3 años" className={INPUT} /></Field>
         <Field label="Profesión u oficio" hint="(opcional)"><input value={profesion} onChange={(e) => setProfesion(e.target.value)} className={INPUT} /></Field>
+        <Field label="Correo" hint="(opcional)"><input type="email" inputMode="email" value={email} onChange={(e) => setEmail(e.target.value)} className={INPUT} /></Field>
       </div>
+
+      <Field label="Disponibilidad" hint="(si puede servir cada domingo que le toca u otros compromisos)">
+        <textarea value={disponibilidad} onChange={(e) => setDisponibilidad(e.target.value)} rows={2} className={`${INPUT} resize-none`} />
+      </Field>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <Field label="¿Bautizado en aguas?">

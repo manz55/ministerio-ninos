@@ -436,6 +436,8 @@ export type Database = {
           nombre: string
           photo_url: string | null
           profesion: string | null
+          email: string | null
+          disponibilidad: string | null
           team_color: string
           tiempo_asistencia: string | null
         }
@@ -452,6 +454,8 @@ export type Database = {
           nombre: string
           photo_url?: string | null
           profesion?: string | null
+          email?: string | null
+          disponibilidad?: string | null
           team_color?: string
           tiempo_asistencia?: string | null
         }
@@ -468,6 +472,8 @@ export type Database = {
           nombre?: string
           photo_url?: string | null
           profesion?: string | null
+          email?: string | null
+          disponibilidad?: string | null
           team_color?: string
           tiempo_asistencia?: string | null
         }

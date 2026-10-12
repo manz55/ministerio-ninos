@@ -66,7 +66,7 @@ export function createSeed(): Db {
       ['Samuel', 'Xicará', 'amarillo'], ['Rut', 'Batres', 'azul'], ['Abigail', 'Coronado', 'azul'],
     ].map(([nombre, apellido, team], i) => ({
       id: id('m', i + 1), nombre, apellido, team_color: team, discipulador: null, fecha_nacimiento: null, dpi: null,
-      celular: null, tiempo_asistencia: null, bautizado_aguas: null, bautizado_espiritu: null, profesion: null,
+      celular: null, tiempo_asistencia: null, bautizado_aguas: null, bautizado_espiritu: null, profesion: null, email: null, disponibilidad: null,
       photo_url: null, created_at: now.toISOString(),
     })),
     parents: [],

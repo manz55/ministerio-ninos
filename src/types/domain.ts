@@ -199,6 +199,8 @@ export interface Maestro {
   bautizado_aguas: boolean | null
   bautizado_espiritu: boolean | null
   profesion: string | null
+  email: string | null
+  disponibilidad: string | null
   photo_url: string | null
   created_at: string
   team_color: TeamColor
