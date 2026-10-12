@@ -87,8 +87,12 @@ self.addEventListener('fetch', (event) => {
 })
 `
 
-export default defineConfig({
-  plugins: [react(), tailwindcss(), offlineServiceWorker()],
+export default defineConfig(({ mode }) => ({
+  // `--mode demo` (npm run build:demo): versión de prueba con datos falsos
+  // (src/demo/), rutas relativas para poder abrirla desde cualquier lugar y
+  // sin service worker.
+  ...(mode === 'demo' ? { base: './' } : {}),
+  plugins: [react(), tailwindcss(), ...(mode === 'demo' ? [] : [offlineServiceWorker()])],
   // So the header can show what's actually live without anyone needing to
   // check the Netlify dashboard — baked in at build time, not runtime.
   define: {
@@ -96,7 +100,9 @@ export default defineConfig({
     __COMMIT_HASH__: JSON.stringify(COMMIT_HASH),
   },
   build: {
+    ...(mode === 'demo' ? { outDir: 'dist-demo' } : {}),
     rollupOptions: {
+      ...(mode === 'demo' ? { input: 'demo.html' } : {}),
       output: {
         manualChunks(id) {
           if (id.includes('/react') || id.includes('/react-dom') || id.includes('/react-router'))
@@ -108,4 +114,4 @@ export default defineConfig({
       },
     },
   },
-})
+}))

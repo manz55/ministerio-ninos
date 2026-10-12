@@ -1,5 +1,5 @@
 import { lazy, Suspense } from 'react'
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, MemoryRouter, Routes, Route, Navigate } from 'react-router-dom'
 import Layout from './components/layout/Layout'
 import { LoginScreen } from './components/ui/LoginScreen'
 import { ResetPasswordScreen } from './components/ui/ResetPasswordScreen'
@@ -18,6 +18,13 @@ function PageSpinner() {
       <div className="w-7 h-7 border-2 border-indigo-200 border-t-indigo-600 rounded-full animate-spin" />
     </div>
   )
+}
+
+// La demo (npm run build:demo) corre dentro de una página ajena, donde la
+// URL no es nuestra — ahí las rutas viven en memoria.
+function Router({ children }: { children: React.ReactNode }) {
+  if (import.meta.env.VITE_DEMO === '1') return <MemoryRouter initialEntries={['/registro']}>{children}</MemoryRouter>
+  return <BrowserRouter>{children}</BrowserRouter>
 }
 
 function RequireAdmin({ isAdmin, children }: { isAdmin: boolean; children: React.ReactNode }) {
@@ -49,7 +56,7 @@ function App() {
   }
 
   return (
-    <BrowserRouter>
+    <Router>
       <Routes>
         <Route element={<Layout isAdmin={isAdmin} profile={profile} />}>
           <Route index element={<Navigate to="/registro" replace />} />
@@ -89,7 +96,7 @@ function App() {
           />
         </Route>
       </Routes>
-    </BrowserRouter>
+    </Router>
   )
 }
 

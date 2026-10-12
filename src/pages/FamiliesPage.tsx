@@ -18,7 +18,7 @@ import { ChildContacts } from '../components/ui/ChildContacts'
 import { QuickCheckIn } from '../components/ui/QuickCheckIn'
 import { useDebounce } from '../hooks/useDebounce'
 import { NewFamilyStep } from '../components/checkin/NewFamilyStep'
-import { CATEGORY_LABELS, GUARDIAN_RELATIONSHIP_LABELS, NEXT_CATEGORY, isCorderitos, type ParentRow, type Category, type GuardianRelationship, type ChildPrefill } from '../types/domain'
+import { CATEGORY_LABELS, CATEGORY_COLORS, GUARDIAN_RELATIONSHIP_LABELS, NEXT_CATEGORY, isCorderitos, type ParentRow, type Category, type GuardianRelationship, type ChildPrefill } from '../types/domain'
 import { BackgroundRadialViolet } from '../components/ui/BackgroundRadialViolet'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -745,30 +745,50 @@ function FamilyDetailPanel({
 
 function FamilyListItem({ family, onSelect }: { family: FamilyDetail; onSelect: () => void }) {
   const anyAlert = family.children?.some((c) => c.allergies || c.medical_notes)
+  const initials = family.full_name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase()
+  // Los niños van en su propia fila debajo, uno por chip con su nombre y su
+  // grupo, y pueden bajar de línea — antes iban hasta 3 etiquetas en la misma
+  // fila que el nombre y en celular se salían de la tarjeta y tapaban el
+  // nombre y el teléfono.
   return (
     <button
       onClick={onSelect}
-      className="w-full text-left p-4 bg-white rounded-xl border-2 border-gray-200 hover:border-indigo-400 hover:bg-indigo-50/50 transition-all group"
+      className="w-full text-left p-4 bg-white rounded-2xl border border-gray-200/80 shadow-sm hover:border-indigo-300 hover:shadow-md transition-all group"
     >
-      <div className="flex items-center justify-between gap-3">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <p className="font-semibold text-gray-900 leading-tight truncate">{family.full_name}</p>
-            {anyAlert && <AlertTriangle size={13} className="text-red-500 shrink-0" />}
+      <div className="flex items-start gap-3">
+        <span className="w-10 h-10 rounded-full bg-indigo-50 text-indigo-700 font-display font-semibold flex items-center justify-center shrink-0">
+          {initials || '?'}
+        </span>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 min-w-0">
+            <p className="font-display font-semibold text-gray-900 text-[17px] leading-tight truncate">{family.full_name}</p>
+            {anyAlert && <AlertTriangle size={14} className="text-red-500 shrink-0" />}
           </div>
-          <div className="flex items-center gap-1.5 text-gray-500 mt-0.5 text-sm">
-            <Phone size={12} />
-            <span>{family.phone}</span>
-            <span className="mx-1 text-gray-300">·</span>
+          <div className="flex items-center gap-1.5 text-gray-500 mt-0.5 text-sm whitespace-nowrap">
+            <Phone size={12} className="shrink-0" />
+            <span className="tabular-nums">{family.phone || 'Sin teléfono'}</span>
+            <span className="text-gray-300">·</span>
             <span>{family.children?.length ?? 0} niño{family.children?.length !== 1 ? 's' : ''}</span>
           </div>
+          {(family.children?.length ?? 0) > 0 && (
+            <div className="flex flex-wrap gap-1.5 mt-2.5">
+              {family.children!.map((c) => {
+                const cat = getEffectiveCategory(c)
+                return (
+                  <span
+                    key={c.id}
+                    className={`inline-flex items-center gap-1 max-w-full rounded-full border text-xs font-medium px-2 py-0.5 ${cat ? CATEGORY_COLORS[cat] : 'bg-gray-50 text-gray-500 border-gray-200'}`}
+                  >
+                    <span className="truncate">{c.full_name.split(' ')[0]}</span>
+                    <span className="opacity-60">·</span>
+                    <span className="whitespace-nowrap">{cat ? CATEGORY_LABELS[cat] : 'Sin grupo'}</span>
+                  </span>
+                )
+              })}
+            </div>
+          )}
         </div>
-        <div className="flex items-center gap-2 shrink-0">
-          {family.children?.slice(0, 3).map((c) => (
-            <CategoryBadge key={c.id} category={getEffectiveCategory(c)} size="sm" />
-          ))}
-          <ChevronRight className="text-gray-300 group-hover:text-indigo-500 transition-colors" size={18} />
-        </div>
+        <ChevronRight className="self-center text-gray-300 group-hover:text-indigo-500 transition-colors shrink-0" size={18} />
       </div>
     </button>
   )

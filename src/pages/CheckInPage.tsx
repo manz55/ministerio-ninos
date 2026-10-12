@@ -67,6 +67,9 @@ type ChildResult = {
 
 const CHILD_SELECT = 'id, full_name, birth_date, category, allergies, medical_notes, toilet_trained, comments, guardian_relationship, photo_url, assigned_maestro_id, assigned_maestro_name, parent_id, parents(full_name, phone)'
 
+/** Botoncito de acción dentro de la tarjeta del niño. */
+const CHIP = 'inline-flex items-center gap-1 px-2.5 py-1 rounded-full border border-gray-200 bg-white/80 text-xs font-medium text-gray-600 hover:border-indigo-300 hover:text-indigo-700 transition-colors'
+
 type RosterChild = Omit<ChildResult, 'attendance'>
 type TodayAtt = { child_id: string; badge_number: number | null }
 
@@ -673,10 +676,10 @@ function ChildCard({
     <div
       className={`rounded-2xl border-2 overflow-hidden transition-all ${canToggleSelect ? 'cursor-pointer' : ''} ${
         alreadyIn
-          ? 'border-green-200 bg-green-50'
+          ? isSelected ? 'border-emerald-400 bg-emerald-50 shadow-md' : 'border-emerald-200 bg-emerald-50/70 hover:border-emerald-300'
           : isSelected
-          ? 'border-indigo-400 bg-white shadow-md'
-          : 'border-gray-200 bg-white hover:border-indigo-300'
+          ? 'border-indigo-500 bg-white shadow-lg shadow-indigo-900/5 ring-4 ring-indigo-100'
+          : 'border-transparent bg-white shadow-sm hover:border-indigo-200'
       }`}
       role="button"
       tabIndex={canToggleSelect ? 0 : -1}
@@ -692,11 +695,11 @@ function ChildCard({
       } : undefined}
     >
       {/* ── Card header ── */}
-      <div className="w-full text-left px-5 py-4">
-        <div className="flex items-center justify-between gap-3">
+      <div className="w-full text-left px-4 pt-3.5 pb-2.5">
+        <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 space-y-1.5">
             <div className="flex items-center gap-2 min-w-0">
-              <p className="font-bold text-gray-900 text-lg leading-tight truncate">{child.full_name}</p>
+              <p className="font-display font-semibold text-gray-900 text-lg leading-tight truncate">{child.full_name}</p>
               {hasAlert && <AlertTriangle size={15} className="text-red-500 shrink-0" />}
               {missingBirthDate && (
                 <span title="Sin fecha de nacimiento" className="shrink-0">
@@ -704,7 +707,7 @@ function ChildCard({
                 </span>
               )}
             </div>
-            <div className="flex items-center gap-2 min-w-0">
+            <div className="flex items-center gap-x-2 gap-y-1 min-w-0 flex-wrap">
               <CategoryBadge category={category} size="sm" />
               {categoryChanged && child.category && NEXT_CATEGORY[child.category] && (
                 <span className="text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5 shrink-0">
@@ -718,14 +721,13 @@ function ChildCard({
           </div>
 
           {alreadyIn && (
-            <div className="flex flex-col items-end shrink-0">
-              <div className="flex items-center gap-1.5 text-green-600">
-                <CheckCircle2 size={20} />
-                <span className="text-sm font-semibold">
-                  {todayBadgeNumber ? `#${todayBadgeNumber}` : 'Registrado'}
-                </span>
-              </div>
-              {!isSelected && <span className="text-[11px] text-green-700/60 font-medium">Toca para corregir</span>}
+            // "Gafete" verde: el número es lo que el maestro busca con la
+            // vista al revisar quién ya entró.
+            <div className="flex flex-col items-center shrink-0 rounded-xl bg-emerald-600 text-white px-2.5 py-1.5 min-w-[3.5rem] shadow-sm">
+              <CheckCircle2 size={14} className="opacity-90" />
+              <span className="font-display text-lg font-semibold leading-none mt-0.5 tabular-nums">
+                {todayBadgeNumber ? `#${todayBadgeNumber}` : 'Listo'}
+              </span>
             </div>
           )}
           {!alreadyIn && !needsBadge && isSelected && submitting && (
@@ -734,67 +736,34 @@ function ChildCard({
         </div>
       </div>
 
-      {/* ── Observaciones: alergias, notas médicas, baño, comentarios ──
-          min-h reserves this row's space always, whether or not this
-          particular child has anything to show — before, a card without
-          observations was simply shorter than one with, so cards in the
-          same grid row ended up at different heights depending on which
-          kids happened to have allergies/notes set. */}
-      <div className="px-5 pb-3 -mt-1 min-h-[28px]" onClick={(e) => e.stopPropagation()}>
+      {/* ── Acciones de la tarjeta: una sola fila de botoncitos con ícono
+          (antes eran tres renglones de texto gris sueltos que se veían
+          como relleno). Cada uno para la propagación para no
+          seleccionar/deseleccionar la tarjeta de paso. ── */}
+      <div className="px-4 pb-3 flex flex-wrap items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
         {hasObservations && (
           <button
             type="button"
             onClick={() => setShowObservations((v) => !v)}
-            className={`flex items-center gap-1 text-xs font-medium transition-colors ${
-              hasAlert ? 'text-red-500 hover:text-red-700' : 'text-gray-400 hover:text-indigo-600'
-            }`}
+            className={`${CHIP} ${hasAlert ? 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100' : ''}`}
           >
-            {hasAlert && <AlertTriangle size={12} className="shrink-0" />}
-            {showObservations ? 'Ocultar observaciones' : '+ Ver observaciones'}
+            {hasAlert ? <AlertTriangle size={12} /> : null}
+            {showObservations ? 'Ocultar observaciones' : 'Observaciones'}
           </button>
         )}
-        {showObservations && (
-          <div className="mt-2">
-            <ObservationsPanel
-              allergies={child.allergies}
-              medicalNotes={child.medical_notes}
-              toiletTrained={child.toilet_trained}
-              comments={child.comments}
-            />
-          </div>
-        )}
-      </div>
-
-      {/* ── Otros contactos autorizados ── */}
-      <div className="px-5 pb-3 -mt-1" onClick={(e) => e.stopPropagation()}>
-        <button
-          type="button"
-          onClick={() => setShowContacts((v) => !v)}
-          className="text-xs font-medium text-gray-400 hover:text-indigo-600 transition-colors"
-        >
-          {showContacts ? 'Ocultar otros contactos' : '+ Otros contactos autorizados'}
+        <button type="button" onClick={() => setShowContacts((v) => !v)} className={CHIP}>
+          <Users size={12} />
+          {showContacts ? 'Ocultar contactos' : 'Contactos'}
         </button>
-        {showContacts && (
-          <div className="mt-2">
-            <ChildContacts childId={child.id} />
-          </div>
-        )}
-      </div>
-
-      {/* ── Cambiar categoría — same manual override Familias already has,
-          just reachable without leaving Registro. Sits outside the header
-          button (can't nest a <select> inside it) and stays admin-only,
-          matching the RLS on children.category (is_admin()-only UPDATE). */}
-      {isAdmin && (
-        <div className="px-5 pb-3 -mt-1 flex items-center gap-3 flex-wrap" onClick={(e) => e.stopPropagation()}>
-          {showCategoryPicker ? (
+        {isAdmin && (
+          showCategoryPicker ? (
             <select
               autoFocus
               disabled={savingCategory}
               defaultValue={category ?? ''}
               onChange={(e) => changeCategory(e.target.value as Category)}
               onBlur={() => setShowCategoryPicker(false)}
-              className="text-xs px-2 py-1.5 border-2 border-indigo-300 rounded-lg focus:border-indigo-500 focus:outline-none bg-white"
+              className="text-xs px-2 py-1 border-2 border-indigo-300 rounded-full focus:border-indigo-500 focus:outline-none bg-white"
             >
               {!category && <option value="" disabled>Sin categoría</option>}
               {ACTIVE_CATEGORIES.map((c) => (
@@ -802,30 +771,38 @@ function ChildCard({
               ))}
             </select>
           ) : (
-            <button
-              type="button"
-              onClick={() => setShowCategoryPicker(true)}
-              className="flex items-center gap-1 text-xs font-medium text-gray-400 hover:text-indigo-600 transition-colors"
-            >
-              <Pencil size={11} />
-              Cambiar categoría
+            <button type="button" onClick={() => setShowCategoryPicker(true)} className={CHIP}>
+              <Compass size={12} />
+              Categoría
             </button>
-          )}
-          <button
-            type="button"
-            onClick={() => setShowEditModal(true)}
-            className="flex items-center gap-1 text-xs font-medium text-gray-400 hover:text-indigo-600 transition-colors"
-          >
-            <Pencil size={11} />
-            Editar niño
+          )
+        )}
+        {isAdmin && (
+          <button type="button" onClick={() => setShowEditModal(true)} className={CHIP}>
+            <Pencil size={12} />
+            Editar
           </button>
-          {categoryError && <p className="text-xs text-red-600 mt-1 w-full">{categoryError}</p>}
+        )}
+        {categoryError && <p className="text-xs text-red-600 w-full">{categoryError}</p>}
+      </div>
+
+      {(showObservations || showContacts) && (
+        <div className="px-4 pb-3 space-y-2" onClick={(e) => e.stopPropagation()}>
+          {showObservations && (
+            <ObservationsPanel
+              allergies={child.allergies}
+              medicalNotes={child.medical_notes}
+              toiletTrained={child.toilet_trained}
+              comments={child.comments}
+            />
+          )}
+          {showContacts && <ChildContacts childId={child.id} />}
         </div>
       )}
 
       {/* ── Inline badge form ── */}
       {isSelected && needsBadge && !alreadyIn && (
-        <form onSubmit={handleSubmit} onClick={(e) => e.stopPropagation()} className="px-5 pb-5 space-y-3 border-t border-gray-100 pt-4">
+        <form onSubmit={handleSubmit} onClick={(e) => e.stopPropagation()} className="px-4 pb-4 space-y-3 border-t border-gray-100 pt-4">
 
           {hasAlert && (
             <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-3">
@@ -894,7 +871,7 @@ function ChildCard({
       {isSelected && !needsBadge && isCorderitos(category) && !alreadyIn && (
         <form
           onSubmit={(e) => { e.preventDefault(); if (!submitting) doCheckIn(null, pager ? parseInt(pager, 10) : null) }}
-          className="px-5 pb-5 space-y-3 border-t border-gray-100 pt-4"
+          className="px-4 pb-4 space-y-3 border-t border-gray-100 pt-4"
           onClick={(e) => e.stopPropagation()}
         >
           {hasAlert && (
@@ -978,7 +955,7 @@ function ChildCard({
 
       {/* ── Ya registrado: corregir gafete/bíper o quitar el registro ── */}
       {isSelected && alreadyIn && (
-        <form onSubmit={saveRecordEdit} onClick={(e) => e.stopPropagation()} className="px-5 pb-5 space-y-3 border-t border-green-200/70 pt-4">
+        <form onSubmit={saveRecordEdit} onClick={(e) => e.stopPropagation()} className="px-4 pb-4 space-y-3 border-t border-green-200/70 pt-4">
           {!todayRecord ? (
             <p className="text-sm text-gray-400">Cargando registro de hoy…</p>
           ) : todayRecord.pending ? (
@@ -1787,29 +1764,45 @@ export default function CheckInPage() {
     <SoftGradientBackground />
     <div className="relative z-[2] space-y-4">
 
-      {/* ── Session card ── */}
-      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm px-5 py-4">
-        <div className="flex items-start justify-between gap-4">
-          {/* Date + count */}
-          <div>
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+      {/* ── Tarjeta del día: fecha + conteo a la izquierda, equipo como
+          bloque de color a la derecha, y los dos encargados abajo en
+          renglones propios (antes iban apretados bajo la fecha y el de
+          "compu" se partía en dos líneas en celular). ── */}
+      <section className="bg-white rounded-3xl border border-gray-200/80 shadow-sm overflow-hidden">
+        <div className="flex items-stretch">
+          <div className="flex-1 min-w-0 px-5 py-4">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
               {format(new Date(), 'EEEE', { locale: es })}
             </p>
-            <p className="text-xl font-black text-gray-900 leading-tight">
-              {format(new Date(), "d 'de' MMMM yyyy", { locale: es })}
+            <h1 className="text-2xl sm:text-3xl font-semibold text-gray-900 leading-tight">
+              {format(new Date(), "d 'de' MMMM", { locale: es })}
+            </h1>
+            <p className="mt-1.5 flex items-center gap-1.5 text-sm font-semibold text-emerald-700">
+              <CheckCircle2 size={15} className="text-emerald-500 shrink-0" />
+              {totalToday > 0
+                ? `${totalToday} niño${totalToday !== 1 ? 's' : ''} registrado${totalToday !== 1 ? 's' : ''} hoy`
+                : <span className="text-gray-400 font-medium">Aún nadie registrado hoy</span>}
             </p>
-            {totalToday > 0 && (
-              <div className="flex items-center gap-1.5 mt-1.5">
-                <CheckCircle2 size={13} className="text-emerald-500" />
-                <span className="text-sm font-semibold text-emerald-600">
-                  {totalToday} niño{totalToday !== 1 ? 's' : ''} registrado{totalToday !== 1 ? 's' : ''}
-                </span>
-              </div>
-            )}
+          </div>
+          <button
+            onClick={() => setTeamConfirmed(false)}
+            className={`shrink-0 w-28 sm:w-36 flex flex-col items-center justify-center gap-1 px-3 ${TEAM_META[teamColor].bg} ${TEAM_META[teamColor].text} hover:brightness-95 active:brightness-90 transition`}
+            title="Cambiar equipo"
+          >
+            <span className="text-[11px] font-semibold uppercase tracking-wider opacity-80">Equipo</span>
+            <span className="font-display text-xl font-semibold leading-none">{TEAM_META[teamColor].label}</span>
+            <span className="text-[11px] font-medium opacity-80 underline underline-offset-2">Cambiar</span>
+          </button>
+        </div>
 
-            {/* Coordinator — inline editable */}
-            <div className="flex items-center gap-1.5 mt-2">
-              <User size={12} className="text-indigo-400 shrink-0" />
+        <div className="grid grid-cols-1 sm:grid-cols-2 border-t border-gray-100 divide-y sm:divide-y-0 sm:divide-x divide-gray-100">
+          {/* Encargado del día */}
+          <div className="flex items-center gap-3 px-5 py-3 min-w-0">
+            <span className="w-8 h-8 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+              <User size={15} />
+            </span>
+            <div className="flex-1 min-w-0">
+              <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Encargado</p>
               {editingCoordinator ? (
                 <input
                   autoFocus
@@ -1821,25 +1814,26 @@ export default function CheckInPage() {
                     if (e.key === 'Escape') setEditingCoordinator(false)
                   }}
                   placeholder="Nombre…"
-                  className="text-sm border-b-2 border-indigo-400 focus:outline-none font-medium text-gray-700 bg-transparent w-36"
+                  className="w-full text-sm border-b-2 border-indigo-400 focus:outline-none font-semibold text-gray-800 bg-transparent"
                 />
               ) : (
-                <button
-                  onClick={() => setEditingCoordinator(true)}
-                  className="flex items-center gap-1 text-sm text-gray-500 hover:text-indigo-600 transition-colors group"
-                >
-                  <span className={coordinatorName ? 'font-semibold text-gray-700' : 'italic text-gray-400 underline decoration-dotted'}>
-                    {coordinatorName || 'Agregar encargado…'}
+                <button onClick={() => setEditingCoordinator(true)} className="group flex items-center gap-1.5 max-w-full text-left">
+                  <span className={`truncate text-sm ${coordinatorName ? 'font-semibold text-gray-800' : 'text-indigo-600 font-medium'}`}>
+                    {coordinatorName || 'Agregar nombre'}
                   </span>
-                  <Pencil size={11} className="opacity-40 group-hover:opacity-70 transition-opacity" />
+                  <Pencil size={11} className="shrink-0 text-gray-400 group-hover:text-indigo-600" />
                 </button>
               )}
+              {coordinatorError && <p className="text-[11px] text-red-600 mt-0.5">{coordinatorError}</p>}
             </div>
-            {coordinatorError && <p className="text-[11px] text-red-600 mt-1">{coordinatorError}</p>}
-
-            {/* Computer operator — inline editable, same pattern as coordinator */}
-            <div className="flex items-center gap-1.5 mt-1">
-              <Monitor size={12} className="text-indigo-400 shrink-0" />
+          </div>
+          {/* Encargado de compu */}
+          <div className="flex items-center gap-3 px-5 py-3 min-w-0">
+            <span className="w-8 h-8 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+              <Monitor size={15} />
+            </span>
+            <div className="flex-1 min-w-0">
+              <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">En la compu</p>
               {editingComputerOperator ? (
                 <input
                   autoFocus
@@ -1851,40 +1845,21 @@ export default function CheckInPage() {
                     if (e.key === 'Escape') setEditingComputerOperator(false)
                   }}
                   placeholder="Nombre…"
-                  className="text-sm border-b-2 border-indigo-400 focus:outline-none font-medium text-gray-700 bg-transparent w-36"
+                  className="w-full text-sm border-b-2 border-indigo-400 focus:outline-none font-semibold text-gray-800 bg-transparent"
                 />
               ) : (
-                <button
-                  onClick={() => setEditingComputerOperator(true)}
-                  className="flex items-center gap-1 text-sm text-gray-500 hover:text-indigo-600 transition-colors group"
-                >
-                  <span className={computerOperatorName ? 'font-semibold text-gray-700' : 'italic text-gray-400 underline decoration-dotted'}>
-                    {computerOperatorName || 'Agregar encargado de compu…'}
+                <button onClick={() => setEditingComputerOperator(true)} className="group flex items-center gap-1.5 max-w-full text-left">
+                  <span className={`truncate text-sm ${computerOperatorName ? 'font-semibold text-gray-800' : 'text-indigo-600 font-medium'}`}>
+                    {computerOperatorName || 'Agregar nombre'}
                   </span>
-                  <Pencil size={11} className="opacity-40 group-hover:opacity-70 transition-opacity" />
+                  <Pencil size={11} className="shrink-0 text-gray-400 group-hover:text-indigo-600" />
                 </button>
               )}
+              {computerOperatorError && <p className="text-[11px] text-red-600 mt-0.5">{computerOperatorError}</p>}
             </div>
-            {computerOperatorError && <p className="text-[11px] text-red-600 mt-1">{computerOperatorError}</p>}
-          </div>
-
-          {/* Team indicator */}
-          <div className="flex flex-col items-end gap-1.5 shrink-0">
-            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-xl ${TEAM_META[teamColor].cardBg}`}>
-              <div className={`w-2.5 h-2.5 rounded-full ${TEAM_META[teamColor].dot}`} />
-              <span className={`text-sm font-bold ${TEAM_META[teamColor].cardText}`}>
-                Equipo {TEAM_META[teamColor].label}
-              </span>
-            </div>
-            <button
-              onClick={() => setTeamConfirmed(false)}
-              className="text-xs text-gray-400 hover:text-gray-600 font-medium transition-colors pr-1"
-            >
-              Cambiar equipo →
-            </button>
           </div>
         </div>
-      </div>
+      </section>
 
       {/* ── Búsqueda global ── */}
       <div className="relative">
@@ -1972,44 +1947,42 @@ export default function CheckInPage() {
         O selecciona el grupo
       </p>
 
-      {/* ── Category tiles: all five the same size. The previous version
-          made Saltamontes and both Corderitos groups span 2 columns of a
-          4-column grid starting at `lg:` (1024px) — below that width
-          (a very common laptop-window size, not just phones) every tile
-          fell back to a plain 2-column grid, leaving Corderitos 2-4 as a
-          lone card by itself in its own row. Uniform sizing at breakpoints
-          that don't leave a 1-card orphan row (2 → 3 → 5 columns) instead. ── */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3">
-        {TILES.map(({ category, icon: Icon, ages, cardBg, iconBg, iconColor, bar, barBg, textColor }) => {
+      {/* ── Grupos. En celular/tablet son renglones (ícono · nombre ·
+          conteo grande): antes eran cuadros en 2 columnas, el quinto
+          quedaba solo en su fila y "Corderitos 1-2 años" se partía en dos
+          líneas desalineando las alturas. En pantalla grande, 5 columnas. ── */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5 lg:gap-3">
+        {TILES.map(({ category, icon: Icon, ages, cardBg, iconBg, iconColor, bar, barBg, textColor }, i) => {
           const count = todayCounts[category] ?? 0
           return (
             <motion.button
               key={category}
               onClick={() => openCategory(category)}
-              whileTap={{ scale: 0.97 }}
-              whileHover={{ scale: 1.02 }}
-              className={`relative overflow-hidden rounded-2xl text-left shadow-md p-5 ${cardBg}`}
+              whileTap={{ scale: 0.98 }}
+              className={`relative overflow-hidden rounded-2xl text-left border border-black/5 shadow-sm hover:shadow-md transition-shadow ${cardBg}
+                flex lg:flex-col items-center lg:items-stretch gap-3.5 px-4 py-3.5 lg:p-5 ${i === TILES.length - 1 ? 'sm:col-span-2 lg:col-span-1' : ''}`}
             >
-              <div>
-                <div className={`rounded-2xl ${iconBg} flex items-center justify-center backdrop-blur-sm w-12 h-12 mb-4`}>
-                  <Icon className={`w-6 h-6 ${iconColor}`} />
-                </div>
-                <p className={`font-bold uppercase tracking-wide ${textColor} leading-tight text-sm`}>
+              <span className={`rounded-xl ${iconBg} flex items-center justify-center w-11 h-11 shrink-0`}>
+                <Icon className={`w-5 h-5 ${iconColor}`} />
+              </span>
+              <span className="flex-1 min-w-0">
+                <span className={`block font-display font-semibold text-[17px] leading-tight ${textColor}`}>
                   {CATEGORY_LABELS[category]}
-                </p>
-                <p className={`${iconColor} opacity-70 mt-0.5 mb-3 text-xs`}>{ages}</p>
-                <div className={`h-1.5 w-full rounded-full ${barBg} mb-1.5`}>
-                  <motion.div
+                </span>
+                <span className={`block text-xs ${iconColor} opacity-80 mt-0.5`}>{ages}</span>
+                <span className={`block h-1.5 w-full rounded-full ${barBg} mt-2.5`}>
+                  <motion.span
                     initial={{ width: 0 }}
                     animate={{ width: count > 0 ? `${Math.min(count * 10, 100)}%` : '0%' }}
                     transition={{ duration: 0.7, ease: 'easeOut' }}
-                    className={`h-1.5 rounded-full ${bar}`}
+                    className={`block h-1.5 rounded-full ${bar}`}
                   />
-                </div>
-                <span className={`text-xs font-medium ${iconColor}`}>
-                  {count > 0 ? `${count} registrado${count !== 1 ? 's' : ''}` : 'Sin registros aún'}
                 </span>
-              </div>
+              </span>
+              <span className={`shrink-0 text-right lg:text-left ${textColor}`}>
+                <span className="block font-display text-3xl font-semibold leading-none tabular-nums">{count}</span>
+                <span className={`block text-[11px] font-medium ${iconColor} mt-0.5`}>{count === 1 ? 'registrado' : 'registrados'}</span>
+              </span>
             </motion.button>
           )
         })}

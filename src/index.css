@@ -1,5 +1,45 @@
 @import "tailwindcss";
 
+/* ── Identidad visual ──────────────────────────────────────────────────────
+   Sale del logo: tres formas en colores primarios (círculo azul, hexágono
+   rojo, triángulo amarillo) sobre niños en tonos cálidos. Acento = azul
+   tinta del círculo (reemplaza al índigo genérico en TODA la app, porque
+   las pantallas usan las clases indigo-*); neutros con un poco de calidez
+   en vez de gris frío. Fredoka (redondeada, juguetona) para títulos y
+   nombres; Figtree para todo lo demás. Ambas van empaquetadas con la app
+   (@fontsource) para que funcionen sin internet y con la CSP de Netlify. */
+@theme {
+  --font-sans: "Figtree Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: "Fredoka Variable", "Figtree Variable", ui-rounded, system-ui, sans-serif;
+
+  --color-indigo-50:  oklch(0.972 0.016 258);
+  --color-indigo-100: oklch(0.938 0.035 258);
+  --color-indigo-200: oklch(0.875 0.07 258);
+  --color-indigo-300: oklch(0.78 0.115 258);
+  --color-indigo-400: oklch(0.66 0.16 258);
+  --color-indigo-500: oklch(0.56 0.185 258);
+  --color-indigo-600: oklch(0.48 0.18 259);
+  --color-indigo-700: oklch(0.415 0.16 260);
+  --color-indigo-800: oklch(0.35 0.13 261);
+  --color-indigo-900: oklch(0.29 0.1 262);
+  --color-indigo-950: oklch(0.21 0.07 263);
+
+  --color-gray-50:  oklch(0.985 0.004 80);
+  --color-gray-100: oklch(0.962 0.007 80);
+  --color-gray-200: oklch(0.918 0.01 76);
+  --color-gray-300: oklch(0.865 0.013 74);
+  --color-gray-400: oklch(0.70 0.016 70);
+  --color-gray-500: oklch(0.555 0.017 66);
+  --color-gray-600: oklch(0.455 0.016 62);
+  --color-gray-700: oklch(0.375 0.014 60);
+  --color-gray-800: oklch(0.285 0.012 58);
+  --color-gray-900: oklch(0.215 0.01 56);
+  --color-gray-950: oklch(0.15 0.008 56);
+
+  /* Fondo de la app (crema muy clara, no blanco puro) */
+  --color-canvas: oklch(0.982 0.008 85);
+}
+
 @keyframes bg-appear {
   from { opacity: 0; transform: scale(0.4); }
   to   { opacity: 1; transform: scale(1);   }
@@ -19,8 +59,8 @@
   50%     { transform: translate( 3%, -4%) scale(1.06);  }
 }
 @keyframes badge-pulse {
-  0%,100% { box-shadow: 0 0 0 0 rgba(99,102,241,0.55); }
-  50%     { box-shadow: 0 0 0 6px rgba(99,102,241,0);   }
+  0%,100% { box-shadow: 0 0 0 0 oklch(0.56 0.185 258 / 0.55); }
+  50%     { box-shadow: 0 0 0 6px oklch(0.56 0.185 258 / 0);   }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -38,13 +78,16 @@
        LivingBackground didn't cover (WebKit's rubber-band bounce ignores
        overscroll-behavior on the root scroller) fell through to transparent
        — which renders as black, not the intended light backdrop. */
-    background-color: #fafafc;
+    background-color: var(--color-canvas);
   }
 
   body {
+    font-family: var(--font-sans);
+    color: var(--color-gray-900);
+    font-feature-settings: "ss01";
     /* Prevent rubber-band scroll that reveals gray background */
     overscroll-behavior-y: none;
-    background-color: #fafafc;
+    background-color: var(--color-canvas);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     /* Safety net against any element that overflows viewport width on
@@ -59,6 +102,23 @@
   select,
   textarea {
     font-size: max(16px, 1em);
+  }
+
+  h1, h2, h3, .font-display {
+    font-family: var(--font-display);
+    letter-spacing: -0.005em;
+    text-wrap: balance;
+  }
+
+  /* Sin flechitas en los campos numéricos (gafete, bíper): en celular no
+     sirven y en compu se encimaban sobre el número. */
+  input[type="number"]::-webkit-outer-spin-button,
+  input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
+
+  :focus-visible {
+    outline: 3px solid var(--color-indigo-300);
+    outline-offset: 2px;
   }
 
   /* Smooth scrolling for all scroll containers */

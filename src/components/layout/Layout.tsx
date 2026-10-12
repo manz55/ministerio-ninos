@@ -8,6 +8,7 @@ import { EditProfileModal } from '../ui/EditProfileModal'
 import { LivingBackground } from '../ui/LivingBackground'
 import { OfflineStatus } from '../ui/OfflineStatus'
 import { getOfflineState } from '../../lib/offline'
+import { DemoBar } from '../ui/DemoBar'
 import { signOut } from '../../lib/auth'
 import type { Profile } from '../../types/domain'
 
@@ -68,7 +69,7 @@ export default function Layout({ isAdmin, profile }: { isAdmin: boolean; profile
           <ChurchLogo size={38} />
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-1.5">
-              <span className="font-semibold text-gray-900 leading-tight truncate">Maestros de Niños</span>
+              <span className="font-display font-semibold text-[17px] text-gray-900 leading-tight truncate">Maestros de Niños</span>
               {/* Version stamp — its own separate pill, not folded into the
                   name line. Lives in the (sticky, always-on-top) header
                   instead of floating over the page: a fixed badge anywhere
@@ -120,6 +121,7 @@ export default function Layout({ isAdmin, profile }: { isAdmin: boolean; profile
         {/* Dentro del header para que quede pegado arriba junto con él. */}
         <div className="-mx-4 -mb-3 mt-3 empty:hidden">
           <OfflineStatus />
+          {import.meta.env.VITE_DEMO === '1' && <DemoBar />}
         </div>
       </header>
 
