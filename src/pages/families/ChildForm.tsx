@@ -118,7 +118,7 @@ export function ChildForm({ child, prefill, submitLabel, onSubmit, onCancel }: {
         </select>
       </Field>
       <Field label="Comentarios" hint="(opcional)">
-        <textarea value={comments} onChange={(e) => setComments(e.target.value)} rows={2} placeholder="Ej. le teme a los globos…" className={`${INPUT} resize-none`} />
+        <textarea value={comments} onChange={(e) => setComments(e.target.value)} rows={2} placeholder="Ej. Ya va solo al baño, pero hay que recordarle que se lave las manos" className={`${INPUT} resize-none`} />
       </Field>
 
       <FormError error={error} />

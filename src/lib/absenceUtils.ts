@@ -31,38 +31,13 @@ export function computeAbsence(
   return { missed, lastSeen, tier }
 }
 
-// El emoji al frente sigue marcando la urgencia (chill/amarilla/roja); el
-// cuerpo de la frase es uno de 20 únicos, elegido de forma estable por niño
-// (no al azar en cada render) para que no cambie de frase cada vez que se
-// abre el panel, y para que no se repitan las mismas 4-5 frases entre varios
-// niños de la misma categoría de urgencia.
-const TIER_EMOJI: Record<AbsenceTier, string> = { chill: '👀', amarilla: '🟡', roja: '🔴' }
-
-const BODY_TEMPLATES: ((n: string, m: number) => string)[] = [
-  (n, m) => `¿Y ${n}? Ya van ${m} domingos sin verl@ por aquí.`,
-  (n, m) => `${n} se nos perdió — lleva ${m} domingos sin venir.`,
-  (n, m) => `${m} domingos sin noticias de ${n}…`,
-  (n, m) => `${n} anda perdid@ — ${m} domingos sin aparecer.`,
-  (n, m) => `¿Alguien sabe de ${n}? Van ${m} domingos sin venir.`,
-  (n, m) => `${n} lleva ${m} domingos sin venir — vale la pena preguntar qué pasó.`,
-  (n, m) => `Se extraña a ${n} — ${m} domingos sin asistir.`,
-  (n, m) => `${m} domingos y ${n} no ha vuelto a aparecer.`,
-  (n, m) => `${n} no ha cruzado la puerta en ${m} domingos.`,
-  (n, m) => `${n}: ${m} domingos consecutivos sin registrar entrada.`,
-  (n, m) => `Extrañamos a ${n} — ya van ${m} domingos.`,
-  (n, m) => `${n} se nos desvió del camino — ${m} domingos sin venir.`,
-  (n, m) => `Pensando en ${n}, que lleva ${m} domingos sin aparecer.`,
-  (n, m) => `${m} domingos marcados sin ${n} en la lista.`,
-  (n, m) => `${n} se nos escondió — ${m} domingos sin venir.`,
-  (n, m) => `${n} lleva ${m} domingos de ausencia — ¿le avisamos a la familia?`,
-  (n, m) => `El lugar de ${n} sigue vacío, van ${m} domingos.`,
-  (n, m) => `Cero registros de ${n} en los últimos ${m} domingos.`,
-  (n, m) => `¿Cómo estará ${n}? ${m} domingos sin verl@ por aquí.`,
-  (n, m) => `${m} domingos y ${n} sigue sin aparecer — quizás valga una llamada.`,
-]
-
+// Un mensaje claro por nivel (el color de la tarjeta ya marca la urgencia).
+// Joshua pidió que no sonaran genéricos ni a chiste: siempre la misma frase
+// para el mismo caso, con lo que conviene hacer.
 export function absenceMessage(nombre: string, info: AbsenceInfo): string {
   if (!info.tier) return ''
-  const idx = [...nombre].reduce((s, c) => s + c.charCodeAt(0), 0) % BODY_TEMPLATES.length
-  return `${TIER_EMOJI[info.tier]} ${BODY_TEMPLATES[idx](nombre, info.missed)}`
+  const m = info.missed
+  if (info.tier === 'roja') return `${nombre} lleva ${m} domingos sin venir. Vale la pena llamar a la familia.`
+  if (info.tier === 'amarilla') return `${nombre} lleva ${m} domingos sin venir. Sería bueno preguntar si todo está bien.`
+  return `${nombre} no ha venido los últimos ${m} domingos.`
 }

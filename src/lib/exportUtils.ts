@@ -32,19 +32,24 @@ export async function fetchAttendanceRange(from: string, to: string) {
 // Who was "encargado" / "encargado de computadora" on each day of the range
 // — both can change day to day, so a single header meta-row (like the
 // single-day export uses) wouldn't be accurate across a multi-day range.
-export type DailyStaffing = Record<string, { coordinator: string; computerOperator: string }>
+export type DailyStaffing = Record<string, { coordinator: string; computerOperator: string; corderitosLead: string }>
 
 export async function fetchDailyStaffing(from: string, to: string): Promise<DailyStaffing> {
-  const [coordinators, operators] = await Promise.all([
+  const [coordinators, operators, corderitos] = await Promise.all([
     supabase.from('daily_coordinator').select('session_date, name').gte('session_date', from).lte('session_date', to),
     supabase.from('daily_computer_operator').select('session_date, name').gte('session_date', from).lte('session_date', to),
+    supabase.from('daily_corderitos_lead').select('session_date, name').gte('session_date', from).lte('session_date', to),
   ])
+  const empty = { coordinator: '', computerOperator: '', corderitosLead: '' }
   const staffing: DailyStaffing = {}
   for (const row of coordinators.data ?? []) {
-    staffing[row.session_date] = { ...(staffing[row.session_date] ?? { coordinator: '', computerOperator: '' }), coordinator: row.name }
+    staffing[row.session_date] = { ...(staffing[row.session_date] ?? empty), coordinator: row.name }
   }
   for (const row of operators.data ?? []) {
-    staffing[row.session_date] = { ...(staffing[row.session_date] ?? { coordinator: '', computerOperator: '' }), computerOperator: row.name }
+    staffing[row.session_date] = { ...(staffing[row.session_date] ?? empty), computerOperator: row.name }
+  }
+  for (const row of corderitos.data ?? []) {
+    staffing[row.session_date] = { ...(staffing[row.session_date] ?? empty), corderitosLead: row.name }
   }
   return staffing
 }
@@ -71,7 +76,7 @@ export function toCSV(rows: unknown[][]): string {
 // Returns the Blob instead of saving directly (mirrors exportRangePDF) so
 // callers can also hand it to the receipt-printer share/download animation.
 export function exportRangeCSV(rows: RangeAttendanceRow[], staffing: DailyStaffing = {}): Blob {
-  const headers = ['Fecha', 'Nombre niño', 'Padre/Madre', 'Categoría', 'Equipo', 'Gafete', 'Hora de entrada', 'Encargado', 'Encargado de computadora']
+  const headers = ['Fecha', 'Nombre niño', 'Padre/Madre', 'Categoría', 'Equipo', 'Gafete', 'Hora de entrada', 'Encargado', 'Encargado de computadora', 'Encargado de Corderitos']
   const body = rows.map((r) => [
     r.session_date,
     r.children?.full_name ?? '',
@@ -82,6 +87,7 @@ export function exportRangeCSV(rows: RangeAttendanceRow[], staffing: DailyStaffi
     format(new Date(r.checked_in_at), 'HH:mm'),
     staffing[r.session_date]?.coordinator ?? '',
     staffing[r.session_date]?.computerOperator ?? '',
+    staffing[r.session_date]?.corderitosLead ?? '',
   ])
   return new Blob(['﻿' + toCSV([headers, ...body])], { type: 'text/csv;charset=utf-8;' })
 }
@@ -109,7 +115,7 @@ export async function exportRangePDF(rows: RangeAttendanceRow[], from: string, t
 
   autoTable(doc, {
     startY: 28,
-    head: [['Fecha', 'Niño', 'Padre/Madre', 'Categoría', 'Equipo', 'Gafete', 'Encargado', 'Encargado de compu']],
+    head: [['Fecha', 'Niño', 'Padre/Madre', 'Categoría', 'Equipo', 'Gafete', 'Encargado', 'Compu', 'Corderitos']],
     body: rows.map((r) => [
       r.session_date,
       r.children?.full_name ?? '',
@@ -119,6 +125,7 @@ export async function exportRangePDF(rows: RangeAttendanceRow[], from: string, t
       r.badge_number ? String(r.badge_number) : '—',
       staffing[r.session_date]?.coordinator || '—',
       staffing[r.session_date]?.computerOperator || '—',
+      staffing[r.session_date]?.corderitosLead || '—',
     ]),
     styles: { fontSize: 8 },
     headStyles: { fillColor: [79, 70, 229] },

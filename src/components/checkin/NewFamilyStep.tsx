@@ -450,7 +450,7 @@ export function NewFamilyStep({
                 <textarea
                   value={child.comments}
                   onChange={(e) => updateChild(child.key, 'comments', e.target.value)}
-                  placeholder="Ej. ya va solo al baño, le teme a los globos…"
+                  placeholder="Ej. Ya va solo al baño, pero hay que recordarle que se lave las manos"
                   rows={2}
                   className="w-full px-4 py-3 border-2 border-gray-200 rounded-2xl focus:border-indigo-500 focus:outline-none text-base resize-none"
                 />

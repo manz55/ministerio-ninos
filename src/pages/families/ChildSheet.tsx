@@ -115,7 +115,7 @@ function Body({ child, onClose, onChanged, startInEdit, highlightCheckIn, parent
         {savedFlash && (
           <motion.p initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
             className="rounded-2xl bg-emerald-50 text-emerald-800 text-sm font-semibold px-4 py-2.5">
-            ✓ Cambios guardados
+            Cambios guardados
           </motion.p>
         )}
       </AnimatePresence>

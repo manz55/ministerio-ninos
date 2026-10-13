@@ -191,7 +191,7 @@ function SheetBody({
           initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15, ...SPRING }}
           className="font-display text-2xl font-semibold text-gray-900 mt-3"
         >
-          ¡{child.full_name.split(' ')[0]} ya está adentro!
+          ¡{child.full_name.split(' ')[0]} quedó registrado!
         </motion.p>
         {success.badge !== null && (
           <motion.span

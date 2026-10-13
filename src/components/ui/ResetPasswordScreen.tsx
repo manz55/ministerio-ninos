@@ -32,7 +32,7 @@ export function ResetPasswordScreen() {
 
       {done ? (
         <p className="w-full text-sm font-semibold text-emerald-600 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 text-center">
-          ✓ Contraseña actualizada. Inicia sesión de nuevo…
+          Contraseña actualizada. Inicia sesión de nuevo…
         </p>
       ) : (
         <form onSubmit={handleSubmit} className="w-full space-y-3">

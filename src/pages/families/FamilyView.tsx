@@ -189,7 +189,7 @@ function FamilyChildRow({ child, index, onOpen, justAdded }: { child: ChildDetai
           <span className={`font-semibold ${g.iconColor}`}>{category ? CATEGORY_LABELS[category] : 'Sin grupo'}</span>
           {age !== null && <span>{age} años</span>}
           <span>· {visits} visita{visits !== 1 ? 's' : ''}</span>
-          {hasCategoryChanged(child) && <span className="text-amber-700 font-semibold">· 🎉 puede subir de grupo</span>}
+          {hasCategoryChanged(child) && <span className="text-amber-700 font-semibold">· puede subir de grupo</span>}
         </span>
       </span>
       <ChevronRight size={18} className="text-gray-300 group-hover:text-indigo-500 transition-colors shrink-0" />

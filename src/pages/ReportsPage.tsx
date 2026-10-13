@@ -5,7 +5,7 @@ import { es } from 'date-fns/locale'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   RefreshCw, Download, AlertTriangle, FileText, FileSpreadsheet, PartyPopper, Check, User, Monitor,
-  FileWarning, ArrowRight, Copy, Phone, Trash2, CalendarX, Trophy, Clock,
+  FileWarning, ArrowRight, Copy, Phone, Trash2, CalendarX, Trophy, Clock, Baby, Flame,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { CATEGORY_LABELS, ACTIVE_CATEGORIES, NEXT_CATEGORY, type Category } from '../types/domain'
@@ -70,17 +70,20 @@ export default function ReportsPage() {
   const [rangeTo, setRangeTo] = useState(todayStr)
   const [coordinatorName, setCoordinatorName] = useState('')
   const [computerOperatorName, setComputerOperatorName] = useState('')
+  const [corderitosLeadName, setCorderitosLeadName] = useState('')
 
   const selectedStr = format(selectedDate, 'yyyy-MM-dd')
   const isToday = selectedStr === todayStr
 
-  // Encargado y compu del día elegido (ver CheckInPage).
+  // Encargados del día elegido (ver CheckInPage).
   useEffect(() => {
     let cancelled = false
     supabase.from('daily_coordinator').select('name').eq('session_date', selectedStr).maybeSingle()
       .then(({ data }) => { if (!cancelled) setCoordinatorName(data?.name ?? '') })
     supabase.from('daily_computer_operator').select('name').eq('session_date', selectedStr).maybeSingle()
       .then(({ data }) => { if (!cancelled) setComputerOperatorName(data?.name ?? '') })
+    supabase.from('daily_corderitos_lead').select('name').eq('session_date', selectedStr).maybeSingle()
+      .then(({ data }) => { if (!cancelled) setCorderitosLeadName(data?.name ?? '') })
     return () => { cancelled = true }
   }, [selectedStr])
 
@@ -201,7 +204,7 @@ export default function ReportsPage() {
           onChange={setTab}
           options={[
             { value: 'dia', label: 'Del día', count: total },
-            { value: 'tendencias', label: 'Tendencias' },
+            { value: 'tendencias', label: 'Números' },
             { value: 'seguimiento', label: 'Seguimiento', count: followUps },
             { value: 'exportar', label: 'Exportar' },
           ]}
@@ -225,6 +228,7 @@ export default function ReportsPage() {
               lastRefresh={lastRefresh}
               coordinatorName={coordinatorName}
               operatorName={computerOperatorName}
+              corderitosLeadName={corderitosLeadName}
               onChanged={fetchLive}
             />
           )}
@@ -241,6 +245,7 @@ export default function ReportsPage() {
               total={total}
               coordinatorName={coordinatorName}
               operatorName={computerOperatorName}
+              corderitosLeadName={corderitosLeadName}
               weeks={weekHistory}
               rangeFrom={rangeFrom}
               rangeTo={rangeTo}
@@ -256,7 +261,7 @@ export default function ReportsPage() {
 
 // ─── Del día ──────────────────────────────────────────────────────────────────
 
-function DayTab({ records, loading, byCategory, total, avgWeek, lastRefresh, coordinatorName, operatorName, onChanged }: {
+function DayTab({ records, loading, byCategory, total, avgWeek, lastRefresh, coordinatorName, operatorName, corderitosLeadName, onChanged }: {
   records: LiveRecord[]
   loading: boolean
   byCategory: CategoryCount
@@ -265,6 +270,7 @@ function DayTab({ records, loading, byCategory, total, avgWeek, lastRefresh, coo
   lastRefresh: Date
   coordinatorName: string
   operatorName: string
+  corderitosLeadName: string
   onChanged: () => void
 }) {
   const [filter, setFilter] = useState<Category | 'all'>('all')
@@ -278,12 +284,9 @@ function DayTab({ records, loading, byCategory, total, avgWeek, lastRefresh, coo
     <div className="space-y-5">
       {/* ── Números grandes ── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <Kpi label="Niños adentro" accent>
+        <Kpi label="En el área de niños" accent>
           <span className="font-display text-5xl font-bold leading-none"><AnimatedNumber value={total} /></span>
-          <span className="flex items-center gap-1.5 text-xs text-gray-500 mt-2">
-            <span className="relative flex w-2 h-2"><span className="absolute inset-0 rounded-full bg-emerald-400 animate-ping opacity-60 motion-reduce:animate-none" /><span className="relative w-2 h-2 rounded-full bg-emerald-500" /></span>
-            En vivo · {format(lastRefresh, 'HH:mm')}
-          </span>
+          <span className="text-xs text-gray-500 mt-2">Actualizado {format(lastRefresh, 'HH:mm')}</span>
         </Kpi>
         <Kpi label="Grupo con más niños">
           {total > 0 ? (
@@ -305,10 +308,11 @@ function DayTab({ records, loading, byCategory, total, avgWeek, lastRefresh, coo
         </Kpi>
       </div>
 
-      {(coordinatorName || operatorName) && (
+      {(coordinatorName || operatorName || corderitosLeadName) && (
         <div className="flex flex-wrap gap-2">
           {coordinatorName && <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white border border-gray-200 text-sm font-medium text-gray-700"><User size={14} className="text-indigo-500" /> {coordinatorName}</span>}
           {operatorName && <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white border border-gray-200 text-sm font-medium text-gray-700"><Monitor size={14} className="text-indigo-500" /> {operatorName}</span>}
+          {corderitosLeadName && <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white border border-gray-200 text-sm font-medium text-gray-700"><Baby size={14} className="text-indigo-500" /> Corderitos: {corderitosLeadName}</span>}
         </div>
       )}
 
@@ -373,7 +377,7 @@ function DayTab({ records, loading, byCategory, total, avgWeek, lastRefresh, coo
                   </span>
                   <span className="shrink-0 text-right">
                     <span className="block text-xs text-gray-500 tabular-nums">{format(new Date(r.checked_in_at), 'HH:mm')}</span>
-                    <span className={`inline-block mt-0.5 text-[11px] font-semibold rounded-full px-2 py-0.5 ${r.checked_out_at ? 'bg-gray-100 text-gray-500' : 'bg-emerald-50 text-emerald-700'}`}>{r.checked_out_at ? 'Salió' : 'Adentro'}</span>
+                    <span className={`inline-block mt-0.5 text-[11px] font-semibold rounded-full px-2 py-0.5 ${r.checked_out_at ? 'bg-gray-100 text-gray-500' : 'bg-emerald-50 text-emerald-700'}`}>{r.checked_out_at ? 'Salió' : 'Registrado'}</span>
                   </span>
                 </motion.button>
               )
@@ -457,7 +461,7 @@ function RecordEditor({ record, onDone }: { record: LiveRecord; onDone: () => vo
   )
 }
 
-// ─── Tendencias ───────────────────────────────────────────────────────────────
+// ─── Números ──────────────────────────────────────────────────────────────────
 
 function TrendsTab({ weeks, loading, rangeFrom, rangeTo, setRangeFrom, setRangeTo }: {
   weeks: WeekRow[]
@@ -540,21 +544,28 @@ function WeeklyChart({ weeks }: { weeks: WeekRow[] }) {
 function Ranking({ rangeFrom, rangeTo, setRangeFrom, setRangeTo }: { rangeFrom: string; rangeTo: string; setRangeFrom: (v: string) => void; setRangeTo: (v: string) => void }) {
   const [loading, setLoading] = useState(true)
   const [category, setCategory] = useState<Category | 'todas'>('todas')
-  const [rows, setRows] = useState<{ id: string; full_name: string; category: Category; visits: number }[]>([])
+  const [rows, setRows] = useState<{ id: string; full_name: string; category: Category; visits: number; streak: number }[]>([])
   const [copied, setCopied] = useState(false)
 
   const load = useCallback(async () => {
     if (!rangeFrom || !rangeTo || rangeFrom > rangeTo) return
     setLoading(true)
-    const { data } = await supabase.from('attendance').select('child_id, category, children(full_name)').gte('session_date', rangeFrom).lte('session_date', rangeTo).is('deleted_at', null)
-    const byChild = new Map<string, { full_name: string; category: Category; visits: number }>()
-    for (const row of (data ?? []) as unknown as { child_id: string; category: Category; children: { full_name: string } | null }[]) {
+    const { data } = await supabase.from('attendance').select('child_id, category, session_date, children(full_name)').gte('session_date', rangeFrom).lte('session_date', rangeTo).is('deleted_at', null)
+    const list = (data ?? []) as unknown as { child_id: string; category: Category; session_date: string; children: { full_name: string } | null }[]
+    // Racha: cuántos de los últimos días con servicio (del rango) vino seguido.
+    const serviceDays = [...new Set(list.map((r) => r.session_date))].sort().reverse()
+    const byChild = new Map<string, { full_name: string; category: Category; visits: number; days: Set<string> }>()
+    for (const row of list) {
       if (!row.children) continue
       const e = byChild.get(row.child_id)
-      if (e) e.visits += 1
-      else byChild.set(row.child_id, { full_name: row.children.full_name, category: row.category, visits: 1 })
+      if (e) { if (!e.days.has(row.session_date)) { e.days.add(row.session_date); e.visits += 1 } }
+      else byChild.set(row.child_id, { full_name: row.children.full_name, category: row.category, visits: 1, days: new Set([row.session_date]) })
     }
-    setRows([...byChild.entries()].map(([id, v]) => ({ id, ...v })).sort((a, b) => b.visits - a.visits || a.full_name.localeCompare(b.full_name)))
+    setRows([...byChild.entries()].map(([id, { days, ...v }]) => {
+      let streak = 0
+      for (const d of serviceDays) { if (days.has(d)) streak++; else break }
+      return { id, ...v, streak }
+    }).sort((a, b) => b.visits - a.visits || b.streak - a.streak || a.full_name.localeCompare(b.full_name)))
     setLoading(false)
   }, [rangeFrom, rangeTo])
   useEffect(() => { load() }, [load])
@@ -574,6 +585,7 @@ function Ranking({ rangeFrom, rangeTo, setRangeFrom, setRangeTo }: { rangeFrom: 
         <Trophy size={20} className="text-amber-500" />
         <h2 className="text-xl font-bold text-gray-900">Quién viene más</h2>
       </div>
+      <p className="text-sm text-gray-500 -mt-2 flex items-center gap-1">El número es cuántas veces vino. <Flame size={13} className="text-orange-500" /> es su racha: los últimos días seguidos que vino.</p>
       <div className="flex flex-wrap items-end gap-3">
         <Field label="Desde"><input type="date" value={rangeFrom} max={rangeTo} onChange={(e) => setRangeFrom(e.target.value)} className={INPUT} /></Field>
         <Field label="Hasta"><input type="date" value={rangeTo} min={rangeFrom} max={todayStr} onChange={(e) => setRangeTo(e.target.value)} className={INPUT} /></Field>
@@ -596,7 +608,10 @@ function Ranking({ rangeFrom, rangeTo, setRangeFrom, setRangeTo }: { rangeFrom: 
                 <span className="flex-1 min-w-0">
                   <span className="flex items-baseline justify-between gap-2">
                     <span className="truncate font-semibold text-gray-800">{r.full_name}</span>
-                    <span className="text-sm font-bold text-gray-900 tabular-nums">{r.visits}</span>
+                    <span className="shrink-0 flex items-baseline gap-2">
+                      {r.streak >= 2 && <span title={`Vino los últimos ${r.streak} días seguidos`} className="inline-flex items-center gap-0.5 text-xs font-semibold text-orange-600 tabular-nums"><Flame size={12} className="self-center" />{r.streak}</span>}
+                      <span className="text-sm font-bold text-gray-900 tabular-nums">{r.visits}</span>
+                    </span>
                   </span>
                   <span className="block h-1.5 rounded-full bg-gray-100 mt-1 overflow-hidden">
                     <motion.span className={`block h-full rounded-full ${g.bar}`} initial={{ width: 0 }} animate={{ width: `${(r.visits / maxVisits) * 100}%` }} transition={{ duration: 0.6, delay: Math.min(i, 12) * 0.03 }} />
@@ -632,7 +647,7 @@ function FollowUpTab({ absent, graduating, medical, missingBirthDate }: { absent
 
       <AnimatePresence mode="wait">
         <motion.div key={view} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
-          {view === 'faltas' && (absent.length === 0 ? <EmptyState icon={Check} text="Todos han venido últimamente. ¡Qué bendición!" /> : (
+          {view === 'faltas' && (absent.length === 0 ? <EmptyState icon={Check} text="Ningún niño ha faltado seguido estas semanas." /> : (
             <motion.div initial="hidden" animate="show" className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-2">
               {absent.map((c, i) => (
                 <motion.div key={c.id} variants={itemVariants} custom={i}
@@ -708,12 +723,13 @@ function FollowCard({ active, onClick, icon: Icon, tone, count, label }: { activ
 
 // ─── Exportar ─────────────────────────────────────────────────────────────────
 
-function ExportTab({ selectedDate, byCategory, total, coordinatorName, operatorName, weeks, rangeFrom, rangeTo, setRangeFrom, setRangeTo }: {
+function ExportTab({ selectedDate, byCategory, total, coordinatorName, operatorName, corderitosLeadName, weeks, rangeFrom, rangeTo, setRangeFrom, setRangeTo }: {
   selectedDate: Date
   byCategory: CategoryCount
   total: number
   coordinatorName: string
   operatorName: string
+  corderitosLeadName: string
   weeks: WeekRow[]
   rangeFrom: string
   rangeTo: string
@@ -740,7 +756,11 @@ function ExportTab({ selectedDate, byCategory, total, coordinatorName, operatorN
     downloadCSV(toCSV([headers, ...rows]), 'historial-asistencia.csv')
   }
 
-  const note = coordinatorName ? (operatorName ? `Generado por: ${coordinatorName} · Compu: ${operatorName}` : `Generado por: ${coordinatorName}`) : undefined
+  const note = [
+    coordinatorName && `Generado por: ${coordinatorName}`,
+    operatorName && `Compu: ${operatorName}`,
+    corderitosLeadName && `Corderitos: ${corderitosLeadName}`,
+  ].filter(Boolean).join(' · ') || undefined
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-start">

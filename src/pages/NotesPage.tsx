@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
-import { X, User, Send, Calendar, SlidersHorizontal, Check, NotebookPen } from 'lucide-react'
+import { X, User, Send, Calendar, Check, NotebookPen } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { useDebounce } from '../hooks/useDebounce'
@@ -11,6 +11,8 @@ import { Sheet, SkeletonRow } from '../components/motion'
 import { PageHeader, BTN_SECONDARY } from '../components/ui/PageHeader'
 import { Field, INPUT } from '../components/ui/form'
 import { EmptyState } from '../components/ui/EmptyState'
+import { SearchField } from '../components/ui/SearchField'
+import { FilterChips } from '../components/ui/Segmented'
 import { initials } from './checkin/shared'
 
 const TEAM_ORDER: TeamColor[] = ['rojo', 'amarillo', 'azul']
@@ -39,11 +41,13 @@ export default function NotesPage() {
   const [loading, setLoading] = useState(true)
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [childFilter, setChildFilter] = useState('')
+  const [teamFilter, setTeamFilter] = useState<TeamColor | 'todos'>('todos')
   const [fromDate, setFromDate] = useState('')
   const [toDate, setToDate] = useState('')
   const [freshId, setFreshId] = useState<string | null>(null)
   const debouncedChild = useDebounce(childFilter.trim(), 300)
-  const filtersActive = Boolean(fromDate || toDate || childFilter)
+  const datesActive = Boolean(fromDate || toDate)
+  const filtersActive = Boolean(datesActive || childFilter || teamFilter !== 'todos')
 
   const fetchNotes = useCallback(async () => {
     let matchingChildIds: string[] | null = null
@@ -61,10 +65,11 @@ export default function NotesPage() {
     if (fromDate) query = query.gte('session_date', fromDate)
     if (toDate) query = query.lte('session_date', toDate)
     if (matchingChildIds) query = query.in('child_id', matchingChildIds)
+    if (teamFilter !== 'todos') query = query.eq('team_color', teamFilter)
     const { data } = await query
     setNotes((data as unknown as NoteRow[]) ?? [])
     setLoading(false)
-  }, [fromDate, toDate, debouncedChild])
+  }, [fromDate, toDate, debouncedChild, teamFilter])
 
   useEffect(() => { fetchNotes() }, [fetchNotes])
 
@@ -82,24 +87,32 @@ export default function NotesPage() {
     <div className="max-w-3xl mx-auto space-y-5">
       <PageHeader
         title="Notas del turno"
-        subtitle="Lo que pasó hoy: actividades, incidentes y detalles de cada niño"
-        actions={
-          <button onClick={() => setFiltersOpen(true)} className={`${BTN_SECONDARY} ${filtersActive ? '!border-indigo-300 !text-indigo-700' : ''}`}>
-            <SlidersHorizontal size={16} /> Filtrar
-            {filtersActive && <span className="w-2 h-2 rounded-full bg-indigo-500" />}
-          </button>
-        }
+        subtitle="Lo que pasó en el turno: actividades, accidentes o imprevistos y detalles de cada niño"
       />
 
       <Composer onSaved={(id) => { setFreshId(id); fetchNotes() }} />
 
-      {filtersActive && (
-        <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} className="flex flex-wrap items-center gap-2">
-          {fromDate && <ActiveFilter label={`Desde ${format(new Date(fromDate + 'T12:00:00'), 'd MMM', { locale: es })}`} onClear={() => setFromDate('')} />}
-          {toDate && <ActiveFilter label={`Hasta ${format(new Date(toDate + 'T12:00:00'), 'd MMM', { locale: es })}`} onClear={() => setToDate('')} />}
-          {childFilter && <ActiveFilter label={`Niño: ${childFilter}`} onClear={() => setChildFilter('')} />}
-        </motion.div>
-      )}
+      {/* Filtros siempre a la vista: por grupo, por niño y (opcional) por fechas. */}
+      <div className="space-y-2.5">
+        <div className="flex flex-col sm:flex-row gap-2.5 sm:items-center">
+          <div className="flex-1"><SearchField value={childFilter} onChange={setChildFilter} placeholder="Ver notas de un niño…" /></div>
+          <button onClick={() => setFiltersOpen(true)} className={`${BTN_SECONDARY} ${datesActive ? '!border-indigo-300 !text-indigo-700' : ''}`}>
+            <Calendar size={16} /> Fechas
+            {datesActive && <span className="w-2 h-2 rounded-full bg-indigo-500" />}
+          </button>
+        </div>
+        <FilterChips
+          value={teamFilter}
+          onChange={setTeamFilter}
+          options={[{ value: 'todos', label: 'Todos los grupos' }, ...TEAM_ORDER.map((t) => ({ value: t, label: TEAM_COLOR_LABELS[t] }))]}
+        />
+        {datesActive && (
+          <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} className="flex flex-wrap items-center gap-2">
+            {fromDate && <ActiveFilter label={`Desde ${format(new Date(fromDate + 'T12:00:00'), 'd MMM', { locale: es })}`} onClear={() => setFromDate('')} />}
+            {toDate && <ActiveFilter label={`Hasta ${format(new Date(toDate + 'T12:00:00'), 'd MMM', { locale: es })}`} onClear={() => setToDate('')} />}
+          </motion.div>
+        )}
+      </div>
 
       {loading ? (
         <div className="space-y-2">{[0, 1, 2].map((i) => <SkeletonRow key={i} />)}</div>
@@ -123,18 +136,15 @@ export default function NotesPage() {
         </div>
       )}
 
-      <Sheet open={filtersOpen} onClose={() => setFiltersOpen(false)} title="Filtrar notas">
+      <Sheet open={filtersOpen} onClose={() => setFiltersOpen(false)} title="Filtrar por fechas">
         <div className="px-6 pt-3 sm:pt-7 pb-6 space-y-5">
-          <h2 className="text-2xl font-bold text-gray-900 pr-10">Filtrar notas</h2>
+          <h2 className="text-2xl font-bold text-gray-900 pr-10">Filtrar por fechas</h2>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Desde"><input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className={INPUT} /></Field>
             <Field label="Hasta"><input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className={INPUT} /></Field>
           </div>
-          <Field label="Nombre del niño">
-            <input value={childFilter} onChange={(e) => setChildFilter(e.target.value)} placeholder="Ej. Mateo" className={INPUT} />
-          </Field>
           <div className="flex gap-2">
-            <button onClick={() => { setFromDate(''); setToDate(''); setChildFilter('') }} className="flex-1 py-3.5 rounded-2xl bg-gray-100 text-gray-700 font-semibold hover:bg-gray-200">Limpiar</button>
+            <button onClick={() => { setFromDate(''); setToDate('') }} className="flex-1 py-3.5 rounded-2xl bg-gray-100 text-gray-700 font-semibold hover:bg-gray-200">Limpiar</button>
             <button onClick={() => setFiltersOpen(false)} className="flex-[2] py-3.5 rounded-2xl bg-indigo-600 text-white font-display font-bold text-lg hover:bg-indigo-700">Ver notas</button>
           </div>
         </div>
@@ -174,7 +184,7 @@ function NoteCard({ note, index, fresh }: { note: NoteRow; index: number; fresh:
           <div className="flex flex-wrap gap-1.5 pt-0.5">
             {note.team_color && (
               <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-600 bg-gray-100 px-2.5 py-1 rounded-full">
-                <span className={`w-2 h-2 rounded-full ${TEAM_DOT[note.team_color]}`} /> Equipo {TEAM_COLOR_LABELS[note.team_color]}
+                <span className={`w-2 h-2 rounded-full ${TEAM_DOT[note.team_color]}`} /> Grupo {TEAM_COLOR_LABELS[note.team_color]}
               </span>
             )}
             {note.children && (
@@ -190,7 +200,7 @@ function NoteCard({ note, index, fresh }: { note: NoteRow; index: number; fresh:
 }
 
 // Escribir una nota es como mandar un mensaje: el texto primero, y fecha,
-// equipo o niño solo si hacen falta. Ctrl/⌘ + Enter la envía.
+// grupo o niño solo si hacen falta. Ctrl/⌘ + Enter la envía.
 function Composer({ onSaved }: { onSaved: (id: string) => void }) {
   const { profile } = useAuth()
   const [sessionDate, setSessionDate] = useState(todayStr)
@@ -240,7 +250,7 @@ function Composer({ onSaved }: { onSaved: (id: string) => void }) {
         onChange={(e) => setNote(e.target.value)}
         onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); save() } }}
         rows={2}
-        placeholder="¿Qué pasó en el turno? Ej. Mateo ayudó a repartir el material…"
+        placeholder="¿Pasó algo hoy? Ej: bípers perdidos, notas sobre algún niño o algún aviso para el siguiente grupo"
         className="w-full px-1 text-[16px] leading-relaxed text-gray-800 placeholder:text-gray-400 bg-transparent focus:outline-none resize-none"
       />
 
@@ -271,7 +281,7 @@ function Composer({ onSaved }: { onSaved: (id: string) => void }) {
 
       <div className="flex items-center gap-1.5 flex-wrap">
         <Tag active={panel === 'date' || sessionDate !== todayStr} icon={Calendar} label={dateLabel} onClick={() => setPanel(panel === 'date' ? null : 'date')} />
-        <Tag active={panel === 'team' || !!teamColor} icon={null} dot={teamColor ? TEAM_DOT[teamColor] : undefined} label={teamColor ? TEAM_COLOR_LABELS[teamColor] : 'Equipo'} onClick={() => setPanel(panel === 'team' ? null : 'team')} />
+        <Tag active={panel === 'team' || !!teamColor} icon={null} dot={teamColor ? TEAM_DOT[teamColor] : undefined} label={teamColor ? TEAM_COLOR_LABELS[teamColor] : 'Grupo'} onClick={() => setPanel(panel === 'team' ? null : 'team')} />
         {child ? (
           <span className="inline-flex items-center gap-1.5 pl-3 pr-1.5 py-1.5 rounded-full bg-indigo-50 text-indigo-800 text-sm font-semibold">
             <User size={14} /> {child.full_name}

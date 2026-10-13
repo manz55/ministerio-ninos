@@ -12,7 +12,8 @@ import tailwindcss from '@tailwindcss/vite'
 function readGit(cmd: string, fallback: string) {
   try { return execSync(cmd, { encoding: 'utf-8' }).trim() } catch { return fallback }
 }
-const APP_VERSION = 'v' + readGit('git rev-list --count HEAD', '0')
+// v2 desde el rediseño completo; el número sigue contando commits.
+const APP_VERSION = 'v2.' + readGit('git rev-list --count HEAD', '0')
 const COMMIT_HASH = readGit('git rev-parse --short HEAD', 'sin-commit')
 
 // Genera dist/sw.js con la lista exacta de archivos de este build, para que

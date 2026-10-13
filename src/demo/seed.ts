@@ -77,6 +77,7 @@ export function createSeed(): Db {
     coordinator_requests: [],
     daily_coordinator: [{ session_date: today, name: 'Ester Chávez', set_by: DEMO_USER_ID }],
     daily_computer_operator: [],
+    daily_corderitos_lead: [],
     activity_log: [],
     deletion_log: [],
   }

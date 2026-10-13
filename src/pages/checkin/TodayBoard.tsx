@@ -49,12 +49,8 @@ export function TodayBoard({
   return (
     <section className="rounded-3xl bg-white/85 backdrop-blur border border-gray-200/70 shadow-sm overflow-hidden">
       <header className="flex items-center gap-2.5 px-4 pt-4 pb-3">
-        <span className="relative flex w-2.5 h-2.5">
-          <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-60 animate-ping motion-reduce:animate-none" />
-          <span className="relative inline-flex rounded-full w-2.5 h-2.5 bg-emerald-500" />
-        </span>
         <h2 className="font-display text-lg font-semibold text-gray-900 flex-1">
-          {onlyCategory ? `Adentro en ${CATEGORY_LABELS[onlyCategory]}` : 'Registrados hoy'}
+          {onlyCategory ? `En ${CATEGORY_LABELS[onlyCategory]} hoy` : 'Registrados hoy'}
         </h2>
         <span className="font-display text-2xl font-semibold text-gray-900 leading-none">
           <AnimatedNumber value={visible.length} />
@@ -150,13 +146,13 @@ function RecordRow({
           </span>
         </span>
         {rec.pending ? (
-          <span className="shrink-0 inline-flex items-center gap-1 text-[11px] font-semibold text-amber-800 bg-amber-100 rounded-full px-2 py-0.5" title="Guardado en este dispositivo — se sube solo al volver el internet">
+          <span className="shrink-0 inline-flex items-center gap-1 text-[11px] font-semibold text-amber-800 bg-amber-100 rounded-full px-2 py-0.5" title="Guardado en este dispositivo. Se sube solo cuando vuelva el internet">
             <CloudOff size={11} /> Sin subir
           </span>
         ) : rec.checked_out_at ? (
           <span className="shrink-0 text-[11px] font-semibold text-gray-500 bg-gray-100 rounded-full px-2 py-0.5">Salió</span>
         ) : (
-          <span className="shrink-0 text-[11px] font-semibold text-emerald-700 bg-emerald-50 rounded-full px-2 py-0.5">Adentro</span>
+          <span className="shrink-0 text-[11px] font-semibold text-emerald-700 bg-emerald-50 rounded-full px-2 py-0.5">Registrado</span>
         )}
       </button>
       {isCorderitos(rec.category) && !rec.pending && (
@@ -223,7 +219,7 @@ function AssignedTeacherControl({
             : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
         }`}
       >
-        {!canChange && '🔒 '}{assignedName ? `Lo cuida: ${assignedName}` : '+ ¿Quién lo cuida? (baño, etc.)'}
+        {assignedName ? `Lo cuida: ${assignedName}` : '+ ¿Quién lo cuida? (baño, etc.)'}
       </button>
     )
   }

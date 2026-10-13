@@ -238,8 +238,13 @@ async function handleRest(url: URL, method: string, headers: Headers, body: stri
   if (path.startsWith('rpc/')) {
     const fn = path.slice(4)
     const args = body ? JSON.parse(body) : {}
-    if (fn === 'set_daily_coordinator' || fn === 'set_daily_computer_operator') {
-      const table = fn === 'set_daily_coordinator' ? 'daily_coordinator' : 'daily_computer_operator'
+    const staffTables: Record<string, string> = {
+      set_daily_coordinator: 'daily_coordinator',
+      set_daily_computer_operator: 'daily_computer_operator',
+      set_daily_corderitos_lead: 'daily_corderitos_lead',
+    }
+    if (fn in staffTables) {
+      const table = staffTables[fn]
       db[table] = (db[table] ?? []).filter((r) => r.session_date !== args.p_session_date)
       db[table].push({ session_date: args.p_session_date, name: args.p_name, set_by: DEMO_USER_ID })
     } else if (fn === 'assign_attendance_teacher') {

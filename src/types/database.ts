@@ -310,6 +310,35 @@ export type Database = {
           },
         ]
       }
+      daily_corderitos_lead: {
+        Row: {
+          name: string
+          session_date: string
+          set_by: string | null
+          updated_at: string
+        }
+        Insert: {
+          name: string
+          session_date: string
+          set_by?: string | null
+          updated_at?: string
+        }
+        Update: {
+          name?: string
+          session_date?: string
+          set_by?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "daily_corderitos_lead_set_by_fkey"
+            columns: ["set_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       daily_coordinator: {
         Row: {
           name: string
@@ -609,6 +638,10 @@ export type Database = {
       is_admin: { Args: never; Returns: boolean }
       is_owner: { Args: never; Returns: boolean }
       set_daily_computer_operator: {
+        Args: { p_name: string; p_session_date: string }
+        Returns: undefined
+      }
+      set_daily_corderitos_lead: {
         Args: { p_name: string; p_session_date: string }
         Returns: undefined
       }

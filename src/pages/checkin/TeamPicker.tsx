@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
-import { Monitor, User } from 'lucide-react'
+import { Baby, Monitor, User } from 'lucide-react'
 import type { TeamColor } from '../../types/domain'
 import { ChurchLogo } from '../../components/ui/ChurchLogo'
 import { listVariants, itemVariants } from '../../components/motion/presets'
@@ -12,23 +12,26 @@ const TEAMS: TeamColor[] = ['rojo', 'amarillo', 'azul']
 
 /** Primera pantalla de cada domingo: quién está a cargo y qué equipo sirve. */
 export function TeamPicker({
-  onConfirm, initialCoordinator, initialComputerOperator,
+  onConfirm, initialCoordinator, initialComputerOperator, initialCorderitosLead,
 }: {
-  onConfirm: (color: TeamColor, coordinator: string, computerOperator: string) => void
+  onConfirm: (color: TeamColor, coordinator: string, computerOperator: string, corderitosLead: string) => void
   initialCoordinator: string
   initialComputerOperator: string
+  initialCorderitosLead: string
 }) {
   const [coordinator, setCoordinator] = useState(initialCoordinator)
   useEffect(() => setCoordinator(initialCoordinator), [initialCoordinator])
   const [operator, setOperator] = useState(initialComputerOperator)
   useEffect(() => setOperator(initialComputerOperator), [initialComputerOperator])
+  const [corderitos, setCorderitos] = useState(initialCorderitosLead)
+  useEffect(() => setCorderitos(initialCorderitosLead), [initialCorderitosLead])
   const [picked, setPicked] = useState<TeamColor | null>(null)
 
   function pick(color: TeamColor) {
     if (picked) return
     setPicked(color)
     // Deja ver la selección un instante antes de pasar a Registro.
-    setTimeout(() => onConfirm(color, coordinator.trim(), operator.trim()), 320)
+    setTimeout(() => onConfirm(color, coordinator.trim(), operator.trim(), corderitos.trim()), 320)
   }
 
   const input = 'w-full pl-11 pr-4 py-3.5 bg-white border-2 border-gray-200 rounded-2xl text-base font-medium text-gray-800 placeholder:text-gray-400 focus:border-indigo-500 focus:outline-none shadow-sm transition-colors'
@@ -43,7 +46,7 @@ export function TeamPicker({
         </motion.div>
         <p className="mt-4 text-xs font-semibold text-gray-500 uppercase tracking-widest">{format(new Date(), 'EEEE', { locale: es })}</p>
         <h1 className="text-4xl font-semibold text-gray-900 mt-1">{format(new Date(), "d 'de' MMMM", { locale: es })}</h1>
-        <p className="text-gray-500 mt-1">¡Bienvenidos! Antes de empezar:</p>
+        <p className="text-gray-500 mt-1">¡Bienvenidos!</p>
       </motion.div>
 
       <motion.div variants={itemVariants} custom={1} className="w-full max-w-sm space-y-3">
@@ -57,10 +60,15 @@ export function TeamPicker({
           <Monitor size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-indigo-500" />
           <input type="text" value={operator} onChange={(e) => setOperator(e.target.value)} placeholder="¿Quién está en la compu hoy?" autoComplete="off" className={input} />
         </label>
+        <label className="block relative">
+          <span className="sr-only">¿Quién está con Corderitos hoy?</span>
+          <Baby size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-indigo-500" />
+          <input type="text" value={corderitos} onChange={(e) => setCorderitos(e.target.value)} placeholder="¿Quién está con Corderitos hoy?" autoComplete="off" className={input} />
+        </label>
       </motion.div>
 
       <motion.div variants={itemVariants} custom={2} className="w-full max-w-md">
-        <p className="text-center font-display text-xl font-semibold text-gray-800 mb-3">¿Qué equipo sirve hoy?</p>
+        <p className="text-center font-display text-xl font-semibold text-gray-800 mb-3">Selecciona qué grupo sirve hoy</p>
         <div className="grid grid-cols-3 gap-3">
           {TEAMS.map((color) => {
             const m = TEAM_META[color]

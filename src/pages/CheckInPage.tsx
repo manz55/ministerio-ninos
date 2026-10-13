@@ -48,6 +48,7 @@ export default function CheckInPage() {
   const [teamConfirmed, setTeamConfirmed] = useState(() => getStoredTeamForToday() !== null)
   const [coordinatorName, setCoordinatorName] = useState('')
   const [computerOperatorName, setComputerOperatorName] = useState('')
+  const [corderitosLeadName, setCorderitosLeadName] = useState('')
   const [searchParams, setSearchParams] = useSearchParams()
   const [showNewFamily, setShowNewFamily] = useState(() => searchParams.get('nueva') !== null)
   // Carried over when a coordinator jumps here from a maestro's request in
@@ -209,7 +210,14 @@ export default function CheckInPage() {
         if (row?.name) setComputerOperatorName(row.name)
       })
       .subscribe()
-    return () => { [attendance, children, coordinator, operator].forEach((ch) => supabase.removeChannel(ch)) }
+    const corderitos = supabase
+      .channel('daily-corderitos-lead-sync')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'daily_corderitos_lead', filter: `session_date=eq.${today}` }, (payload) => {
+        const row = payload.new as { name?: string } | undefined
+        if (row?.name) setCorderitosLeadName(row.name)
+      })
+      .subscribe()
+    return () => { [attendance, children, coordinator, operator, corderitos].forEach((ch) => supabase.removeChannel(ch)) }
   }, [fetchCounts, scheduleRefresh])
 
   useEffect(() => {
@@ -217,6 +225,8 @@ export default function CheckInPage() {
       .then(({ data }) => { if (data?.name) setCoordinatorName(data.name) })
     supabase.from('daily_computer_operator').select('name').eq('session_date', today).maybeSingle()
       .then(({ data }) => { if (data?.name) setComputerOperatorName(data.name) })
+    supabase.from('daily_corderitos_lead').select('name').eq('session_date', today).maybeSingle()
+      .then(({ data }) => { if (data?.name) setCorderitosLeadName(data.name) })
   }, [])
 
   // ─── Derivados ─────────────────────────────────────────────────────────────
@@ -355,13 +365,14 @@ export default function CheckInPage() {
     }
   }
 
-  function confirmTeam(color: TeamColor, coordinator: string, computerOperator: string) {
+  function confirmTeam(color: TeamColor, coordinator: string, computerOperator: string, corderitosLead: string) {
     setTeamColor(color)
     setTeamConfirmed(true)
     persistTeam(color)
     // Solo se escribe si es nuevo/cambió.
     if (coordinator && coordinator !== coordinatorName) saveCoordinator(coordinator)
     if (computerOperator && computerOperator !== computerOperatorName) saveComputerOperator(computerOperator)
+    if (corderitosLead && corderitosLead !== corderitosLeadName) saveCorderitosLead(corderitosLead)
   }
 
   async function saveCoordinator(name: string): Promise<string | null> {
@@ -375,6 +386,13 @@ export default function CheckInPage() {
     const { error } = await supabase.rpc('set_daily_computer_operator', { p_session_date: today, p_name: name })
     if (error) return 'No se pudo guardar. Revisa la conexión.'
     setComputerOperatorName(name)
+    return null
+  }
+
+  async function saveCorderitosLead(name: string): Promise<string | null> {
+    const { error } = await supabase.rpc('set_daily_corderitos_lead', { p_session_date: today, p_name: name })
+    if (error) return 'No se pudo guardar. Revisa la conexión.'
+    setCorderitosLeadName(name)
     return null
   }
 
@@ -432,7 +450,7 @@ export default function CheckInPage() {
   // ─── Pantallas previas ─────────────────────────────────────────────────────
 
   if (!teamConfirmed) {
-    return <TeamPicker onConfirm={confirmTeam} initialCoordinator={coordinatorName} initialComputerOperator={computerOperatorName} />
+    return <TeamPicker onConfirm={confirmTeam} initialCoordinator={coordinatorName} initialComputerOperator={computerOperatorName} initialCorderitosLead={corderitosLeadName} />
   }
 
   if (showNewFamily) {
@@ -568,6 +586,8 @@ export default function CheckInPage() {
         operatorName={computerOperatorName}
         onSaveCoordinator={saveCoordinator}
         onSaveOperator={saveComputerOperator}
+        corderitosLeadName={corderitosLeadName}
+        onSaveCorderitosLead={saveCorderitosLead}
       />
 
       {resolveNote}

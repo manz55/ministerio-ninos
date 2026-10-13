@@ -237,7 +237,7 @@ export function EditChildModal({
 
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1">Comentarios adicionales</label>
-            <textarea value={comments} onChange={(e) => setComments(e.target.value)} rows={2} placeholder="Ej. le teme a los globos…"
+            <textarea value={comments} onChange={(e) => setComments(e.target.value)} rows={2} placeholder="Ej. Ya va solo al baño, pero hay que recordarle que se lave las manos"
               className="w-full px-3 py-2.5 border-2 border-gray-200 rounded-lg focus:border-indigo-500 focus:outline-none text-sm resize-none" />
           </div>
 

@@ -46,7 +46,7 @@ export function LoginScreen() {
         {resetSent ? (
           <div className="w-full space-y-3.5 text-center">
             <p className="text-sm font-semibold text-emerald-600 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3">
-              ✓ Si ese correo está registrado, te llegará un enlace en unos minutos.
+              Si ese correo está registrado, te llegará un enlace en unos minutos.
             </p>
             <button
               type="button"

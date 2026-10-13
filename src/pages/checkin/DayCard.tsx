@@ -2,14 +2,14 @@ import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
-import { Monitor, Pencil, User, Check } from 'lucide-react'
+import { Baby, Monitor, Pencil, User, Check } from 'lucide-react'
 import type { TeamColor } from '../../types/domain'
 import { AnimatedNumber } from '../../components/motion'
 import { TEAM_META } from './shared'
 
-/** Encabezado del día: fecha, cuántos van, equipo y los dos encargados. */
+/** Encabezado del día: fecha, cuántos van, equipo y los encargados. */
 export function DayCard({
-  totalToday, teamColor, onChangeTeam, coordinatorName, operatorName, onSaveCoordinator, onSaveOperator,
+  totalToday, teamColor, onChangeTeam, coordinatorName, operatorName, onSaveCoordinator, onSaveOperator, corderitosLeadName, onSaveCorderitosLead,
 }: {
   totalToday: number
   teamColor: TeamColor
@@ -18,6 +18,8 @@ export function DayCard({
   operatorName: string
   onSaveCoordinator: (name: string) => Promise<string | null>
   onSaveOperator: (name: string) => Promise<string | null>
+  corderitosLeadName: string
+  onSaveCorderitosLead: (name: string) => Promise<string | null>
 }) {
   const team = TEAM_META[teamColor]
   return (
@@ -33,7 +35,7 @@ export function DayCard({
           <h1 className="text-[26px] sm:text-3xl font-semibold text-gray-900 leading-tight">{format(new Date(), "d 'de' MMMM", { locale: es })}</h1>
           <p className="mt-1 text-sm text-gray-600 flex items-baseline gap-1.5">
             <span className="font-display text-2xl font-semibold text-emerald-600 leading-none"><AnimatedNumber value={totalToday} /></span>
-            {totalToday === 1 ? 'niño adentro hoy' : 'niños adentro hoy'}
+            {totalToday === 1 ? 'niño registrado hoy' : 'niños registrados hoy'}
           </p>
         </div>
         <motion.button
@@ -47,9 +49,10 @@ export function DayCard({
           <span className="text-[11px] font-medium opacity-85 mt-0.5">Cambiar</span>
         </motion.button>
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 border-t border-gray-100 divide-y sm:divide-y-0 sm:divide-x divide-gray-100">
+      <div className="grid grid-cols-1 sm:grid-cols-3 border-t border-gray-100 divide-y sm:divide-y-0 sm:divide-x divide-gray-100">
         <NameSlot icon={User} label="Encargado" value={coordinatorName} onSave={onSaveCoordinator} />
         <NameSlot icon={Monitor} label="En la compu" value={operatorName} onSave={onSaveOperator} />
+        <NameSlot icon={Baby} label="Corderitos" value={corderitosLeadName} onSave={onSaveCorderitosLead} />
       </div>
     </motion.section>
   )

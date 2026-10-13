@@ -63,7 +63,7 @@ export function GroupTiles({ counts, totals, onOpen, wide }: {
             <span className={`shrink-0 flex items-center gap-2 2xl:justify-between ${g.text}`}>
               <span className="text-right 2xl:text-left">
                 <span className="block font-display text-[32px] font-semibold leading-none"><AnimatedNumber value={count} /></span>
-                <span className={`block text-[11px] font-medium ${g.iconColor} mt-0.5`}>adentro</span>
+                <span className={`block text-[11px] font-medium ${g.iconColor} mt-0.5`}>hoy</span>
               </span>
               <ArrowRight size={18} className={`hidden 2xl:block ${g.iconColor} opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all`} />
             </span>
