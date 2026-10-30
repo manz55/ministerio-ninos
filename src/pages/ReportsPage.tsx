@@ -656,7 +656,7 @@ function FollowUpTab({ absent, graduating, medical, missingBirthDate }: { absent
                     <p className="font-display font-bold text-lg text-gray-900 truncate">{c.full_name}</p>
                     <span className="text-sm font-bold text-gray-500 shrink-0 tabular-nums">{c.missed} domingos</span>
                   </div>
-                  <p className="text-sm text-gray-600">{absenceMessage(c.full_name, { missed: c.missed, lastSeen: null, tier: c.tier })}</p>
+                  <p className="text-sm text-gray-600">{absenceMessage({ missed: c.missed, lastSeen: null, tier: c.tier })}</p>
                   <div className="flex items-center justify-between gap-2 pt-1 text-sm">
                     <span className="text-gray-500 truncate">{c.parentName}</span>
                     {c.parentPhone && <a href={`tel:${c.parentPhone}`} className="inline-flex items-center gap-1 font-semibold text-indigo-700 shrink-0"><Phone size={13} /> {c.parentPhone}</a>}
@@ -677,7 +677,7 @@ function FollowUpTab({ absent, graduating, medical, missingBirthDate }: { absent
                       <ArrowRight size={14} className="text-amber-500" />
                       {to && <span className={`px-2.5 py-0.5 rounded-full ${groupOf(to).avatar}`}>{CATEGORY_LABELS[to]}</span>}
                     </div>
-                    {to && <p className="text-sm text-gray-600">{graduationMessage(c.full_name, CATEGORY_LABELS[to])}</p>}
+                    {to && <p className="text-sm text-gray-600">{graduationMessage(CATEGORY_LABELS[to])}</p>}
                   </motion.div>
                 )
               })}

@@ -3,7 +3,8 @@ import { BrowserRouter, MemoryRouter, Routes, Route, Navigate } from 'react-rout
 import Layout from './components/layout/Layout'
 import { LoginScreen } from './components/ui/LoginScreen'
 import { ResetPasswordScreen } from './components/ui/ResetPasswordScreen'
-import { useAuth } from './lib/auth'
+import { AuthShell } from './components/ui/AuthShell'
+import { useAuth, signOut } from './lib/auth'
 
 const CheckInPage  = lazy(() => import('./pages/CheckInPage'))
 const ReportsPage  = lazy(() => import('./pages/ReportsPage'))
@@ -53,6 +54,18 @@ function App() {
 
   if (!session || !profile) {
     return <LoginScreen />
+  }
+
+  // Una cuenta desactivada ya no puede ver ni registrar nada (lo bloquea la
+  // base de datos); aquí solo se le explica en vez de mostrarle la app vacía.
+  if (profile.active === false) {
+    return (
+      <AuthShell title="Cuenta desactivada" subtitle="Un coordinador desactivó esta cuenta. Si es un error, pídele que la vuelva a activar.">
+        <button onClick={() => signOut()} className="w-full py-3.5 rounded-2xl bg-indigo-600 text-white font-display font-bold text-lg hover:bg-indigo-700">
+          Cerrar sesión
+        </button>
+      </AuthShell>
+    )
   }
 
   return (

@@ -18,9 +18,11 @@ export function EditProfileModal({ profile, onClose, onSaved }: { profile: Profi
     if (!fullName.trim()) { setError('Escribe tu nombre.'); return }
     setSaving(true)
     setError(null)
-    const { error: err } = await supabase.from('profiles').update({ full_name: fullName.trim() }).eq('id', profile.id)
+    // .select() para saber si de verdad se guardó: si las reglas lo
+    // bloquean, Supabase no da error, solo devuelve 0 filas.
+    const { data, error: err } = await supabase.from('profiles').update({ full_name: fullName.trim() }).eq('id', profile.id).select('id')
     setSaving(false)
-    if (err) { setError('No se pudo guardar. Intenta de nuevo.'); return }
+    if (err || !data?.length) { setError('No se pudo guardar. Intenta de nuevo.'); return }
     setDone(true)
     onSaved(fullName.trim())
     setTimeout(onClose, 1100)

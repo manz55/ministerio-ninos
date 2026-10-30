@@ -34,10 +34,11 @@ export function computeAbsence(
 // Un mensaje claro por nivel (el color de la tarjeta ya marca la urgencia).
 // Joshua pidió que no sonaran genéricos ni a chiste: siempre la misma frase
 // para el mismo caso, con lo que conviene hacer.
-export function absenceMessage(nombre: string, info: AbsenceInfo): string {
+// El nombre ya va de título en la tarjeta, así que la frase no lo repite.
+export function absenceMessage(info: AbsenceInfo): string {
   if (!info.tier) return ''
   const m = info.missed
-  if (info.tier === 'roja') return `${nombre} lleva ${m} domingos sin venir. Vale la pena llamar a la familia.`
-  if (info.tier === 'amarilla') return `${nombre} lleva ${m} domingos sin venir. Sería bueno preguntar si todo está bien.`
-  return `${nombre} no ha venido los últimos ${m} domingos.`
+  if (info.tier === 'roja') return `Lleva ${m} domingos sin venir. Vale la pena llamar a la familia.`
+  if (info.tier === 'amarilla') return `Lleva ${m} domingos sin venir. Sería bueno preguntar si todo está bien.`
+  return `No ha venido los últimos ${m} domingos.`
 }
