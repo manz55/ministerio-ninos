@@ -43,7 +43,8 @@ export function QuickCheckIn({ childId, category }: { childId: string; category:
 
   const teamColor = getStoredTeamForToday()
   const needsBadge = category ? requiresBadge(category) : false
-  const needsPager = category ? requiresPager(category) : false
+  const pagerRequired = isCorderitos(category)
+  const needsPager = (category ? requiresPager(category) : false) || pagerRequired
 
   if (!category) {
     return (
@@ -82,6 +83,9 @@ export function QuickCheckIn({ childId, category }: { childId: string; category:
       setError('Número de gafete inválido.')
       return
     }
+    const pagerNum = pager.trim() ? parseInt(pager, 10) : null
+    if (pagerNum !== null && (isNaN(pagerNum) || pagerNum <= 0)) { setError('Número de bíper inválido.'); return }
+    if (pagerRequired && pagerNum === null) { setError('Escribe el número de bíper.'); return }
     setSubmitting(true)
     setError(null)
     const { error: err } = await saveAttendance({
@@ -91,7 +95,7 @@ export function QuickCheckIn({ childId, category }: { childId: string; category:
       team_color: team,
       category: cat,
       badge_number: isCorderitos(cat) ? null : badgeNum,
-      pager_number: needsPager && pager ? parseInt(pager, 10) : null,
+      pager_number: needsPager ? pagerNum : null,
       checked_in_at: new Date().toISOString(),
     })
     setSubmitting(false)
@@ -127,13 +131,13 @@ export function QuickCheckIn({ childId, category }: { childId: string; category:
             inputMode="numeric"
             value={pager}
             onChange={(e) => setPager(e.target.value)}
-            placeholder="Bíper (op.)"
+            placeholder={pagerRequired ? 'Bíper' : 'Bíper (op.)'}
             className="w-24 px-2 py-1.5 text-xs font-bold text-center border-2 border-gray-200 rounded-lg focus:border-indigo-400 focus:outline-none"
           />
         )}
         <button
           onClick={submit}
-          disabled={submitting}
+          disabled={submitting || (needsBadge && !badge.trim()) || (pagerRequired && !pager.trim())}
           className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors disabled:opacity-50"
         >
           <LogIn size={13} />

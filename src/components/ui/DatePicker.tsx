@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, type ReactNode } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   format, addMonths, subMonths,
@@ -14,14 +14,23 @@ interface Props {
   onChange: (d: Date) => void
   disableFuture?: boolean
   disableSundays?: boolean
+  /** Días a marcar con un puntito (p. ej. domingos con registros). */
+  markedDates?: Set<string>
+  /** Contenido propio del botón (por defecto: ícono + fecha). */
+  children?: ReactNode
+  triggerClassName?: string
+  /** Alinear el calendario al centro del botón en vez de a la izquierda. */
+  center?: boolean
 }
 
 const DAY_LABELS = ['Do', 'Lu', 'Ma', 'Mi', 'Ju', 'Vi', 'Sa']
 
-export function DatePicker({ value, onChange, disableFuture = true, disableSundays = false }: Props) {
+export function DatePicker({ value, onChange, disableFuture = true, disableSundays = false, markedDates, children, triggerClassName, center = false }: Props) {
   const [open, setOpen] = useState(false)
   const [view, setView] = useState(() => new Date(value.getFullYear(), value.getMonth(), 1))
   const ref = useRef<HTMLDivElement>(null)
+  // Si la fecha cambia desde afuera (flechas), el calendario abre en ese mes.
+  useEffect(() => { setView(new Date(value.getFullYear(), value.getMonth(), 1)) }, [value])
 
   // Close on outside click
   useEffect(() => {
@@ -59,16 +68,20 @@ export function DatePicker({ value, onChange, disableFuture = true, disableSunda
   }
 
   return (
-    <div className="relative inline-block" ref={ref}>
+    <div className={`relative ${children ? 'block' : 'inline-block'}`} ref={ref}>
       {/* Trigger button */}
       <button
         onClick={() => setOpen((o) => !o)}
-        className="flex items-center gap-2 px-4 py-2.5 bg-white border-2 border-gray-200 rounded-2xl font-medium text-gray-700 hover:border-indigo-400 transition-colors shadow-sm text-sm"
+        className={triggerClassName ?? 'flex items-center gap-2 px-4 py-2.5 bg-white border-2 border-gray-200 rounded-2xl font-medium text-gray-700 hover:border-indigo-400 transition-colors shadow-sm text-sm'}
       >
-        <Calendar size={15} className="text-indigo-500" />
-        <span className="inline-block first-letter:uppercase">
-          {format(value, "d 'de' MMMM yyyy", { locale: es })}
-        </span>
+        {children ?? (
+          <>
+            <Calendar size={15} className="text-indigo-500" />
+            <span className="inline-block first-letter:uppercase">
+              {format(value, "d 'de' MMMM yyyy", { locale: es })}
+            </span>
+          </>
+        )}
       </button>
 
       <AnimatePresence>
@@ -78,7 +91,7 @@ export function DatePicker({ value, onChange, disableFuture = true, disableSunda
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 4, scale: 0.97 }}
             transition={{ duration: 0.15 }}
-            className="absolute top-full mt-2 left-0 z-50 bg-white rounded-2xl shadow-2xl border border-gray-100 p-4 w-72"
+            className={`absolute top-full mt-2 z-50 bg-white rounded-2xl shadow-2xl border border-gray-100 p-4 w-72 ${center ? 'left-1/2 -translate-x-1/2' : 'left-0'}`}
           >
             {/* Month navigation */}
             <div className="flex items-center justify-between mb-3">
@@ -116,6 +129,7 @@ export function DatePicker({ value, onChange, disableFuture = true, disableSunda
                 const selected = isSameDay(day, value)
                 const today    = isToday(day)
                 const disabled = isDisabled(day) || outside
+                const marked = !outside && markedDates?.has(format(day, 'yyyy-MM-dd'))
 
                 return (
                   <button
@@ -123,13 +137,14 @@ export function DatePicker({ value, onChange, disableFuture = true, disableSunda
                     onClick={() => pick(day)}
                     disabled={disabled}
                     className={[
-                      'rounded-lg py-1.5 text-xs font-medium transition-colors',
+                      'relative rounded-lg py-1.5 text-xs font-medium transition-colors',
                       outside || disabled ? 'text-gray-300 cursor-default' : 'text-gray-700 hover:bg-indigo-50 cursor-pointer',
                       selected ? '!bg-indigo-600 !text-white hover:!bg-indigo-700' : '',
                       today && !selected ? 'ring-1 ring-inset ring-indigo-400 text-indigo-600' : '',
                     ].join(' ')}
                   >
                     {format(day, 'd')}
+                    {marked && <span className={`absolute bottom-0.5 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full ${selected ? 'bg-white' : 'bg-emerald-500'}`} />}
                   </button>
                 )
               })}

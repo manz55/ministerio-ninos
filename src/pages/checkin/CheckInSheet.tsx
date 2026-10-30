@@ -50,7 +50,10 @@ function SheetBody({
   const age = getAgeLabel(child.birth_date)
   const alreadyIn = isInToday(child)
   const needsBadge = requiresBadge(category)
-  const needsPager = requiresPager(category)
+  // Corderitos no lleva gafete pero el bíper es obligatorio (siempre se
+  // usa); en Hormiguitas el bíper es opcional.
+  const pagerRequired = isCorderitos(category)
+  const showPager = requiresPager(category) || pagerRequired
   const hasAlert = !!(child.allergies || child.medical_notes)
   const graduatesTo = hasCategoryChanged(child) && child.category ? NEXT_CATEGORY[child.category] : null
 
@@ -60,9 +63,12 @@ function SheetBody({
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<{ badge: number | null; queued: boolean } | null>(null)
   const [editing, setEditing] = useState(false)
+  // Sin el número que toca, el botón ni se activa (antes se podía registrar
+  // a un corderito sin bíper).
+  const missingNumber = (needsBadge && !isValidNumber(badge)) || (pagerRequired && !isValidNumber(pager))
   const [confirmDelete, setConfirmDelete] = useState(false)
   const badgeRef = useRef<HTMLInputElement>(null)
-  const submitRef = useRef<HTMLButtonElement>(null)
+  const pagerRef = useRef<HTMLInputElement>(null)
 
   // Corrección (ya registrado)
   const [editBadge, setEditBadge] = useState(todayRecord?.badge_number != null ? String(todayRecord.badge_number) : '')
@@ -76,7 +82,7 @@ function SheetBody({
   // Foco listo para escribir el gafete (o para que Enter registre en Corderitos).
   useEffect(() => {
     if (alreadyIn) return
-    const t = setTimeout(() => (needsBadge ? badgeRef.current : submitRef.current)?.focus(), 280)
+    const t = setTimeout(() => (needsBadge ? badgeRef.current : pagerRef.current)?.focus(), 280)
     return () => clearTimeout(t)
   }, [alreadyIn, needsBadge])
 
@@ -119,6 +125,7 @@ function SheetBody({
     if (submitting || success) return
     const pagerNum = pager.trim() ? parseInt(pager, 10) : null
     if (pagerNum !== null && (isNaN(pagerNum) || pagerNum <= 0)) { setError('Número de bíper inválido.'); return }
+    if (pagerRequired && pagerNum === null) { setError('Escribe el número de bíper.'); pagerRef.current?.focus(); return }
     if (needsBadge) {
       const num = parseInt(badge, 10)
       if (!badge || isNaN(num) || num <= 0) { setError('Escribe el número de gafete.'); badgeRef.current?.focus(); return }
@@ -134,6 +141,7 @@ function SheetBody({
     const b = editBadge.trim() ? parseInt(editBadge, 10) : null
     const pg = editPager.trim() ? parseInt(editPager, 10) : null
     if (needsBadge && (b === null || isNaN(b) || b <= 0)) { setError('Escribe un número de gafete válido.'); return }
+    if (pagerRequired && pg === null) { setError('Escribe el número de bíper.'); return }
     if (pg !== null && (isNaN(pg) || pg <= 0)) { setError('Número de bíper inválido.'); return }
     setSubmitting(true)
     setError(null)
@@ -257,8 +265,8 @@ function SheetBody({
       {/* ── Acción principal ── */}
       {!alreadyIn ? (
         <form onSubmit={submitCheckIn} className="space-y-3">
-          {needsBadge ? (
-            <div className={`grid gap-3 ${needsPager ? 'grid-cols-2' : 'grid-cols-1'}`}>
+          <div className={`grid gap-3 ${needsBadge && showPager ? 'grid-cols-2' : 'grid-cols-1'}`}>
+            {needsBadge && (
               <label className="block">
                 <span className="block text-sm font-semibold text-gray-700 mb-1.5">Gafete</span>
                 <input
@@ -270,44 +278,31 @@ function SheetBody({
                   className={NUM_INPUT}
                 />
               </label>
-              {needsPager && (
-                <label className="block">
-                  <span className="block text-sm font-semibold text-gray-700 mb-1.5">Bíper <span className="font-normal text-gray-400">(opcional)</span></span>
-                  <input
-                    type="number" inputMode="numeric" min={1} enterKeyHint="go"
-                    value={pager}
-                    onChange={(e) => { setPager(e.target.value); setError(null) }}
-                    placeholder="—"
-                    className={NUM_INPUT}
-                  />
-                </label>
-              )}
-            </div>
-          ) : (
-            <>
+            )}
+            {showPager && (
               <label className="block">
-                <span className="block text-sm font-semibold text-gray-700 mb-1.5">Bíper <span className="font-normal text-gray-400">(opcional)</span></span>
+                <span className="block text-sm font-semibold text-gray-700 mb-1.5">Bíper {!pagerRequired && <span className="font-normal text-gray-400">(opcional)</span>}</span>
                 <input
+                  ref={pagerRef}
                   type="number" inputMode="numeric" min={1} enterKeyHint="go"
                   value={pager}
                   onChange={(e) => { setPager(e.target.value); setError(null) }}
-                  placeholder="—"
+                  placeholder={pagerRequired ? 'Núm.' : '—'}
                   className={NUM_INPUT}
                 />
               </label>
-            </>
-          )}
+            )}
+          </div>
 
           <ErrorNote error={error} />
 
           <motion.button
-            ref={submitRef}
             type="submit"
-            disabled={submitting}
+            disabled={submitting || missingNumber}
             whileTap={{ scale: 0.97 }}
             className="w-full py-4 rounded-2xl bg-indigo-600 text-white font-display font-semibold text-lg shadow-lg shadow-indigo-900/15 hover:bg-indigo-700 active:bg-indigo-800 disabled:opacity-60 transition-colors"
           >
-            {submitting ? 'Registrando…' : `Registrar en ${category ? CATEGORY_LABELS[category] : '…'}`}
+            {submitting ? 'Registrando…' : missingNumber ? (needsBadge && !isValidNumber(badge) ? 'Escribe el número de gafete' : 'Escribe el número de bíper') : `Registrar en ${category ? CATEGORY_LABELS[category] : '…'}`}
           </motion.button>
           <p className="text-center text-xs text-gray-400 -mt-1 hidden sm:block">Enter para registrar · Esc para cerrar</p>
         </form>
@@ -323,8 +318,8 @@ function SheetBody({
           <div className="rounded-2xl bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
             <span className="font-semibold">Registrado hoy</span> a las {format(new Date(todayRecord.checked_in_at), 'HH:mm')}
           </div>
-          {(needsBadge || needsPager) && (
-            <div className={`grid gap-3 ${needsBadge && needsPager ? 'grid-cols-2' : 'grid-cols-1'}`}>
+          {(needsBadge || showPager) && (
+            <div className={`grid gap-3 ${needsBadge && showPager ? 'grid-cols-2' : 'grid-cols-1'}`}>
               {needsBadge && (
                 <label className="block">
                   <span className="block text-sm font-semibold text-gray-700 mb-1.5">Gafete</span>
@@ -332,7 +327,7 @@ function SheetBody({
                     onChange={(e) => { setEditBadge(e.target.value); setError(null) }} className={NUM_INPUT} />
                 </label>
               )}
-              {needsPager && (
+              {showPager && (
                 <label className="block">
                   <span className="block text-sm font-semibold text-gray-700 mb-1.5">Bíper</span>
                   <input type="number" inputMode="numeric" min={1} enterKeyHint="done" value={editPager} placeholder="—"
@@ -342,7 +337,7 @@ function SheetBody({
             </div>
           )}
           <ErrorNote error={error} />
-          {(needsBadge || needsPager) && (
+          {(needsBadge || showPager) && (
             <motion.button type="submit" disabled={submitting} whileTap={{ scale: 0.97 }}
               className="w-full py-3.5 rounded-2xl bg-indigo-600 text-white font-display font-semibold text-lg hover:bg-indigo-700 disabled:opacity-60 transition-colors">
               {submitting ? 'Guardando…' : 'Guardar corrección'}
@@ -442,6 +437,11 @@ function MissingBirthDate({ childId, onSaved }: { childId: string; onSaved: (dat
       {error && <p className="text-xs text-red-700">{error}</p>}
     </div>
   )
+}
+
+function isValidNumber(v: string) {
+  const n = parseInt(v, 10)
+  return v.trim() !== '' && !isNaN(n) && n > 0
 }
 
 function ErrorNote({ error }: { error: string | null }) {

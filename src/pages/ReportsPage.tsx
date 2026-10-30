@@ -4,7 +4,8 @@ import { format, subWeeks, subDays, startOfWeek, endOfWeek } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  RefreshCw, Download, AlertTriangle, FileText, FileSpreadsheet, PartyPopper, Check, User, Monitor,
+  Download, AlertTriangle, FileText, FileSpreadsheet, PartyPopper, Check, User, Monitor, ChevronLeft, ChevronRight,
+  TrendingUp, TrendingDown, Minus, NotebookPen, Sparkles, Search,
   FileWarning, ArrowRight, Copy, Phone, Trash2, CalendarX, Trophy, Clock, Baby, Flame, Sprout,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
@@ -19,6 +20,7 @@ import { ReporteAsistenciaDescarga } from '../components/receipt-printer/Reporte
 import { AnimatedNumber, Sheet, SkeletonRow } from '../components/motion'
 import { itemVariants } from '../components/motion/presets'
 import { PageHeader, BTN_SECONDARY } from '../components/ui/PageHeader'
+import { SearchField } from '../components/ui/SearchField'
 import { Segmented, FilterChips } from '../components/ui/Segmented'
 import { EmptyState } from '../components/ui/EmptyState'
 import { ConfirmSheet } from '../components/ui/ConfirmSheet'
@@ -43,7 +45,7 @@ type MedicalChild = { id: string; full_name: string; allergies: string | null; m
 type RosterChild = { id: string; full_name: string; birth_date: string | null; category: Category | null; allergies: string | null; medical_notes: string | null; parents: { full_name: string; phone: string } | null }
 type AbsentChild = { id: string; full_name: string; parentName: string; parentPhone: string | null; missed: number; tier: AbsenceTier }
 type NewChild = { id: string; full_name: string; category: Category | null; parentName: string; parentPhone: string | null; firstSeen: string; visits: number }
-type Tab = 'dia' | 'tendencias' | 'seguimiento' | 'exportar'
+type Tab = 'dia' | 'tendencias' | 'seguimiento'
 
 const todayStr = format(new Date(), 'yyyy-MM-dd')
 const emptyCount = (): CategoryCount => ({ corderitos_0_2: 0, corderitos_2_4: 0, hormiguitas: 0, saltamontes: 0, exploradores: 0 })
@@ -65,11 +67,14 @@ export default function ReportsPage() {
   const [loadingLive, setLoadingLive] = useState(true)
   const [weekHistory, setWeekHistory] = useState<WeekRow[]>([])
   const [loadingHistory, setLoadingHistory] = useState(true)
-  const [lastRefresh, setLastRefresh] = useState(new Date())
   const [medicalChildren, setMedicalChildren] = useState<MedicalChild[]>([])
   const [graduatingChildren, setGraduatingChildren] = useState<RosterChild[]>([])
   const [absentChildren, setAbsentChildren] = useState<AbsentChild[]>([])
   const [newChildren, setNewChildren] = useState<NewChild[]>([])
+  /** Cuántos niños hubo cada día con servicio (para las flechas y comparar). */
+  const [countsByDate, setCountsByDate] = useState<Map<string, number>>(new Map())
+  const [notesCount, setNotesCount] = useState(0)
+  const [exportOpen, setExportOpen] = useState(false)
   const [missingBirthDateCount, setMissingBirthDateCount] = useState(0)
   const [rangeFrom, setRangeFrom] = useState(format(subWeeks(new Date(), 1), 'yyyy-MM-dd'))
   const [rangeTo, setRangeTo] = useState(todayStr)
@@ -82,6 +87,8 @@ export default function ReportsPage() {
   useEffect(() => {
     let cancelled = false
     fetchStaff(selectedStr).then((s) => { if (!cancelled) setStaff(s) })
+    supabase.from('shift_notes').select('id', { count: 'exact', head: true }).eq('session_date', selectedStr)
+      .then(({ count }) => { if (!cancelled) setNotesCount(count ?? 0) })
     return () => { cancelled = true }
   }, [selectedStr])
 
@@ -103,7 +110,6 @@ export default function ReportsPage() {
       }
     }
     setLiveRecords(rows)
-    setLastRefresh(new Date())
     setLoadingLive(false)
   }, [selectedDate])
 
@@ -139,6 +145,9 @@ export default function ReportsPage() {
       if (!first || row.session_date < first) firstSeen.set(row.child_id, row.session_date)
       visits.set(row.child_id, (visits.get(row.child_id) ?? 0) + 1)
     }
+    const perDate = new Map<string, number>()
+    for (const row of attendance as { session_date: string }[]) perDate.set(row.session_date, (perDate.get(row.session_date) ?? 0) + 1)
+    setCountsByDate(perDate)
     // Nuevos: su primera vez fue en los últimos 30 días.
     const since = format(subDays(new Date(), 30), 'yyyy-MM-dd')
     const fresh: NewChild[] = []
@@ -206,36 +215,45 @@ export default function ReportsPage() {
   const total = liveRecords.length
   const avgWeek = weekHistory.length ? Math.round(weekHistory.reduce((s, w) => s + w.total, 0) / weekHistory.length) : 0
   const followUps = absentChildren.length + graduatingChildren.length + medicalChildren.length
+  // Días con servicio, para moverse de domingo en domingo con las flechas.
+  const serviceDates = useMemo(() => [...countsByDate.keys()].sort(), [countsByDate])
+  const prevDate = [...serviceDates].reverse().find((d) => d < selectedStr) ?? null
+  const nextDate = serviceDates.find((d) => d > selectedStr) ?? (selectedStr < todayStr ? todayStr : null)
+  const markedDates = useMemo(() => new Set(serviceDates), [serviceDates])
 
   return (
     <div className="space-y-5">
       <PageHeader
         title="Reportes"
-        subtitle={<span className="inline-block first-letter:uppercase">{format(selectedDate, "EEEE d 'de' MMMM yyyy", { locale: es })}{isToday && <span className="ml-1.5 text-emerald-600 font-semibold normal-case">· hoy</span>}</span>}
+        subtitle="Cómo nos fue cada domingo y a quién darle seguimiento"
         actions={
-          <motion.button whileTap={{ scale: 0.95 }} onClick={refreshAll} className={BTN_SECONDARY}>
-            <RefreshCw size={16} /> Actualizar
+          <motion.button whileTap={{ scale: 0.95 }} onClick={() => setExportOpen(true)} className={BTN_SECONDARY}>
+            <Download size={16} /> Descargar
           </motion.button>
         }
       />
 
-      <div className="flex flex-col lg:flex-row lg:items-center gap-3">
-        <Segmented
-          value={tab}
-          onChange={setTab}
-          options={[
-            { value: 'dia', label: 'Del día', count: total },
-            { value: 'tendencias', label: 'Números' },
-            { value: 'seguimiento', label: 'Seguimiento', count: followUps },
-            { value: 'exportar', label: 'Exportar' },
-          ]}
+      <Segmented
+        value={tab}
+        onChange={setTab}
+        options={[
+          { value: 'dia', label: 'El domingo' },
+          { value: 'tendencias', label: 'Números' },
+          { value: 'seguimiento', label: 'Seguimiento', count: followUps },
+        ]}
+      />
+
+      {tab === 'dia' && (
+        <SundayNav
+          date={selectedDate}
+          isToday={isToday}
+          total={total}
+          prevDate={prevDate}
+          nextDate={nextDate}
+          markedDates={markedDates}
+          onChange={setSelectedDate}
         />
-        {(tab === 'dia' || tab === 'exportar') && (
-          <div className="lg:ml-auto">
-            <DatePicker value={selectedDate} onChange={setSelectedDate} disableFuture disableSundays={false} />
-          </div>
-        )}
-      </div>
+      )}
 
       <AnimatePresence mode="wait" initial={false}>
         <motion.div key={tab} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.22 }}>
@@ -246,7 +264,9 @@ export default function ReportsPage() {
               byCategory={byCategory}
               total={total}
               avgWeek={avgWeek}
-              lastRefresh={lastRefresh}
+              prev={prevDate ? { date: prevDate, total: countsByDate.get(prevDate) ?? 0 } : null}
+              notesCount={notesCount}
+              isToday={isToday}
               staff={staff}
               onChanged={fetchLive}
             />
@@ -257,125 +277,176 @@ export default function ReportsPage() {
           {tab === 'seguimiento' && (
             <FollowUpTab absent={absentChildren} fresh={newChildren} graduating={graduatingChildren} medical={medicalChildren} missingBirthDate={missingBirthDateCount} />
           )}
-          {tab === 'exportar' && (
-            <ExportTab
-              selectedDate={selectedDate}
-              byCategory={byCategory}
-              total={total}
-              staff={staff}
-              weeks={weekHistory}
-              rangeFrom={rangeFrom}
-              rangeTo={rangeTo}
-              setRangeFrom={setRangeFrom}
-              setRangeTo={setRangeTo}
-            />
-          )}
         </motion.div>
       </AnimatePresence>
+
+      <Sheet open={exportOpen} onClose={() => setExportOpen(false)} title="Descargar reportes" wide>
+        <div className="px-5 sm:px-7 pt-3 sm:pt-7 pb-6 space-y-4">
+          <h2 className="text-2xl font-bold text-gray-900 pr-10">Descargar reportes</h2>
+          <ExportTab
+            selectedDate={selectedDate}
+            byCategory={byCategory}
+            total={total}
+            staff={staff}
+            weeks={weekHistory}
+            rangeFrom={rangeFrom}
+            rangeTo={rangeTo}
+            setRangeFrom={setRangeFrom}
+            setRangeTo={setRangeTo}
+          />
+        </div>
+      </Sheet>
+    </div>
+  )
+}
+
+// ─── Navegar entre domingos ───────────────────────────────────────────────────
+
+function SundayNav({ date, isToday, total, prevDate, nextDate, markedDates, onChange }: {
+  date: Date
+  isToday: boolean
+  total: number
+  prevDate: string | null
+  nextDate: string | null
+  markedDates: Set<string>
+  onChange: (d: Date) => void
+}) {
+  const key = format(date, 'yyyy-MM-dd')
+  // Para que la fecha se deslice hacia el lado al que se movió.
+  const [dir, setDir] = useState(0)
+  const go = (d: string, direction: number) => { setDir(direction); onChange(new Date(d + 'T12:00:00')) }
+  const weeksAgo = Math.round((Date.now() - date.getTime()) / (7 * 24 * 3600 * 1000))
+  const when = isToday ? 'Hoy' : weeksAgo <= 0 ? 'Esta semana' : weeksAgo === 1 ? 'Hace 1 semana' : `Hace ${weeksAgo} semanas`
+
+  const arrow = 'w-12 h-12 shrink-0 rounded-2xl flex items-center justify-center text-gray-600 hover:bg-gray-100 active:bg-gray-200 disabled:opacity-25 disabled:hover:bg-transparent transition-colors'
+  return (
+    <div className="flex items-center gap-1 rounded-3xl bg-white border border-gray-200/70 shadow-sm p-1.5">
+      <motion.button whileTap={{ scale: 0.9 }} onClick={() => prevDate && go(prevDate, -1)} disabled={!prevDate} className={arrow} aria-label="Domingo anterior">
+        <ChevronLeft size={22} />
+      </motion.button>
+      <div className="flex-1 min-w-0">
+        <DatePicker value={date} onChange={(d) => { setDir(d > date ? 1 : -1); onChange(d) }} disableFuture markedDates={markedDates} center
+          triggerClassName="w-full rounded-2xl px-2 py-1.5 hover:bg-gray-50 transition-colors overflow-hidden">
+          <AnimatePresence mode="popLayout" initial={false} custom={dir}>
+            <motion.span
+              key={key}
+              custom={dir}
+              initial={{ opacity: 0, x: dir * 40 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: dir * -40 }}
+              transition={{ type: 'spring', stiffness: 420, damping: 34 }}
+              className="block text-center"
+            >
+              <span className="block font-display text-lg sm:text-xl font-semibold text-gray-900 leading-tight first-letter:uppercase">
+                {format(date, "EEEE d 'de' MMMM", { locale: es })}
+              </span>
+              <span className="block text-xs text-gray-500">
+                <span className={isToday ? 'text-emerald-600 font-semibold' : ''}>{when}</span> · {total} niño{total !== 1 ? 's' : ''}
+              </span>
+            </motion.span>
+          </AnimatePresence>
+        </DatePicker>
+      </div>
+      <motion.button whileTap={{ scale: 0.9 }} onClick={() => nextDate && go(nextDate, 1)} disabled={!nextDate} className={arrow} aria-label="Domingo siguiente">
+        <ChevronRight size={22} />
+      </motion.button>
     </div>
   )
 }
 
 // ─── Del día ──────────────────────────────────────────────────────────────────
 
-function DayTab({ records, loading, byCategory, total, avgWeek, lastRefresh, staff, onChanged }: {
+function DayTab({ records, loading, byCategory, total, avgWeek, prev, notesCount, isToday, staff, onChanged }: {
   records: LiveRecord[]
   loading: boolean
   byCategory: CategoryCount
   total: number
   avgWeek: number
-  lastRefresh: Date
+  prev: { date: string; total: number } | null
+  notesCount: number
+  isToday: boolean
   staff: Staff
   onChanged: () => void
 }) {
   const [filter, setFilter] = useState<Category | 'all'>('all')
+  const [query, setQuery] = useState('')
   const [openId, setOpenId] = useState<string | null>(null)
-  const top = ACTIVE_CATEGORIES.reduce((a, b) => (byCategory[a] >= byCategory[b] ? a : b))
-  const shown = filter === 'all' ? records : records.filter((r) => r.category === filter)
+  const firstTimers = records.filter((r) => r.first_time).length
+  const q = query.trim().toLowerCase()
+  const shown = records.filter((r) => (filter === 'all' || r.category === filter) && (!q || r.children?.full_name.toLowerCase().includes(q)))
   const open = records.find((r) => r.id === openId) ?? null
-  const vsAvg = avgWeek ? total - avgWeek : 0
+  const maxGroup = Math.max(...ACTIVE_CATEGORIES.map((c) => byCategory[c]), 1)
 
   return (
     <div className="space-y-5">
-      {/* ── Números grandes ── */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <Kpi label="En el área de niños" accent>
-          <span className="font-display text-5xl font-bold leading-none"><AnimatedNumber value={total} /></span>
-          <span className="text-xs text-gray-500 mt-2">Actualizado {format(lastRefresh, 'HH:mm')}</span>
-        </Kpi>
-        <Kpi label="Grupo con más niños">
-          {total > 0 ? (
-            <>
-              <span className={`font-display text-4xl font-bold leading-none ${groupOf(top).iconColor}`}><AnimatedNumber value={byCategory[top]} /></span>
-              <span className={`text-sm font-semibold mt-1 ${groupOf(top).iconColor}`}>{CATEGORY_LABELS[top]}</span>
-            </>
-          ) : <span className="font-display text-4xl font-bold text-gray-300 leading-none">—</span>}
-        </Kpi>
-        <Kpi label="Promedio por semana">
-          <span className="font-display text-4xl font-bold leading-none text-gray-900">{avgWeek || '—'}</span>
-          <span className="text-sm text-gray-500 mt-1">últimas 10 semanas</span>
-        </Kpi>
-        <Kpi label="Comparado con el promedio">
-          <span className={`font-display text-4xl font-bold leading-none ${vsAvg > 0 ? 'text-emerald-600' : vsAvg < 0 ? 'text-amber-600' : 'text-gray-400'}`}>
-            {avgWeek ? `${vsAvg > 0 ? '+' : ''}${vsAvg}` : '—'}
-          </span>
-          <span className="text-sm text-gray-500 mt-1">{vsAvg > 0 ? 'más que de costumbre' : vsAvg < 0 ? 'menos que de costumbre' : 'igual que siempre'}</span>
-        </Kpi>
-      </div>
-
-      {(staff.coordinator || staff.computer || staff.corderitos) && (
-        <div className="flex flex-wrap gap-2">
-          {staff.coordinator && <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white border border-gray-200 text-sm font-medium text-gray-700"><User size={14} className="text-indigo-500" /> {staff.coordinator}</span>}
-          {staff.computer && <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white border border-gray-200 text-sm font-medium text-gray-700"><Monitor size={14} className="text-indigo-500" /> {staff.computer}</span>}
-          {staff.corderitos && <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white border border-gray-200 text-sm font-medium text-gray-700"><Baby size={14} className="text-indigo-500" /> Corderitos: {staff.corderitos}</span>}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 items-start">
+      {/* ── El número del día, dicho en palabras ── */}
+      <section className="rounded-3xl bg-white border border-gray-200/70 shadow-sm p-5 sm:p-6 grid grid-cols-1 sm:grid-cols-[auto_minmax(0,1fr)] gap-5 sm:gap-8 items-center">
+        <div className="flex sm:flex-col items-baseline sm:items-start gap-3 sm:gap-1">
+          <span className="font-display text-7xl font-bold leading-none text-gray-900 tabular-nums"><AnimatedNumber value={total} /></span>
+          <span className="text-gray-600 leading-snug">niño{total !== 1 ? 's' : ''} {isToday ? 'en el área de niños' : 'vinieron'}</span>
         </div>
-      )}
+        <div className="space-y-2">
+          {prev && <Compare diff={total - prev.total} label={`el domingo anterior (${format(new Date(prev.date + 'T12:00:00'), "d 'de' MMM", { locale: es })})`} />}
+          {avgWeek > 0 && <Compare diff={total - avgWeek} label={`el promedio de las últimas semanas (${avgWeek})`} />}
+          <div className="flex flex-wrap gap-2 pt-1">
+            {firstTimers > 0 && (
+              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-violet-50 text-violet-700 text-sm font-semibold"><Sparkles size={14} /> {firstTimers} por primera vez</span>
+            )}
+            {notesCount > 0 && (
+              <Link to="/notas" className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-50 text-amber-800 text-sm font-semibold hover:bg-amber-100"><NotebookPen size={14} /> {notesCount} nota{notesCount !== 1 ? 's' : ''} del turno</Link>
+            )}
+            {staff.coordinator && <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gray-50 text-sm font-medium text-gray-700"><User size={14} className="text-indigo-500" /> {staff.coordinator}</span>}
+            {staff.computer && <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gray-50 text-sm font-medium text-gray-700"><Monitor size={14} className="text-indigo-500" /> {staff.computer}</span>}
+            {staff.corderitos && <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gray-50 text-sm font-medium text-gray-700"><Baby size={14} className="text-indigo-500" /> Corderitos: {staff.corderitos}</span>}
+          </div>
+        </div>
+      </section>
 
-      {/* ── Reparto por grupo: una barra apilada + leyenda con números ── */}
+      {/* ── Por grupo: una barra por grupo, tocar para ver solo ese ── */}
       {total > 0 && (
-        <section className="rounded-3xl bg-white border border-gray-200/70 shadow-sm p-5 space-y-4">
-          <h2 className="text-xl font-bold text-gray-900">Por grupo</h2>
-          <div className="flex h-4 rounded-full overflow-hidden bg-gray-100">
-            {GROUPS.map((g, i) => {
-              const pct = (byCategory[g.category] / total) * 100
-              return pct > 0 ? (
-                <motion.div key={g.category} className={`${g.bar} h-full`} initial={{ width: 0 }} animate={{ width: `${pct}%` }}
-                  transition={{ duration: 0.7, delay: i * 0.06, ease: [0.22, 1, 0.36, 1] }} title={`${CATEGORY_LABELS[g.category]}: ${byCategory[g.category]}`} />
-              ) : null
-            })}
+        <section className="rounded-3xl bg-white border border-gray-200/70 shadow-sm p-4 sm:p-5 space-y-1">
+          <div className="flex items-baseline justify-between px-1 pb-2">
+            <h2 className="text-xl font-bold text-gray-900">Por grupo</h2>
+            <span className="text-xs text-gray-500">Toca un grupo para ver quién vino</span>
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
-            {GROUPS.map((g) => {
-              const Icon = g.icon
-              const count = byCategory[g.category]
-              return (
-                <button key={g.category} onClick={() => setFilter(filter === g.category ? 'all' : g.category)}
-                  className={`flex items-center gap-2 sm:gap-2.5 rounded-2xl px-2.5 sm:px-3 py-2.5 text-left transition-colors ${filter === g.category ? `${g.tile} ring-2 ring-offset-1 ring-gray-300` : 'bg-gray-50 hover:bg-gray-100'}`}>
-                  <span className={`w-8 h-8 rounded-xl ${g.iconBg} flex items-center justify-center shrink-0`}><Icon size={15} className={g.iconColor} /></span>
-                  <span className="min-w-0">
-                    <span className="flex items-baseline gap-1.5">
-                      <span className={`font-display font-bold text-xl leading-none ${g.text}`}><AnimatedNumber value={count} /></span>
-                      <span className="text-xs font-semibold text-gray-400 tabular-nums">{Math.round((count / total) * 100)}%</span>
-                    </span>
-                    <span className="block text-xs text-gray-600 leading-tight mt-0.5">{CATEGORY_LABELS[g.category]}</span>
+          {GROUPS.map((g, i) => {
+            const Icon = g.icon
+            const count = byCategory[g.category]
+            const active = filter === g.category
+            return (
+              <motion.button key={g.category} whileTap={{ scale: 0.985 }} onClick={() => setFilter(active ? 'all' : g.category)}
+                className={`w-full grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 rounded-2xl px-2 py-2 text-left transition-colors ${active ? g.tile : 'hover:bg-gray-50'} ${filter !== 'all' && !active ? 'opacity-50' : ''}`}>
+                <span className={`w-10 h-10 rounded-xl ${g.iconBg} flex items-center justify-center`}><Icon size={18} className={g.iconColor} /></span>
+                <span className="min-w-0 space-y-1.5">
+                  <span className="block text-sm font-semibold text-gray-800 truncate">{CATEGORY_LABELS[g.category]}</span>
+                  <span className={`block h-2.5 rounded-full ${g.barBg} overflow-hidden`}>
+                    <motion.span className={`block h-full rounded-full ${g.bar}`} initial={{ width: 0 }} animate={{ width: `${(count / maxGroup) * 100}%` }}
+                      transition={{ duration: 0.8, delay: 0.1 + i * 0.07, ease: [0.22, 1, 0.36, 1] }} />
                   </span>
-                </button>
-              )
-            })}
-          </div>
+                </span>
+                <span className="text-right w-14">
+                  <span className={`block font-display text-2xl font-bold leading-none ${g.text}`}><AnimatedNumber value={count} /></span>
+                  <span className="block text-[11px] font-semibold text-gray-400 tabular-nums mt-0.5">{Math.round((count / total) * 100)}%</span>
+                </span>
+              </motion.button>
+            )
+          })}
         </section>
       )}
+      </div>
 
       {/* ── Lista del día ── */}
       <section className="space-y-3">
         <div className="flex items-center justify-between gap-2 flex-wrap">
-          <h2 className="text-xl font-bold text-gray-900">Registros {filter !== 'all' && <span className="text-gray-400">· {CATEGORY_LABELS[filter]}</span>}</h2>
+          <h2 className="text-xl font-bold text-gray-900">Quién vino {filter !== 'all' && <span className="text-gray-400">· {CATEGORY_LABELS[filter]}</span>}</h2>
           {filter !== 'all' && <button onClick={() => setFilter('all')} className="text-sm font-semibold text-indigo-700">Ver todos</button>}
         </div>
+        {records.length > 6 && <SearchField value={query} onChange={setQuery} placeholder="Buscar un niño en este día…" />}
         {loading ? (
           <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-2">{[0, 1, 2].map((i) => <SkeletonRow key={i} />)}</div>
         ) : shown.length === 0 ? (
-          <EmptyState icon={CalendarX} text="No hay registros este día." />
+          <EmptyState icon={q ? Search : CalendarX} text={q ? `Nadie se llama "${query.trim()}" en este día.` : 'No hay registros este día.'} />
         ) : (
           <motion.div key={filter} initial="hidden" animate="show" className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-2">
             {shown.map((r, i) => {
@@ -408,13 +479,17 @@ function DayTab({ records, loading, byCategory, total, avgWeek, lastRefresh, sta
   )
 }
 
-function Kpi({ label, children, accent = false }: { label: string; children: React.ReactNode; accent?: boolean }) {
+/** "4 más que el domingo anterior", con flechita y color. */
+function Compare({ diff, label }: { diff: number; label: string }) {
+  const Icon = diff > 0 ? TrendingUp : diff < 0 ? TrendingDown : Minus
+  const tone = diff > 0 ? 'bg-emerald-50 text-emerald-700' : diff < 0 ? 'bg-amber-50 text-amber-800' : 'bg-gray-50 text-gray-600'
   return (
-    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
-      className={`rounded-3xl p-4 sm:p-5 flex flex-col shadow-sm ${accent ? 'bg-white border-2 border-emerald-200' : 'bg-white border border-gray-200/70'}`}>
-      <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">{label}</span>
-      {children}
-    </motion.div>
+    <motion.p initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.35 }} className="flex items-center gap-2.5 text-sm text-gray-600">
+      <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 font-semibold tabular-nums shrink-0 ${tone}`}>
+        <Icon size={14} /> {diff === 0 ? 'Igual' : `${diff > 0 ? '+' : ''}${diff}`}
+      </span>
+      <span className="min-w-0">{diff === 0 ? 'que' : diff > 0 ? 'más que' : 'menos que'} {label}</span>
+    </motion.p>
   )
 }
 
