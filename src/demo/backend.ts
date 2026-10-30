@@ -250,6 +250,9 @@ async function handleRest(url: URL, method: string, headers: Headers, body: stri
     } else if (fn === 'assign_attendance_teacher') {
       const a = (db.attendance ?? []).find((r) => r.id === args.p_attendance_id)
       if (a) a.assigned_teacher_id = args.p_teacher_id
+    } else if (fn === 'set_child_birth_date') {
+      const c = (db.children ?? []).find((r) => r.id === args.p_child_id)
+      if (c && !c.birth_date) c.birth_date = args.p_birth_date
     } else if (fn === 'sync_child_category') {
       const c = (db.children ?? []).find((r) => r.id === args.p_child_id)
       if (c) c.category = args.p_category

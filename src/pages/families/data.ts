@@ -1,7 +1,6 @@
 // Tipos y operaciones de datos de Familias. Las pantallas solo llaman a
 // estas funciones; cada una devuelve un mensaje de error, o null si salió bien.
 import { supabase } from '../../lib/supabase'
-import { uploadPhoto } from '../../lib/photo'
 import { getCategoryFromBirthDate } from '../../lib/categoryUtils'
 import type { Category, GuardianRelationship } from '../../types/domain'
 
@@ -16,10 +15,7 @@ export type ChildDetail = {
   guardian_relationship: GuardianRelationship | null
   comments: string | null
   toilet_trained: boolean | null
-  photo_url: string | null
-  assigned_maestro_id: string | null
-  assigned_maestro_name: string | null
-  assigned_maestro?: { nombre: string; apellido: string } | null
+  created_at?: string
   attendance: { count: number }[]
 }
 
@@ -27,7 +23,6 @@ export type FamilyDetail = {
   id: string
   full_name: string
   phone: string
-  photo_url: string | null
   children: ChildDetail[]
 }
 
@@ -43,12 +38,9 @@ export type ChildFormData = {
   guardian_relationship: GuardianRelationship | null
   comments: string | null
   toilet_trained: boolean | null
-  assigned_maestro_id: string | null
-  assigned_maestro_name: string | null
-  photoBlob: Blob | null
 }
 
-const FAMILY_SELECT = '*, children(*, attendance(count), assigned_maestro:maestros(nombre, apellido))'
+const FAMILY_SELECT = '*, children(*, attendance(count))'
 
 export async function fetchAllFamilies(): Promise<FamilyDetail[]> {
   // Sin .limit() a propósito: un tope dejaría familias invisibles en la
@@ -65,51 +57,31 @@ export async function fetchFamily(id: string): Promise<FamilyDetail | null> {
 export async function fetchRoster(): Promise<RosterChild[]> {
   const { data } = await supabase
     .from('children')
-    .select('*, parents(id, full_name, phone), attendance(count), assigned_maestro:maestros(nombre, apellido)')
+    .select('*, parents(id, full_name, phone), attendance(count)')
     .is('deleted_at', null)
     .order('full_name')
   return (data as RosterChild[]) ?? []
 }
 
-export async function saveParent(id: string, fields: { full_name: string; phone: string }, photo: Blob | null): Promise<string | null> {
-  const update: { full_name: string; phone: string; photo_url?: string } = { ...fields }
-  if (photo) {
-    const path = await uploadPhoto(`parents/${id}.jpg`, photo)
-    if (path) update.photo_url = path
-  }
+export async function saveParent(id: string, fields: { full_name: string; phone: string }): Promise<string | null> {
   // .select('id') hace que PostgREST diga qué filas cambió: un update
   // bloqueado por RLS no da error y parecería guardado sin estarlo.
-  const { data, error } = await supabase.from('parents').update(update).eq('id', id).select('id')
+  const { data, error } = await supabase.from('parents').update(fields).eq('id', id).select('id')
   return error || !data?.length ? 'No se pudo guardar. Intenta de nuevo.' : null
 }
 
-function childRow(d: ChildFormData) {
-  const { photoBlob: _photo, ...rest } = d
-  void _photo
-  return rest
-}
-
-export async function updateChild(id: string, d: ChildFormData, currentPhoto: string | null): Promise<string | null> {
-  let photo_url = currentPhoto
-  if (d.photoBlob) {
-    const path = await uploadPhoto(`children/${id}.jpg`, d.photoBlob)
-    if (path) photo_url = path
-  }
-  const { data, error } = await supabase.from('children').update({ ...childRow(d), photo_url }).eq('id', id).select('id')
+export async function updateChild(id: string, d: ChildFormData): Promise<string | null> {
+  const { data, error } = await supabase.from('children').update(d).eq('id', id).select('id')
   return error || !data?.length ? 'No se pudo guardar. Intenta de nuevo.' : null
 }
 
 export async function createChild(parentId: string, d: ChildFormData): Promise<{ id: string } | { error: string }> {
   const { data, error } = await supabase.from('children').insert({
     parent_id: parentId,
-    ...childRow(d),
+    ...d,
     category: d.category ?? getCategoryFromBirthDate(d.birth_date),
   }).select('id').single()
   if (error || !data) return { error: 'No se pudo guardar. Intenta de nuevo.' }
-  if (d.photoBlob) {
-    const path = await uploadPhoto(`children/${data.id}.jpg`, d.photoBlob)
-    if (path) await supabase.from('children').update({ photo_url: path }).eq('id', data.id)
-  }
   return { id: data.id }
 }
 

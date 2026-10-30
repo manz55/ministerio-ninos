@@ -6,7 +6,6 @@ import { CATEGORY_LABELS, type ChildPrefill } from '../../types/domain'
 import { Sheet } from '../../components/motion'
 import { itemVariants } from '../../components/motion/presets'
 import { PageHeader, BTN_SECONDARY } from '../../components/ui/PageHeader'
-import { PhotoAvatar, PhotoCapture } from '../../components/ui/PhotoCapture'
 import { ConfirmSheet } from '../../components/ui/ConfirmSheet'
 import { Field, FormError, INPUT } from '../../components/ui/form'
 import { groupOf, initials } from '../checkin/shared'
@@ -15,12 +14,11 @@ import { ChildSheet } from './ChildSheet'
 import { createChild, deleteFamily, saveParent, visitsOf, type ChildDetail, type FamilyDetail } from './data'
 
 /** Una familia: quién la trae, sus niños, y todo lo que se puede hacer. */
-export function FamilyView({ family, onBack, onRefresh, onDeleted, onChildAdded, initialChildPrefill }: {
+export function FamilyView({ family, onBack, onRefresh, onDeleted, initialChildPrefill }: {
   family: FamilyDetail
   onBack: () => void
   onRefresh: () => void
   onDeleted: () => void
-  onChildAdded?: () => void
   /** Llegamos desde "Agregar a esta familia": abrir de una vez el formulario lleno. */
   initialChildPrefill?: ChildPrefill | null
 }) {
@@ -66,9 +64,7 @@ export function FamilyView({ family, onBack, onRefresh, onDeleted, onChildAdded,
         className="rounded-3xl bg-white border border-gray-200/70 shadow-sm p-5 flex flex-col sm:flex-row sm:items-center gap-4"
       >
         <div className="flex items-center gap-4 flex-1 min-w-0">
-          {family.photo_url ? <PhotoAvatar path={family.photo_url} size={64} /> : (
-            <span className="w-16 h-16 rounded-full bg-indigo-50 text-indigo-700 font-display font-bold text-2xl flex items-center justify-center shrink-0">{initials(family.full_name)}</span>
-          )}
+          <span className="w-16 h-16 rounded-full bg-indigo-50 text-indigo-700 font-display font-bold text-2xl flex items-center justify-center shrink-0">{initials(family.full_name)}</span>
           <div className="min-w-0">
             <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Padre, madre o responsable</p>
             <p className="font-display text-xl font-bold text-gray-900 leading-tight truncate">{family.full_name}</p>
@@ -130,7 +126,6 @@ export function FamilyView({ family, onBack, onRefresh, onDeleted, onChildAdded,
               setPrefill(null)
               setJustAddedId(res.id)
               onRefresh()
-              onChildAdded?.()
               // Abre su panel para registrarlo hoy de una vez.
               setTimeout(() => setOpenChildId(res.id), 450)
               return null
@@ -208,14 +203,13 @@ function ParentSheet({ open, family, onClose, onSaved }: { open: boolean; family
 function ParentForm({ family, onClose, onSaved }: { family: FamilyDetail; onClose: () => void; onSaved: () => void }) {
   const [name, setName] = useState(family.full_name)
   const [phone, setPhone] = useState(family.phone ?? '')
-  const [photo, setPhoto] = useState<Blob | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   async function submit(e: React.FormEvent) {
     e.preventDefault()
     if (!name.trim()) { setError('Escribe el nombre.'); return }
     setSaving(true)
-    const err = await saveParent(family.id, { full_name: name.trim(), phone: phone.trim() }, photo)
+    const err = await saveParent(family.id, { full_name: name.trim(), phone: phone.trim() })
     setSaving(false)
     if (err) { setError(err); return }
     onSaved()
@@ -223,7 +217,6 @@ function ParentForm({ family, onClose, onSaved }: { family: FamilyDetail; onClos
   return (
     <form onSubmit={submit} className="px-5 sm:px-7 pt-3 sm:pt-7 pb-6 space-y-5">
       <h2 className="text-2xl font-bold text-gray-900 pr-10">Editar responsable</h2>
-      <PhotoCapture existingPath={family.photo_url} onFileReady={setPhoto} size={76} />
       <Field label="Nombre completo" required>
         <input value={name} onChange={(e) => setName(e.target.value)} className={INPUT} autoFocus />
       </Field>

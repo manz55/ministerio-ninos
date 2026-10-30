@@ -7,31 +7,30 @@ import type { TeamColor } from '../../types/domain'
 import { ChurchLogo } from '../../components/ui/ChurchLogo'
 import { listVariants, itemVariants } from '../../components/motion/presets'
 import { TEAM_META } from './shared'
+import type { Staff } from '../../lib/dailyStaff'
 
 const TEAMS: TeamColor[] = ['rojo', 'amarillo', 'azul']
 
 /** Primera pantalla de cada domingo: quién está a cargo y qué equipo sirve. */
 export function TeamPicker({
-  onConfirm, initialCoordinator, initialComputerOperator, initialCorderitosLead,
+  onConfirm, initialStaff,
 }: {
-  onConfirm: (color: TeamColor, coordinator: string, computerOperator: string, corderitosLead: string) => void
-  initialCoordinator: string
-  initialComputerOperator: string
-  initialCorderitosLead: string
+  onConfirm: (color: TeamColor, staff: Staff) => void
+  initialStaff: Staff
 }) {
-  const [coordinator, setCoordinator] = useState(initialCoordinator)
-  useEffect(() => setCoordinator(initialCoordinator), [initialCoordinator])
-  const [operator, setOperator] = useState(initialComputerOperator)
-  useEffect(() => setOperator(initialComputerOperator), [initialComputerOperator])
-  const [corderitos, setCorderitos] = useState(initialCorderitosLead)
-  useEffect(() => setCorderitos(initialCorderitosLead), [initialCorderitosLead])
+  const [coordinator, setCoordinator] = useState(initialStaff.coordinator)
+  useEffect(() => setCoordinator(initialStaff.coordinator), [initialStaff.coordinator])
+  const [operator, setOperator] = useState(initialStaff.computer)
+  useEffect(() => setOperator(initialStaff.computer), [initialStaff.computer])
+  const [corderitos, setCorderitos] = useState(initialStaff.corderitos)
+  useEffect(() => setCorderitos(initialStaff.corderitos), [initialStaff.corderitos])
   const [picked, setPicked] = useState<TeamColor | null>(null)
 
   function pick(color: TeamColor) {
     if (picked) return
     setPicked(color)
     // Deja ver la selección un instante antes de pasar a Registro.
-    setTimeout(() => onConfirm(color, coordinator.trim(), operator.trim(), corderitos.trim()), 320)
+    setTimeout(() => onConfirm(color, { coordinator: coordinator.trim(), computer: operator.trim(), corderitos: corderitos.trim() }), 320)
   }
 
   const input = 'w-full pl-11 pr-4 py-3.5 bg-white border-2 border-gray-200 rounded-2xl text-base font-medium text-gray-800 placeholder:text-gray-400 focus:border-indigo-500 focus:outline-none shadow-sm transition-colors'

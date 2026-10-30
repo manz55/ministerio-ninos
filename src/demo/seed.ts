@@ -123,6 +123,14 @@ export function createSeed(): Db {
     })
   }
 
+  // Para que en la demo se vean: un niño sin fecha de nacimiento, uno que
+  // cumple años hoy y uno que viene por primera vez.
+  db.children[1].birth_date = null
+  const bday = new Date(now); bday.setFullYear(bday.getFullYear() - 6)
+  db.children[4].birth_date = ymd(bday)
+  const firstTimer = db.children[8].id
+  db.attendance = db.attendance.filter((a) => a.child_id !== firstTimer || a.session_date === today)
+
   db.shift_notes.push({
     id: id('n', 1), session_date: today, team_color: 'rojo', note: 'Mateo se portó muy bien ayudando a repartir el material.',
     child_id: id('c', 1), author_id: id('p', 2), created_at: now.toISOString(),

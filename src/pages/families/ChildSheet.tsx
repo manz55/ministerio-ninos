@@ -1,13 +1,11 @@
 import { useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { AlertTriangle, Baby, MessageSquareText, Pencil, PartyPopper, Trash2, UserRound, Users, LogIn, Link2 } from 'lucide-react'
+import { AlertTriangle, Baby, MessageSquareText, Pencil, PartyPopper, Trash2, Users, LogIn, Link2 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { getAgeLabel, getEffectiveCategory, hasCategoryChanged } from '../../lib/categoryUtils'
 import { CATEGORY_LABELS, GUARDIAN_RELATIONSHIP_LABELS, NEXT_CATEGORY, isCorderitos } from '../../types/domain'
 import { Sheet } from '../../components/motion'
-import { ChildContacts } from '../../components/ui/ChildContacts'
 import { QuickCheckIn } from '../../components/ui/QuickCheckIn'
-import { PhotoAvatar } from '../../components/ui/PhotoCapture'
 import { ConfirmSheet } from '../../components/ui/ConfirmSheet'
 import { FormError, INPUT } from '../../components/ui/form'
 import { useDebounce } from '../../hooks/useDebounce'
@@ -61,7 +59,6 @@ function Body({ child, onClose, onChanged, startInEdit, highlightCheckIn, parent
   const hasAlert = !!(child.allergies || child.medical_notes)
   const graduatesTo = hasCategoryChanged(child) && child.category ? NEXT_CATEGORY[child.category] : null
   const parent = 'parents' in child ? child.parents : undefined
-  const maestro = child.assigned_maestro ? `${child.assigned_maestro.nombre} ${child.assigned_maestro.apellido}` : child.assigned_maestro_name
 
   async function handleDelete() {
     setDeleting(true)
@@ -82,7 +79,7 @@ function Body({ child, onClose, onChanged, startInEdit, highlightCheckIn, parent
           submitLabel="Guardar cambios"
           onCancel={() => setEditing(false)}
           onSubmit={async (d) => {
-            const err = await updateChild(child.id, d, child.photo_url)
+            const err = await updateChild(child.id, d)
             if (!err) { setEditing(false); setSavedFlash(true); onChanged(); setTimeout(() => setSavedFlash(false), 1600) }
             return err
           }}
@@ -95,13 +92,9 @@ function Body({ child, onClose, onChanged, startInEdit, highlightCheckIn, parent
     <div className="px-5 sm:px-7 pt-3 sm:pt-7 pb-6 space-y-4">
       {/* ── Encabezado ── */}
       <div className="flex items-center gap-4 pr-10">
-        <div className="relative shrink-0">
-          {child.photo_url ? <PhotoAvatar path={child.photo_url} size={64} /> : (
-            <span className={`w-16 h-16 rounded-full flex items-center justify-center font-display font-bold text-2xl ${g.avatar}`}>
-              {child.full_name.split(/\s+/).slice(0, 2).map((w) => w[0]).join('').toUpperCase()}
-            </span>
-          )}
-        </div>
+        <span className={`w-16 h-16 shrink-0 rounded-full flex items-center justify-center font-display font-bold text-2xl ${g.avatar}`}>
+          {child.full_name.split(/\s+/).slice(0, 2).map((w) => w[0]).join('').toUpperCase()}
+        </span>
         <div className="min-w-0">
           <h2 className="text-[26px] font-bold text-gray-900 leading-tight">{child.full_name}</h2>
           <p className="text-sm text-gray-500 mt-0.5">
@@ -150,7 +143,6 @@ function Body({ child, onClose, onChanged, startInEdit, highlightCheckIn, parent
           {isCorderitos(category) && (
             <InfoRow icon={Baby} text={child.toilet_trained === true ? 'Ya va solo al baño' : child.toilet_trained === false ? 'Aún usa pañal / no va solo al baño' : 'No se sabe si va solo al baño'} />
           )}
-          {isCorderitos(category) && maestro && <InfoRow icon={UserRound} text={`Maestro responsable: ${maestro}${child.assigned_maestro ? '' : ' (aún sin registrar)'}`} />}
           {child.guardian_relationship && <InfoRow icon={Users} text={`Lo trae: ${GUARDIAN_RELATIONSHIP_LABELS[child.guardian_relationship]}`} />}
           {child.comments && <InfoRow icon={MessageSquareText} text={child.comments} />}
         </ul>
@@ -179,8 +171,6 @@ function Body({ child, onClose, onChanged, startInEdit, highlightCheckIn, parent
         <p className="text-sm font-semibold text-indigo-800 flex items-center gap-1.5"><LogIn size={15} /> Registrar hoy</p>
         <QuickCheckIn childId={child.id} category={category} />
       </motion.div>
-
-      <ChildContacts childId={child.id} />
 
       <FormError error={error} />
 

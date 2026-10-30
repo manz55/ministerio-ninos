@@ -1,17 +1,17 @@
 import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { format } from 'date-fns'
-import { AlertTriangle, ChevronDown, Compass, Pencil, Trash2, Users, Baby, CloudOff, PartyPopper } from 'lucide-react'
+import { AlertTriangle, Pencil, Trash2, Baby, CloudOff, PartyPopper, MessageSquareText, CalendarPlus } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { saveAttendance, newId } from '../../lib/offline'
 import { getAgeLabel, getEffectiveCategory, hasCategoryChanged, requiresBadge, requiresPager } from '../../lib/categoryUtils'
-import { ACTIVE_CATEGORIES, CATEGORY_LABELS, NEXT_CATEGORY, isCorderitos, type Category, type TeamColor } from '../../types/domain'
-import { ChildContacts } from '../../components/ui/ChildContacts'
-import { EditChildModal, type EditableChild } from '../../components/ui/EditChildModal'
-import { AssignedMaestroField } from '../../components/ui/AssignedMaestroField'
+import { CATEGORY_LABELS, NEXT_CATEGORY, isCorderitos, type TeamColor } from '../../types/domain'
 import { Confetti, DrawnCheck, Sheet } from '../../components/motion'
 import { SPRING } from '../../components/motion/presets'
-import { autoAssignTodayTeacher, groupOf, initials, isInToday, today, type ChildResult, type TodayRecord } from './shared'
+import { ConfirmSheet } from '../../components/ui/ConfirmSheet'
+import { ChildForm } from '../families/ChildForm'
+import { deleteChild, updateChild } from '../families/data'
+import { groupOf, initials, isInToday, today, type ChildResult, type TodayRecord } from './shared'
 
 const NUM_INPUT =
   'w-full px-3 py-3.5 text-[2rem] leading-none font-display font-semibold text-center tabular-nums rounded-2xl border-2 border-gray-200 bg-gray-50/60 focus:bg-white focus:border-indigo-500 focus:outline-none transition-colors placeholder:text-gray-300 placeholder:font-medium'
@@ -23,8 +23,7 @@ interface Props {
   isAdmin: boolean
   onClose: () => void
   onRegistered: (childId: string, badgeNumber: number | null) => void
-  onCategoryChanged: (childId: string, category: Category) => void
-  onEdited: (childId: string, patch: Partial<EditableChild>) => void
+  onEdited: (childId: string, patch: Partial<ChildResult>) => void
   onDeleted: (childId: string) => void
   onEditAttendance: (id: string, badge: number | null, pager: number | null) => Promise<string | null>
   onRemoveAttendance: (id: string) => Promise<string | null>
@@ -44,10 +43,9 @@ export function CheckInSheet(props: Props) {
 }
 
 function SheetBody({
-  child, todayRecord, teamColor, isAdmin, onClose, onRegistered, onCategoryChanged, onEdited, onDeleted, onEditAttendance, onRemoveAttendance,
+  child, todayRecord, teamColor, isAdmin, onClose, onRegistered, onEdited, onDeleted, onEditAttendance, onRemoveAttendance,
 }: Props & { child: ChildResult }) {
-  const [categoryOverride, setCategoryOverride] = useState<Category | null>(null)
-  const category = categoryOverride ?? getEffectiveCategory(child)
+  const category = getEffectiveCategory(child)
   const g = groupOf(category)
   const age = getAgeLabel(child.birth_date)
   const alreadyIn = isInToday(child)
@@ -58,16 +56,11 @@ function SheetBody({
 
   const [badge, setBadge] = useState('')
   const [pager, setPager] = useState('')
-  const [maestroId, setMaestroId] = useState<string | null>(child.assigned_maestro_id)
-  const [maestroName, setMaestroName] = useState<string | null>(child.assigned_maestro_name)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<{ badge: number | null; queued: boolean } | null>(null)
-  const [showMore, setShowMore] = useState(false)
-  const [showContacts, setShowContacts] = useState(false)
-  const [savingCategory, setSavingCategory] = useState(false)
-  const [categoryError, setCategoryError] = useState<string | null>(null)
-  const [showEditModal, setShowEditModal] = useState(false)
+  const [editing, setEditing] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
   const badgeRef = useRef<HTMLInputElement>(null)
   const submitRef = useRef<HTMLButtonElement>(null)
 
@@ -117,16 +110,6 @@ function SheetBody({
       return
     }
     setSuccess({ badge: badgeNumber, queued })
-    // Sin internet (queued) esto se omite: el check-in ya quedó en cola, y
-    // el maestro responsable se puede poner después.
-    if (!queued && isCorderitos(category)) {
-      const maestroChanged = maestroId !== child.assigned_maestro_id || maestroName !== child.assigned_maestro_name
-      if (maestroChanged) {
-        await supabase.from('children').update({ assigned_maestro_id: maestroId, assigned_maestro_name: maestroName }).eq('id', child.id)
-        onEdited(child.id, { assigned_maestro_id: maestroId, assigned_maestro_name: maestroName })
-      }
-      if (maestroId) autoAssignTodayTeacher(attendanceId, maestroId)
-    }
     // Un momento para ver la palomita y el confeti, y listo para el siguiente.
     setTimeout(() => onRegistered(child.id, badgeNumber), 1100)
   }
@@ -170,15 +153,33 @@ function SheetBody({
     onClose()
   }
 
-  async function changeCategory(newCategory: Category) {
-    if (newCategory === category) return
-    setSavingCategory(true)
-    setCategoryError(null)
-    const { error: err } = await supabase.from('children').update({ category: newCategory }).eq('id', child.id)
-    setSavingCategory(false)
-    if (err) { setCategoryError('No se pudo cambiar el grupo.'); return }
-    setCategoryOverride(newCategory)
-    onCategoryChanged(child.id, newCategory)
+  async function handleDelete() {
+    setSubmitting(true)
+    const err = await deleteChild(child.id)
+    setSubmitting(false)
+    setConfirmDelete(false)
+    if (err) { setError(err); return }
+    onDeleted(child.id)
+    onClose()
+  }
+
+  // ── Editar datos (coordinadores): el mismo formulario de Familias ───────────
+  if (editing) {
+    return (
+      <div className="px-5 sm:px-6 pt-3 sm:pt-6 pb-6">
+        <h2 className="text-2xl font-bold text-gray-900 mb-5 pr-10">Editar a {child.full_name.split(' ')[0]}</h2>
+        <ChildForm
+          child={child}
+          submitLabel="Guardar cambios"
+          onCancel={() => setEditing(false)}
+          onSubmit={async (d) => {
+            const err = await updateChild(child.id, d)
+            if (!err) { onEdited(child.id, d); setEditing(false) }
+            return err
+          }}
+        />
+      </div>
+    )
   }
 
   // ── Éxito ──────────────────────────────────────────────────────────────────
@@ -251,6 +252,8 @@ function SheetBody({
         </p>
       )}
 
+      {!child.birth_date && !child.partial && <MissingBirthDate childId={child.id} onSaved={(d) => onEdited(child.id, { birth_date: d })} />}
+
       {/* ── Acción principal ── */}
       {!alreadyIn ? (
         <form onSubmit={submitCheckIn} className="space-y-3">
@@ -282,9 +285,6 @@ function SheetBody({
             </div>
           ) : (
             <>
-              {isAdmin && (
-                <AssignedMaestroField value={maestroId} onChange={setMaestroId} freeTextValue={maestroName} onFreeTextChange={setMaestroName} compact />
-              )}
               <label className="block">
                 <span className="block text-sm font-semibold text-gray-700 mb-1.5">Bíper <span className="font-normal text-gray-400">(opcional)</span></span>
                 <input
@@ -322,7 +322,6 @@ function SheetBody({
         <form onSubmit={submitCorrection} className="space-y-3">
           <div className="rounded-2xl bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
             <span className="font-semibold">Registrado hoy</span> a las {format(new Date(todayRecord.checked_in_at), 'HH:mm')}
-            {todayRecord.checked_out_at && <> · ya salió</>}
           </div>
           {(needsBadge || needsPager) && (
             <div className={`grid gap-3 ${needsBadge && needsPager ? 'grid-cols-2' : 'grid-cols-1'}`}>
@@ -368,69 +367,80 @@ function SheetBody({
         </form>
       )}
 
-      {/* ── Más opciones ── */}
-      <div className="border-t border-gray-100 pt-2">
-        <button type="button" onClick={() => setShowMore((v) => !v)}
-          className="w-full flex items-center justify-between py-2 text-sm font-semibold text-gray-600 hover:text-gray-900">
-          Más opciones
-          <ChevronDown size={16} className={`transition-transform duration-300 ${showMore ? 'rotate-180' : ''}`} />
-        </button>
-        <AnimatePresence initial={false}>
-          {showMore && (
-            <motion.div
-              initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}
-              transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
-              className="overflow-hidden"
-            >
-              <div className="space-y-3 pt-1 pb-1">
-                {child.comments && (
-                  <p className="rounded-2xl bg-gray-50 px-4 py-2.5 text-sm text-gray-700"><span className="font-semibold">Comentarios:</span> {child.comments}</p>
-                )}
-                <div className="flex flex-wrap gap-2">
-                  <OptionButton icon={Users} label={showContacts ? 'Ocultar contactos' : 'Otros contactos'} onClick={() => setShowContacts((v) => !v)} />
-                  {isAdmin && <OptionButton icon={Pencil} label="Editar datos del niño" onClick={() => setShowEditModal(true)} />}
-                </div>
-                {showContacts && <ChildContacts childId={child.id} />}
-                {isAdmin && (
-                  <label className="flex items-center gap-2 text-sm text-gray-600">
-                    <Compass size={15} className="shrink-0 text-gray-400" />
-                    <span className="shrink-0">Grupo:</span>
-                    <select
-                      value={category ?? ''}
-                      disabled={savingCategory}
-                      onChange={(e) => changeCategory(e.target.value as Category)}
-                      className="flex-1 min-w-0 px-3 py-2 rounded-xl border-2 border-gray-200 bg-white focus:border-indigo-500 focus:outline-none"
-                    >
-                      {!category && <option value="" disabled>Sin grupo</option>}
-                      {ACTIVE_CATEGORIES.map((c) => <option key={c} value={c}>{CATEGORY_LABELS[c]}</option>)}
-                    </select>
-                  </label>
-                )}
-                {categoryError && <p className="text-xs text-red-600">{categoryError}</p>}
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
-
-      {showEditModal && (
-        <EditChildModal
-          child={child}
-          onClose={() => setShowEditModal(false)}
-          onSaved={(patch) => { setShowEditModal(false); onEdited(child.id, patch) }}
-          onDeleted={() => { setShowEditModal(false); onDeleted(child.id); onClose() }}
-        />
+      {/* ── Lo demás que se sabe del niño ── */}
+      {child.comments && (
+        <p className="rounded-2xl bg-gray-50 px-4 py-2.5 text-sm text-gray-700 flex gap-2.5">
+          <MessageSquareText size={16} className="shrink-0 mt-0.5 text-gray-400" /> {child.comments}
+        </p>
       )}
+      {isAdmin && (
+        <div className="flex gap-2 border-t border-gray-100 pt-3">
+          <button type="button" onClick={() => setEditing(true)}
+            className="flex-1 inline-flex items-center justify-center gap-1.5 py-2.5 rounded-xl border border-gray-200 bg-white text-sm font-semibold text-gray-700 hover:border-indigo-300 hover:text-indigo-700 transition-colors">
+            <Pencil size={15} /> Editar datos del niño
+          </button>
+          <button type="button" onClick={() => setConfirmDelete(true)} aria-label="Eliminar niño"
+            className="px-3.5 rounded-xl border border-gray-200 bg-white text-gray-500 hover:border-red-200 hover:text-red-600 transition-colors">
+            <Trash2 size={15} />
+          </button>
+        </div>
+      )}
+
+      <ConfirmSheet
+        open={confirmDelete}
+        title={`¿Eliminar a ${child.full_name}?`}
+        message="Se marcarán también sus registros de asistencia. Queda en la papelera por si hay que restaurarlo."
+        confirmLabel="Sí, eliminar"
+        destructive
+        busy={submitting}
+        onConfirm={handleDelete}
+        onClose={() => setConfirmDelete(false)}
+      />
     </div>
   )
 }
 
-function OptionButton({ icon: Icon, label, onClick }: { icon: typeof Users; label: string; onClick: () => void }) {
+/** Falta la fecha de nacimiento: se completa aquí mismo (cualquier maestro
+ * puede, solo cuando está vacía), sin ir a Familias. */
+function MissingBirthDate({ childId, onSaved }: { childId: string; onSaved: (date: string) => void }) {
+  const [open, setOpen] = useState(false)
+  const [date, setDate] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function save() {
+    if (!date) return
+    setSaving(true)
+    setError(null)
+    const { error: err } = await supabase.rpc('set_child_birth_date', { p_child_id: childId, p_birth_date: date })
+    setSaving(false)
+    if (err) { setError(err.message.includes('inválida') ? 'Revisa la fecha.' : 'No se pudo guardar. Revisa la conexión.'); return }
+    onSaved(date)
+  }
+
+  if (!open) {
+    return (
+      <button type="button" onClick={() => setOpen(true)}
+        className="w-full rounded-2xl bg-amber-50 px-4 py-2.5 text-sm text-amber-800 flex items-center gap-2 text-left hover:bg-amber-100 transition-colors">
+        <CalendarPlus size={16} className="shrink-0" />
+        <span className="flex-1">Falta su fecha de nacimiento.</span>
+        <span className="font-semibold underline underline-offset-2">Agregar</span>
+      </button>
+    )
+  }
   return (
-    <button type="button" onClick={onClick}
-      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-gray-200 bg-white text-sm font-medium text-gray-700 hover:border-indigo-300 hover:text-indigo-700 transition-colors">
-      <Icon size={15} /> {label}
-    </button>
+    <div className="rounded-2xl bg-amber-50 p-3 space-y-2">
+      <p className="text-sm font-semibold text-amber-900 flex items-center gap-2"><CalendarPlus size={16} /> Fecha de nacimiento</p>
+      <div className="flex gap-2">
+        <input type="date" value={date} autoFocus max={today} onChange={(e) => setDate(e.target.value)}
+          className="flex-1 min-w-0 px-3 py-2.5 rounded-xl border-2 border-amber-200 bg-white focus:border-indigo-500 focus:outline-none" />
+        <button type="button" onClick={save} disabled={!date || saving}
+          className="px-4 rounded-xl bg-amber-600 text-white font-semibold disabled:opacity-50 hover:bg-amber-700">
+          {saving ? '…' : 'Guardar'}
+        </button>
+      </div>
+      {error && <p className="text-xs text-red-700">{error}</p>}
+    </div>
   )
 }
 

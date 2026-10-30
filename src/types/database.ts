@@ -641,6 +641,10 @@ export type Database = {
         Args: { p_name: string; p_session_date: string }
         Returns: undefined
       }
+      set_child_birth_date: {
+        Args: { p_birth_date: string; p_child_id: string }
+        Returns: undefined
+      }
       set_daily_corderitos_lead: {
         Args: { p_name: string; p_session_date: string }
         Returns: undefined

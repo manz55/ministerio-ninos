@@ -1,9 +1,7 @@
 // Tipos, constantes y utilidades compartidas por las piezas de Registro.
 import { format } from 'date-fns'
 import { Bug, Zap, Compass, Baby, PersonStanding, type LucideIcon } from 'lucide-react'
-import { supabase } from '../../lib/supabase'
 import { getPendingItems, readCache } from '../../lib/offline'
-import { normalizeName } from '../../lib/fuzzySearch'
 import type { Category, TeamColor, GuardianRelationship } from '../../types/domain'
 
 export type TodayRecord = {
@@ -13,7 +11,6 @@ export type TodayRecord = {
   badge_number: number | null
   pager_number: number | null
   checked_in_at: string
-  checked_out_at: string | null
   children: {
     full_name: string
     allergies: string | null
@@ -21,8 +18,8 @@ export type TodayRecord = {
     toilet_trained: boolean | null
     comments: string | null
   }
-  assigned_teacher_id: string | null
-  assigned_teacher: { full_name: string } | null
+  /** Primera vez que viene (no tiene registros de domingos anteriores). */
+  first_time?: boolean
   /** Guardado solo en este dispositivo, esperando internet (lib/offline.ts). */
   pending?: boolean
 }
@@ -37,18 +34,17 @@ export type ChildResult = {
   toilet_trained: boolean | null
   comments: string | null
   guardian_relationship: GuardianRelationship | null
-  photo_url: string | null
-  assigned_maestro_id: string | null
-  assigned_maestro_name: string | null
   parent_id: string | null
   parents: { full_name: string; phone: string } | null
   attendance: { session_date: string; badge_number?: number | null }[]
+  /** Armado con lo poco que trae "Registrados hoy" mientras carga el padrón. */
+  partial?: boolean
 }
 
 export type RosterChild = Omit<ChildResult, 'attendance'>
 export type TodayAtt = { child_id: string; badge_number: number | null }
 
-export const CHILD_SELECT = 'id, full_name, birth_date, category, allergies, medical_notes, toilet_trained, comments, guardian_relationship, photo_url, assigned_maestro_id, assigned_maestro_name, parent_id, parents(full_name, phone)'
+export const CHILD_SELECT = 'id, full_name, birth_date, category, allergies, medical_notes, toilet_trained, comments, guardian_relationship, parent_id, parents(full_name, phone)'
 
 // `today` se calcula una sola vez al cargar — CheckInPage recarga la página
 // si cambia el día con la app abierta.
@@ -134,7 +130,7 @@ export async function withPendingRecords(rows: TodayRecord[]): Promise<TodayReco
       const c = roster.find((r) => r.id === a.child_id) ?? pendingKids.find((k) => k.id === a.child_id)
       return {
         id: a.id, child_id: a.child_id, category: a.category, badge_number: a.badge_number, pager_number: a.pager_number,
-        checked_in_at: a.checked_in_at, checked_out_at: null, assigned_teacher_id: null, assigned_teacher: null, pending: true,
+        checked_in_at: a.checked_in_at, pending: true,
         children: {
           full_name: c?.full_name ?? 'Niño nuevo', allergies: c?.allergies ?? null, medical_notes: c?.medical_notes ?? null,
           toilet_trained: c?.toilet_trained ?? null, comments: c?.comments ?? null,
@@ -153,7 +149,6 @@ export async function buildRoster(rows: RosterChild[], todayAtt: TodayAtt[]): Pr
     f.children.filter((c) => !knownIds.has(c.id)).map((c) => ({
       ...c,
       guardian_relationship: c.guardian_relationship as GuardianRelationship | null,
-      photo_url: null,
       parents: { full_name: f.parent.full_name, phone: f.parent.phone ?? '' },
     }))
   )
@@ -168,23 +163,4 @@ export async function buildRoster(rows: RosterChild[], todayAtt: TodayAtt[]): Pr
     ...c,
     attendance: attMap.has(c.id) ? [{ session_date: today, badge_number: attMap.get(c.id) }] : [],
   }))
-}
-
-// Carries the persistent "maestro responsable" (children.assigned_maestro_id,
-// picked from the `maestros` roster) forward into today's per-day claim
-// (attendance.assigned_teacher_id, which points at `profiles` — app logins,
-// a different table) so a coordinator doesn't have to re-pick the same
-// person right after check-in. The two tables aren't linked by an FK, so
-// this only fires on an exact, unambiguous name match — anything less
-// certain and it just leaves the "Asignar maestro" button for a manual
-// pick. Fire-and-forget: never blocks or fails the check-in itself.
-export async function autoAssignTodayTeacher(attendanceId: string, maestroId: string) {
-  const { data: maestro } = await supabase.from('maestros').select('nombre, apellido').eq('id', maestroId).single()
-  if (!maestro) return
-  const target = normalizeName(`${maestro.nombre} ${maestro.apellido}`)
-  const { data: profiles } = await supabase.from('profiles').select('id, full_name').eq('active', true)
-  if (!profiles) return
-  const matches = profiles.filter((p) => normalizeName(p.full_name) === target)
-  if (matches.length !== 1) return
-  await supabase.rpc('assign_attendance_teacher', { p_attendance_id: attendanceId, p_teacher_id: matches[0].id })
 }

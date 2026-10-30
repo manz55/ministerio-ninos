@@ -1,11 +1,11 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { Link } from 'react-router-dom'
-import { format, subWeeks, startOfWeek, endOfWeek } from 'date-fns'
+import { format, subWeeks, subDays, startOfWeek, endOfWeek } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   RefreshCw, Download, AlertTriangle, FileText, FileSpreadsheet, PartyPopper, Check, User, Monitor,
-  FileWarning, ArrowRight, Copy, Phone, Trash2, CalendarX, Trophy, Clock, Baby, Flame,
+  FileWarning, ArrowRight, Copy, Phone, Trash2, CalendarX, Trophy, Clock, Baby, Flame, Sprout,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { CATEGORY_LABELS, ACTIVE_CATEGORIES, NEXT_CATEGORY, type Category } from '../types/domain'
@@ -13,7 +13,8 @@ import { hasCategoryChanged } from '../lib/categoryUtils'
 import { computeAbsence, absenceMessage, type AbsenceTier } from '../lib/absenceUtils'
 import { graduationMessage } from '../lib/graduationMessages'
 import { DatePicker } from '../components/ui/DatePicker'
-import { fetchAttendanceRange, fetchDailyStaffing, exportRangeCSV, exportRangePDF, toCSV } from '../lib/exportUtils'
+import { fetchAttendanceRange, exportRangeCSV, exportRangePDF, toCSV } from '../lib/exportUtils'
+import { EMPTY_STAFF, fetchStaff, fetchStaffRange, type Staff } from '../lib/dailyStaff'
 import { ReporteAsistenciaDescarga } from '../components/receipt-printer/ReporteAsistenciaDescarga'
 import { AnimatedNumber, Sheet, SkeletonRow } from '../components/motion'
 import { itemVariants } from '../components/motion/presets'
@@ -30,15 +31,18 @@ type CategoryCount = Record<Category, number>
 type WeekRow = { week_start: string; week_end: string; total: number } & CategoryCount
 type LiveRecord = {
   id: string
+  child_id: string
   category: string
   badge_number: number | null
   checked_in_at: string
-  checked_out_at: string | null
   children: { full_name: string; parents: { full_name: string } }
+  /** No tiene registros de domingos anteriores. */
+  first_time?: boolean
 }
 type MedicalChild = { id: string; full_name: string; allergies: string | null; medical_notes: string | null; parents: { full_name: string; phone: string } }
 type RosterChild = { id: string; full_name: string; birth_date: string | null; category: Category | null; allergies: string | null; medical_notes: string | null; parents: { full_name: string; phone: string } | null }
 type AbsentChild = { id: string; full_name: string; parentName: string; parentPhone: string | null; missed: number; tier: AbsenceTier }
+type NewChild = { id: string; full_name: string; category: Category | null; parentName: string; parentPhone: string | null; firstSeen: string; visits: number }
 type Tab = 'dia' | 'tendencias' | 'seguimiento' | 'exportar'
 
 const todayStr = format(new Date(), 'yyyy-MM-dd')
@@ -65,12 +69,11 @@ export default function ReportsPage() {
   const [medicalChildren, setMedicalChildren] = useState<MedicalChild[]>([])
   const [graduatingChildren, setGraduatingChildren] = useState<RosterChild[]>([])
   const [absentChildren, setAbsentChildren] = useState<AbsentChild[]>([])
+  const [newChildren, setNewChildren] = useState<NewChild[]>([])
   const [missingBirthDateCount, setMissingBirthDateCount] = useState(0)
   const [rangeFrom, setRangeFrom] = useState(format(subWeeks(new Date(), 1), 'yyyy-MM-dd'))
   const [rangeTo, setRangeTo] = useState(todayStr)
-  const [coordinatorName, setCoordinatorName] = useState('')
-  const [computerOperatorName, setComputerOperatorName] = useState('')
-  const [corderitosLeadName, setCorderitosLeadName] = useState('')
+  const [staff, setStaff] = useState<Staff>(EMPTY_STAFF)
 
   const selectedStr = format(selectedDate, 'yyyy-MM-dd')
   const isToday = selectedStr === todayStr
@@ -78,23 +81,28 @@ export default function ReportsPage() {
   // Encargados del día elegido (ver CheckInPage).
   useEffect(() => {
     let cancelled = false
-    supabase.from('daily_coordinator').select('name').eq('session_date', selectedStr).maybeSingle()
-      .then(({ data }) => { if (!cancelled) setCoordinatorName(data?.name ?? '') })
-    supabase.from('daily_computer_operator').select('name').eq('session_date', selectedStr).maybeSingle()
-      .then(({ data }) => { if (!cancelled) setComputerOperatorName(data?.name ?? '') })
-    supabase.from('daily_corderitos_lead').select('name').eq('session_date', selectedStr).maybeSingle()
-      .then(({ data }) => { if (!cancelled) setCorderitosLeadName(data?.name ?? '') })
+    fetchStaff(selectedStr).then((s) => { if (!cancelled) setStaff(s) })
     return () => { cancelled = true }
   }, [selectedStr])
 
   const fetchLive = useCallback(async () => {
+    const day = format(selectedDate, 'yyyy-MM-dd')
     const { data } = await supabase
       .from('attendance')
-      .select('id, category, badge_number, checked_in_at, checked_out_at, children(full_name, parents(full_name))')
-      .eq('session_date', format(selectedDate, 'yyyy-MM-dd'))
+      .select('id, child_id, category, badge_number, checked_in_at, children(full_name, parents(full_name))')
+      .eq('session_date', day)
       .is('deleted_at', null)
       .order('checked_in_at', { ascending: true })
-    setLiveRecords((data as LiveRecord[]) ?? [])
+    let rows = (data as LiveRecord[] | null) ?? []
+    if (rows.length) {
+      const { data: before } = await supabase.from('attendance').select('child_id')
+        .in('child_id', rows.map((r) => r.child_id)).lt('session_date', day).is('deleted_at', null)
+      if (before) {
+        const returning = new Set(before.map((b) => b.child_id))
+        rows = rows.map((r) => ({ ...r, first_time: !returning.has(r.child_id) }))
+      }
+    }
+    setLiveRecords(rows)
     setLastRefresh(new Date())
     setLoadingLive(false)
   }, [selectedDate])
@@ -115,24 +123,37 @@ export default function ReportsPage() {
   // ver absenceUtils.ts.
   const fetchAbsences = useCallback(async () => {
     const [{ data: children }, { data: attendance }] = await Promise.all([
-      supabase.from('children').select('id, full_name, created_at, parents(full_name, phone)').is('deleted_at', null),
+      supabase.from('children').select('id, full_name, category, created_at, parents(full_name, phone)').is('deleted_at', null),
       supabase.from('attendance').select('child_id, session_date').is('deleted_at', null),
     ])
     if (!children || !attendance) return
     const lastSeen = new Map<string, string>()
+    const firstSeen = new Map<string, string>()
+    const visits = new Map<string, number>()
     const dates = new Set<string>()
     for (const row of attendance as { child_id: string; session_date: string }[]) {
       dates.add(row.session_date)
       const cur = lastSeen.get(row.child_id)
       if (!cur || row.session_date > cur) lastSeen.set(row.child_id, row.session_date)
+      const first = firstSeen.get(row.child_id)
+      if (!first || row.session_date < first) firstSeen.set(row.child_id, row.session_date)
+      visits.set(row.child_id, (visits.get(row.child_id) ?? 0) + 1)
     }
+    // Nuevos: su primera vez fue en los últimos 30 días.
+    const since = format(subDays(new Date(), 30), 'yyyy-MM-dd')
+    const fresh: NewChild[] = []
     const results: AbsentChild[] = []
     for (const c of children as unknown as (RosterChild & { created_at: string })[]) {
+      const first = firstSeen.get(c.id)
+      if (first && first >= since) {
+        fresh.push({ id: c.id, full_name: c.full_name, category: c.category, parentName: c.parents?.full_name ?? 'Sin responsable', parentPhone: c.parents?.phone ?? null, firstSeen: first, visits: visits.get(c.id) ?? 0 })
+      }
       const info = computeAbsence(c.created_at, lastSeen.get(c.id) ?? null, [...dates])
       if (!info.tier) continue
       results.push({ id: c.id, full_name: c.full_name, parentName: c.parents?.full_name ?? 'Sin responsable', parentPhone: c.parents?.phone ?? null, missed: info.missed, tier: info.tier })
     }
     setAbsentChildren(results.sort((a, b) => b.missed - a.missed))
+    setNewChildren(fresh.sort((a, b) => b.firstSeen.localeCompare(a.firstSeen) || a.full_name.localeCompare(b.full_name)))
   }, [])
 
   const fetchMissingBirthDate = useCallback(async () => {
@@ -226,9 +247,7 @@ export default function ReportsPage() {
               total={total}
               avgWeek={avgWeek}
               lastRefresh={lastRefresh}
-              coordinatorName={coordinatorName}
-              operatorName={computerOperatorName}
-              corderitosLeadName={corderitosLeadName}
+              staff={staff}
               onChanged={fetchLive}
             />
           )}
@@ -236,16 +255,14 @@ export default function ReportsPage() {
             <TrendsTab weeks={weekHistory} loading={loadingHistory} rangeFrom={rangeFrom} rangeTo={rangeTo} setRangeFrom={setRangeFrom} setRangeTo={setRangeTo} />
           )}
           {tab === 'seguimiento' && (
-            <FollowUpTab absent={absentChildren} graduating={graduatingChildren} medical={medicalChildren} missingBirthDate={missingBirthDateCount} />
+            <FollowUpTab absent={absentChildren} fresh={newChildren} graduating={graduatingChildren} medical={medicalChildren} missingBirthDate={missingBirthDateCount} />
           )}
           {tab === 'exportar' && (
             <ExportTab
               selectedDate={selectedDate}
               byCategory={byCategory}
               total={total}
-              coordinatorName={coordinatorName}
-              operatorName={computerOperatorName}
-              corderitosLeadName={corderitosLeadName}
+              staff={staff}
               weeks={weekHistory}
               rangeFrom={rangeFrom}
               rangeTo={rangeTo}
@@ -261,16 +278,14 @@ export default function ReportsPage() {
 
 // ─── Del día ──────────────────────────────────────────────────────────────────
 
-function DayTab({ records, loading, byCategory, total, avgWeek, lastRefresh, coordinatorName, operatorName, corderitosLeadName, onChanged }: {
+function DayTab({ records, loading, byCategory, total, avgWeek, lastRefresh, staff, onChanged }: {
   records: LiveRecord[]
   loading: boolean
   byCategory: CategoryCount
   total: number
   avgWeek: number
   lastRefresh: Date
-  coordinatorName: string
-  operatorName: string
-  corderitosLeadName: string
+  staff: Staff
   onChanged: () => void
 }) {
   const [filter, setFilter] = useState<Category | 'all'>('all')
@@ -308,11 +323,11 @@ function DayTab({ records, loading, byCategory, total, avgWeek, lastRefresh, coo
         </Kpi>
       </div>
 
-      {(coordinatorName || operatorName || corderitosLeadName) && (
+      {(staff.coordinator || staff.computer || staff.corderitos) && (
         <div className="flex flex-wrap gap-2">
-          {coordinatorName && <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white border border-gray-200 text-sm font-medium text-gray-700"><User size={14} className="text-indigo-500" /> {coordinatorName}</span>}
-          {operatorName && <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white border border-gray-200 text-sm font-medium text-gray-700"><Monitor size={14} className="text-indigo-500" /> {operatorName}</span>}
-          {corderitosLeadName && <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white border border-gray-200 text-sm font-medium text-gray-700"><Baby size={14} className="text-indigo-500" /> Corderitos: {corderitosLeadName}</span>}
+          {staff.coordinator && <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white border border-gray-200 text-sm font-medium text-gray-700"><User size={14} className="text-indigo-500" /> {staff.coordinator}</span>}
+          {staff.computer && <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white border border-gray-200 text-sm font-medium text-gray-700"><Monitor size={14} className="text-indigo-500" /> {staff.computer}</span>}
+          {staff.corderitos && <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white border border-gray-200 text-sm font-medium text-gray-700"><Baby size={14} className="text-indigo-500" /> Corderitos: {staff.corderitos}</span>}
         </div>
       )}
 
@@ -377,7 +392,7 @@ function DayTab({ records, loading, byCategory, total, avgWeek, lastRefresh, coo
                   </span>
                   <span className="shrink-0 text-right">
                     <span className="block text-xs text-gray-500 tabular-nums">{format(new Date(r.checked_in_at), 'HH:mm')}</span>
-                    <span className={`inline-block mt-0.5 text-[11px] font-semibold rounded-full px-2 py-0.5 ${r.checked_out_at ? 'bg-gray-100 text-gray-500' : 'bg-emerald-50 text-emerald-700'}`}>{r.checked_out_at ? 'Salió' : 'Registrado'}</span>
+                    {r.first_time && <span className="inline-block mt-0.5 text-[11px] font-semibold rounded-full px-2 py-0.5 bg-violet-50 text-violet-700">Primera vez</span>}
                   </span>
                 </motion.button>
               )
@@ -628,12 +643,13 @@ function Ranking({ rangeFrom, rangeTo, setRangeFrom, setRangeTo }: { rangeFrom: 
 
 // ─── Seguimiento ──────────────────────────────────────────────────────────────
 
-function FollowUpTab({ absent, graduating, medical, missingBirthDate }: { absent: AbsentChild[]; graduating: RosterChild[]; medical: MedicalChild[]; missingBirthDate: number }) {
-  const [view, setView] = useState<'faltas' | 'graduar' | 'medicas'>('faltas')
+function FollowUpTab({ absent, fresh, graduating, medical, missingBirthDate }: { absent: AbsentChild[]; fresh: NewChild[]; graduating: RosterChild[]; medical: MedicalChild[]; missingBirthDate: number }) {
+  const [view, setView] = useState<'faltas' | 'nuevos' | 'graduar' | 'medicas'>('faltas')
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
         <FollowCard active={view === 'faltas'} onClick={() => setView('faltas')} icon={Clock} tone="red" count={absent.length} label="Hace rato que no vienen" />
+        <FollowCard active={view === 'nuevos'} onClick={() => setView('nuevos')} icon={Sprout} tone="violet" count={fresh.length} label="Nuevos este mes" />
         <FollowCard active={view === 'graduar'} onClick={() => setView('graduar')} icon={PartyPopper} tone="amber" count={graduating.length} label="Listos para subir de grupo" />
         <FollowCard active={view === 'medicas'} onClick={() => setView('medicas')} icon={AlertTriangle} tone="rose" count={medical.length} label="Con alergias o notas médicas" />
       </div>
@@ -657,6 +673,26 @@ function FollowUpTab({ absent, graduating, medical, missingBirthDate }: { absent
                     <span className="text-sm font-bold text-gray-500 shrink-0 tabular-nums">{c.missed} domingos</span>
                   </div>
                   <p className="text-sm text-gray-600">{absenceMessage({ missed: c.missed, lastSeen: null, tier: c.tier })}</p>
+                  <div className="flex items-center justify-between gap-2 pt-1 text-sm">
+                    <span className="text-gray-500 truncate">{c.parentName}</span>
+                    {c.parentPhone && <a href={`tel:${c.parentPhone}`} className="inline-flex items-center gap-1 font-semibold text-indigo-700 shrink-0"><Phone size={13} /> {c.parentPhone}</a>}
+                  </div>
+                </motion.div>
+              ))}
+            </motion.div>
+          ))}
+          {view === 'nuevos' && (fresh.length === 0 ? <EmptyState icon={Sprout} text="No han llegado niños nuevos en los últimos 30 días." /> : (
+            <motion.div initial="hidden" animate="show" className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-2">
+              {fresh.map((c, i) => (
+                <motion.div key={c.id} variants={itemVariants} custom={i} className="rounded-2xl bg-white border border-violet-200 p-4 space-y-1.5">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <p className="font-display font-bold text-lg text-gray-900 truncate">{c.full_name}</p>
+                    {c.category && <span className={`text-xs font-semibold px-2 py-0.5 rounded-full shrink-0 ${groupOf(c.category).avatar}`}>{CATEGORY_LABELS[c.category]}</span>}
+                  </div>
+                  <p className="text-sm text-gray-600 first-letter:uppercase">
+                    Vino por primera vez el {format(new Date(c.firstSeen + 'T12:00:00'), "d 'de' MMMM", { locale: es })}
+                    {c.visits > 1 ? ` y ya lleva ${c.visits} visitas.` : '.'}
+                  </p>
                   <div className="flex items-center justify-between gap-2 pt-1 text-sm">
                     <span className="text-gray-500 truncate">{c.parentName}</span>
                     {c.parentPhone && <a href={`tel:${c.parentPhone}`} className="inline-flex items-center gap-1 font-semibold text-indigo-700 shrink-0"><Phone size={13} /> {c.parentPhone}</a>}
@@ -703,11 +739,12 @@ function FollowUpTab({ absent, graduating, medical, missingBirthDate }: { absent
   )
 }
 
-function FollowCard({ active, onClick, icon: Icon, tone, count, label }: { active: boolean; onClick: () => void; icon: typeof Clock; tone: 'red' | 'amber' | 'rose'; count: number; label: string }) {
+function FollowCard({ active, onClick, icon: Icon, tone, count, label }: { active: boolean; onClick: () => void; icon: typeof Clock; tone: 'red' | 'amber' | 'rose' | 'violet'; count: number; label: string }) {
   const tones = {
     red: { bg: 'bg-red-50', icon: 'text-red-600', ring: 'ring-red-300' },
     amber: { bg: 'bg-amber-50', icon: 'text-amber-600', ring: 'ring-amber-300' },
     rose: { bg: 'bg-rose-50', icon: 'text-rose-600', ring: 'ring-rose-300' },
+    violet: { bg: 'bg-violet-50', icon: 'text-violet-600', ring: 'ring-violet-300' },
   }[tone]
   return (
     <motion.button whileTap={{ scale: 0.98 }} onClick={onClick}
@@ -723,13 +760,11 @@ function FollowCard({ active, onClick, icon: Icon, tone, count, label }: { activ
 
 // ─── Exportar ─────────────────────────────────────────────────────────────────
 
-function ExportTab({ selectedDate, byCategory, total, coordinatorName, operatorName, corderitosLeadName, weeks, rangeFrom, rangeTo, setRangeFrom, setRangeTo }: {
+function ExportTab({ selectedDate, byCategory, total, staff, weeks, rangeFrom, rangeTo, setRangeFrom, setRangeTo }: {
   selectedDate: Date
   byCategory: CategoryCount
   total: number
-  coordinatorName: string
-  operatorName: string
-  corderitosLeadName: string
+  staff: Staff
   weeks: WeekRow[]
   rangeFrom: string
   rangeTo: string
@@ -740,13 +775,13 @@ function ExportTab({ selectedDate, byCategory, total, coordinatorName, operatorN
 
   async function rangeRows() {
     if (!rangeFrom || !rangeTo || rangeFrom > rangeTo) throw new Error('Elige un rango de fechas válido.')
-    const [{ rows }, staffing] = await Promise.all([fetchAttendanceRange(rangeFrom, rangeTo), fetchDailyStaffing(rangeFrom, rangeTo)])
+    const [{ rows }, staffing] = await Promise.all([fetchAttendanceRange(rangeFrom, rangeTo), fetchStaffRange(rangeFrom, rangeTo)])
     if (rows.length === 0) throw new Error('No hay registros en ese rango.')
     return { rows, staffing }
   }
 
   async function dayPDF(): Promise<Blob> {
-    const [{ rows }, staffing] = await Promise.all([fetchAttendanceRange(selectedStr, selectedStr), fetchDailyStaffing(selectedStr, selectedStr)])
+    const [{ rows }, staffing] = await Promise.all([fetchAttendanceRange(selectedStr, selectedStr), fetchStaffRange(selectedStr, selectedStr)])
     return exportRangePDF(rows, selectedStr, selectedStr, staffing)
   }
 
@@ -757,9 +792,9 @@ function ExportTab({ selectedDate, byCategory, total, coordinatorName, operatorN
   }
 
   const note = [
-    coordinatorName && `Generado por: ${coordinatorName}`,
-    operatorName && `Compu: ${operatorName}`,
-    corderitosLeadName && `Corderitos: ${corderitosLeadName}`,
+    staff.coordinator && `Generado por: ${staff.coordinator}`,
+    staff.computer && `Compu: ${staff.computer}`,
+    staff.corderitos && `Corderitos: ${staff.corderitos}`,
   ].filter(Boolean).join(' · ') || undefined
 
   return (

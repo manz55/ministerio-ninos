@@ -2,11 +2,9 @@ import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { getAgeLabel, getCategoryFromBirthDate } from '../../lib/categoryUtils'
 import { CATEGORY_LABELS, GUARDIAN_RELATIONSHIP_LABELS, isCorderitos, type Category, type GuardianRelationship, type ChildPrefill } from '../../types/domain'
-import { PhotoCapture } from '../../components/ui/PhotoCapture'
-import { AssignedMaestroField } from '../../components/ui/AssignedMaestroField'
 import { Field, ChoiceChips, FormError, INPUT } from '../../components/ui/form'
 import { groupOf } from '../checkin/shared'
-import type { ChildDetail, ChildFormData } from './data'
+import type { ChildFormData } from './data'
 
 /**
  * Formulario de niño, el mismo para agregar uno nuevo y para editar.
@@ -14,8 +12,12 @@ import type { ChildDetail, ChildFormData } from './data'
  * fecha: abrir y guardar sin tocar nada nunca mueve a un niño de grupo
  * (antes eso pasaba y reacomodó a muchos de golpe).
  */
+/** Lo que el formulario necesita de un niño ya existente (sirve tanto el de
+ * Familias como el de Registro). */
+type EditableChild = Pick<ChildFormData, 'full_name' | 'birth_date' | 'category' | 'allergies' | 'medical_notes' | 'guardian_relationship' | 'comments' | 'toilet_trained'>
+
 export function ChildForm({ child, prefill, submitLabel, onSubmit, onCancel }: {
-  child?: ChildDetail
+  child?: EditableChild
   prefill?: ChildPrefill | null
   submitLabel: string
   onSubmit: (data: ChildFormData) => Promise<string | null>
@@ -30,9 +32,6 @@ export function ChildForm({ child, prefill, submitLabel, onSubmit, onCancel }: {
   const [relationship, setRelationship] = useState<GuardianRelationship | ''>(child?.guardian_relationship ?? prefill?.guardian_relationship ?? '')
   const [comments, setComments] = useState(child?.comments ?? prefill?.comments ?? '')
   const [toiletTrained, setToiletTrained] = useState<boolean | null>(child?.toilet_trained ?? prefill?.toilet_trained ?? null)
-  const [maestroId, setMaestroId] = useState<string | null>(child?.assigned_maestro_id ?? null)
-  const [maestroName, setMaestroName] = useState<string | null>(child?.assigned_maestro_name ?? null)
-  const [photoBlob, setPhotoBlob] = useState<Blob | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -61,9 +60,6 @@ export function ChildForm({ child, prefill, submitLabel, onSubmit, onCancel }: {
       guardian_relationship: relationship || null,
       comments: comments.trim() || null,
       toilet_trained: toiletTrained,
-      assigned_maestro_id: maestroId,
-      assigned_maestro_name: maestroName,
-      photoBlob,
     })
     setSaving(false)
     if (err) setError(err)
@@ -71,10 +67,6 @@ export function ChildForm({ child, prefill, submitLabel, onSubmit, onCancel }: {
 
   return (
     <form onSubmit={submit} className="space-y-5">
-      <div className="flex items-center gap-4">
-        <PhotoCapture existingPath={child?.photo_url} onFileReady={setPhotoBlob} size={76} />
-      </div>
-
       <Field label="Nombre completo" required>
         <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nombre y apellidos" className={INPUT} autoFocus={isNew} />
       </Field>
@@ -97,11 +89,10 @@ export function ChildForm({ child, prefill, submitLabel, onSubmit, onCancel }: {
       )}
 
       {isCorderitos(effective) && (
-        <div className="space-y-4 rounded-3xl bg-sky-50/60 p-4">
+        <div className="rounded-3xl bg-sky-50/60 p-4">
           <Field label="¿Ya va solo al baño?">
             <ChoiceChips value={toiletTrained} onChange={setToiletTrained} options={[{ value: true, label: 'Sí' }, { value: false, label: 'No / pañal' }, { value: null, label: 'No sé' }]} />
           </Field>
-          <AssignedMaestroField value={maestroId} onChange={setMaestroId} freeTextValue={maestroName} onFreeTextChange={setMaestroName} compact />
         </div>
       )}
 

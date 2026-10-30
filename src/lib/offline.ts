@@ -1,5 +1,4 @@
 import { supabase, isNetworkError } from './supabase'
-import { PHOTO_BUCKET } from './photo'
 import { CATEGORY_LABELS, type Category, type TeamColor } from '../types/domain'
 
 // ─── Modo sin conexión ────────────────────────────────────────────────────────
@@ -23,8 +22,6 @@ export interface ChildInsert {
   guardian_relationship: string | null
   comments: string | null
   toilet_trained: boolean | null
-  assigned_maestro_id: string | null
-  assigned_maestro_name: string | null
 }
 export interface AttendanceInsert {
   id: string
@@ -40,9 +37,6 @@ export interface AttendanceInsert {
 export interface FamilyPayload {
   parent: ParentInsert
   children: ChildInsert[]
-  parentPhoto: Blob | null
-  /** Same order as `children`. */
-  childPhotos: (Blob | null)[]
 }
 
 type OutboxItem =
@@ -142,35 +136,17 @@ export function markOnline(online: boolean) { if (state.online !== online) setSt
 
 // ─── Guardado real (mismo código en línea y al sincronizar) ───────────────────
 
-/** Like photo.ts's uploadPhoto, but a network failure throws (so the whole
- * family waits in the queue with its photo) instead of quietly saving the
- * family without it. Any other storage error just skips the photo. */
-async function uploadPhotoOrThrow(path: string, blob: Blob | null): Promise<string | null> {
-  if (!blob) return null
-  const { error } = await supabase.storage.from(PHOTO_BUCKET).upload(path, blob, { contentType: 'image/jpeg', upsert: true })
-  if (!error) return path
-  if (error.name === 'StorageUnknownError' || isNetworkError(error)) throw error
-  return null
-}
-
-/** Sube una familia completa. Seguro de repetir. Lanza el error si falla. */
-export async function uploadFamily(p: FamilyPayload): Promise<{ parentPhotoPath: string | null; childPhotoPaths: (string | null)[] }> {
-  // Las fotos van primero: así el photo_url viaja en el mismo insert y no
-  // hace falta un update aparte (que RLS solo le permite a coordinadores).
-  const parentPhotoPath = await uploadPhotoOrThrow(`parents/${p.parent.id}.jpg`, p.parentPhoto)
-  const childPhotoPaths: (string | null)[] = []
-  for (let i = 0; i < p.children.length; i++) {
-    childPhotoPaths.push(await uploadPhotoOrThrow(`children/${p.children[i].id}.jpg`, p.childPhotos[i] ?? null))
-  }
-
-  const { error: parentErr } = await supabase.from('parents').insert({ ...p.parent, photo_url: parentPhotoPath })
+/** Sube una familia completa. Seguro de repetir. Lanza el error si falla.
+ * (Familias que quedaron en cola con una versión vieja pueden traer campos de
+ * fotos: se ignoran.) */
+export async function uploadFamily(p: FamilyPayload): Promise<void> {
+  const { error: parentErr } = await supabase.from('parents').insert(p.parent)
   if (parentErr && !isPkeyConflict(parentErr)) throw parentErr
 
-  for (let i = 0; i < p.children.length; i++) {
-    const { error } = await supabase.from('children').insert({ ...p.children[i], photo_url: childPhotoPaths[i] })
+  for (const child of p.children) {
+    const { error } = await supabase.from('children').insert(child)
     if (error && !isPkeyConflict(error)) throw error
   }
-  return { parentPhotoPath, childPhotoPaths }
 }
 
 type AttendanceResult = { ok: true; notice?: string } | { ok: false; error: PgError }
@@ -219,17 +195,18 @@ export function newId(): string {
  * `queued: true` significa que quedó guardada solo en este dispositivo.
  * Errores del servidor (no de red) se lanzan para que la pantalla los muestre.
  */
-export async function saveFamily(p: FamilyPayload): Promise<{ queued: boolean; parentPhotoPath: string | null; childPhotoPaths: (string | null)[] }> {
+export async function saveFamily(p: FamilyPayload): Promise<{ queued: boolean }> {
   if (navigator.onLine) {
     try {
-      return { queued: false, ...(await uploadFamily(p)) }
+      await uploadFamily({ parent: p.parent, children: p.children })
+      return { queued: false }
     } catch (err) {
       if (!isNetworkError(err as PgError)) throw err
     }
   }
   await put({ id: p.parent.id, kind: 'family', createdAt: Date.now(), payload: p })
   await refreshPending()
-  return { queued: true, parentPhotoPath: null, childPhotoPaths: p.children.map(() => null) }
+  return { queued: true }
 }
 
 /** Igual que saveFamily pero para un check-in. Devuelve el error del

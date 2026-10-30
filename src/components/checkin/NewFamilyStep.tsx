@@ -6,8 +6,6 @@ import { saveFamily, newId, type ChildInsert } from '../../lib/offline'
 import { createChildSearcher, searchChildrenSplit, findBySurname, type SearchableChild } from '../../lib/fuzzySearch'
 import { CategoryBadge } from '../ui/CategoryBadge'
 import { PageHeader } from '../ui/PageHeader'
-import { AssignedMaestroField } from '../ui/AssignedMaestroField'
-import { PhotoCapture } from '../ui/PhotoCapture'
 import { GUARDIAN_RELATIONSHIP_LABELS, isCorderitos, type Category, type GuardianRelationship, type ParentRow, type ChildRow, type ChildPrefill } from '../../types/domain'
 
 interface ChildDraft {
@@ -19,9 +17,6 @@ interface ChildDraft {
   guardian_relationship: GuardianRelationship | ''
   comments: string
   toilet_trained: boolean | null
-  assigned_maestro_id: string | null
-  assigned_maestro_name: string
-  photoBlob: Blob | null
 }
 
 interface Props {
@@ -41,7 +36,7 @@ interface Props {
 function newChild(key: string): ChildDraft {
   return {
     key, full_name: '', birth_date: '', allergies: '', medical_notes: '',
-    guardian_relationship: '', comments: '', toilet_trained: null, assigned_maestro_id: null, assigned_maestro_name: '', photoBlob: null,
+    guardian_relationship: '', comments: '', toilet_trained: null,
   }
 }
 
@@ -58,7 +53,6 @@ export function NewFamilyStep({
 }: Props) {
   const [parentName, setParentName] = useState(prefillName)
   const [parentPhone, setParentPhone] = useState(prefillPhone)
-  const [parentPhotoBlob, setParentPhotoBlob] = useState<Blob | null>(null)
   const [children, setChildren] = useState<ChildDraft[]>([
     { ...newChild('0'), full_name: prefillChildName, birth_date: prefillChildBirthDate, comments: prefillChildComments },
   ])
@@ -146,18 +140,10 @@ export function NewFamilyStep({
       guardian_relationship: c.guardian_relationship || null,
       comments: c.comments.trim() || null,
       toilet_trained: c.toilet_trained,
-      assigned_maestro_id: c.assigned_maestro_id,
-      assigned_maestro_name: c.assigned_maestro_name.trim() || null,
     }))
 
-    let saved: Awaited<ReturnType<typeof saveFamily>>
     try {
-      saved = await saveFamily({
-        parent,
-        children: childRows,
-        parentPhoto: parentPhotoBlob,
-        childPhotos: children.map((c) => c.photoBlob),
-      })
+      await saveFamily({ parent, children: childRows })
     } catch {
       setErrors({ global: 'Error al guardar la familia. Intenta de nuevo.' })
       setSaving(false)
@@ -169,11 +155,11 @@ export function NewFamilyStep({
     const newParent: ParentRow = {
       ...parent,
       created_at: createdAt,
-      photo_url: saved.parentPhotoPath,
-      children: childRows.map((c, i) => ({
+      photo_url: null,
+      children: childRows.map((c) => ({
         ...c,
         created_at: createdAt,
-        photo_url: saved.childPhotoPaths[i],
+        photo_url: null,
         category: c.category as Category | null,
         attendance: [],
       })) as unknown as ChildRow[],
@@ -189,8 +175,6 @@ export function NewFamilyStep({
       {/* ── Padre / madre ── */}
       <section className="bg-white rounded-3xl border border-gray-200/70 shadow-sm p-5 space-y-4">
         <h3 className="text-xl font-bold text-gray-900">Padre, madre o responsable</h3>
-
-        <PhotoCapture onFileReady={setParentPhotoBlob} />
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1.5">
@@ -262,8 +246,6 @@ export function NewFamilyStep({
                   </button>
                 )}
               </div>
-
-              <PhotoCapture onFileReady={(blob) => updateChild(child.key, 'photoBlob', blob)} />
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">
@@ -386,15 +368,6 @@ export function NewFamilyStep({
                     ))}
                   </div>
                 </div>
-              )}
-
-              {isCorderitos(category) && (
-                <AssignedMaestroField
-                  value={child.assigned_maestro_id}
-                  onChange={(id) => updateChild(child.key, 'assigned_maestro_id', id)}
-                  freeTextValue={child.assigned_maestro_name || null}
-                  onFreeTextChange={(name) => updateChild(child.key, 'assigned_maestro_name', name ?? '')}
-                />
               )}
 
               <div>

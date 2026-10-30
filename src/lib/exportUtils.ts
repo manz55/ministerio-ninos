@@ -2,6 +2,7 @@ import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { supabase } from './supabase'
 import { CATEGORY_LABELS, TEAM_COLOR_LABELS, type Category, type TeamColor } from '../types/domain'
+import type { Staff } from './dailyStaff'
 
 export type RangeAttendanceRow = {
   session_date: string
@@ -29,31 +30,6 @@ export async function fetchAttendanceRange(from: string, to: string) {
   return { rows: (data as unknown as RangeAttendanceRow[]) ?? [], total: count ?? 0 }
 }
 
-// Who was "encargado" / "encargado de computadora" on each day of the range
-// — both can change day to day, so a single header meta-row (like the
-// single-day export uses) wouldn't be accurate across a multi-day range.
-export type DailyStaffing = Record<string, { coordinator: string; computerOperator: string; corderitosLead: string }>
-
-export async function fetchDailyStaffing(from: string, to: string): Promise<DailyStaffing> {
-  const [coordinators, operators, corderitos] = await Promise.all([
-    supabase.from('daily_coordinator').select('session_date, name').gte('session_date', from).lte('session_date', to),
-    supabase.from('daily_computer_operator').select('session_date, name').gte('session_date', from).lte('session_date', to),
-    supabase.from('daily_corderitos_lead').select('session_date, name').gte('session_date', from).lte('session_date', to),
-  ])
-  const empty = { coordinator: '', computerOperator: '', corderitosLead: '' }
-  const staffing: DailyStaffing = {}
-  for (const row of coordinators.data ?? []) {
-    staffing[row.session_date] = { ...(staffing[row.session_date] ?? empty), coordinator: row.name }
-  }
-  for (const row of operators.data ?? []) {
-    staffing[row.session_date] = { ...(staffing[row.session_date] ?? empty), computerOperator: row.name }
-  }
-  for (const row of corderitos.data ?? []) {
-    staffing[row.session_date] = { ...(staffing[row.session_date] ?? empty), corderitosLead: row.name }
-  }
-  return staffing
-}
-
 export function downloadBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
@@ -75,7 +51,7 @@ export function toCSV(rows: unknown[][]): string {
 
 // Returns the Blob instead of saving directly (mirrors exportRangePDF) so
 // callers can also hand it to the receipt-printer share/download animation.
-export function exportRangeCSV(rows: RangeAttendanceRow[], staffing: DailyStaffing = {}): Blob {
+export function exportRangeCSV(rows: RangeAttendanceRow[], staffing: Record<string, Staff> = {}): Blob {
   const headers = ['Fecha', 'Nombre niño', 'Padre/Madre', 'Categoría', 'Equipo', 'Gafete', 'Hora de entrada', 'Encargado', 'Encargado de computadora', 'Encargado de Corderitos']
   const body = rows.map((r) => [
     r.session_date,
@@ -86,8 +62,8 @@ export function exportRangeCSV(rows: RangeAttendanceRow[], staffing: DailyStaffi
     r.badge_number ?? '',
     format(new Date(r.checked_in_at), 'HH:mm'),
     staffing[r.session_date]?.coordinator ?? '',
-    staffing[r.session_date]?.computerOperator ?? '',
-    staffing[r.session_date]?.corderitosLead ?? '',
+    staffing[r.session_date]?.computer ?? '',
+    staffing[r.session_date]?.corderitos ?? '',
   ])
   return new Blob(['﻿' + toCSV([headers, ...body])], { type: 'text/csv;charset=utf-8;' })
 }
@@ -98,7 +74,7 @@ export function exportRangeCSV(rows: RangeAttendanceRow[], staffing: DailyStaffi
 // ~200KB nobody may ever use. Returns the Blob instead of saving directly so
 // callers can also hand it to something other than the browser's save
 // dialog (e.g. the receipt-printer download animation).
-export async function exportRangePDF(rows: RangeAttendanceRow[], from: string, to: string, staffing: DailyStaffing = {}): Promise<Blob> {
+export async function exportRangePDF(rows: RangeAttendanceRow[], from: string, to: string, staffing: Record<string, Staff> = {}): Promise<Blob> {
   const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([
     import('jspdf'),
     import('jspdf-autotable'),
@@ -124,8 +100,8 @@ export async function exportRangePDF(rows: RangeAttendanceRow[], from: string, t
       TEAM_COLOR_LABELS[r.team_color] ?? r.team_color,
       r.badge_number ? String(r.badge_number) : '—',
       staffing[r.session_date]?.coordinator || '—',
-      staffing[r.session_date]?.computerOperator || '—',
-      staffing[r.session_date]?.corderitosLead || '—',
+      staffing[r.session_date]?.computer || '—',
+      staffing[r.session_date]?.corderitos || '—',
     ]),
     styles: { fontSize: 8 },
     headStyles: { fillColor: [79, 70, 229] },

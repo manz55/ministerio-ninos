@@ -1,9 +1,8 @@
 import { useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { format } from 'date-fns'
-import { ChevronDown, CloudOff, X, Radio } from 'lucide-react'
-import { supabase } from '../../lib/supabase'
-import { CATEGORY_LABELS, isCorderitos, type Category } from '../../types/domain'
+import { ChevronDown, CloudOff, Radio } from 'lucide-react'
+import { CATEGORY_LABELS, type Category } from '../../types/domain'
 import { AnimatedNumber } from '../../components/motion'
 import { EASE_OUT } from '../../components/motion/presets'
 import { GROUPS, type TodayRecord } from './shared'
@@ -18,17 +17,11 @@ export function TodayBoard({
   onOpen,
   onlyCategory,
   defaultOpen,
-  isAdmin,
-  userId,
-  onTeacherChanged,
 }: {
   records: TodayRecord[]
   onOpen: (childId: string) => void
   onlyCategory?: Category | null
   defaultOpen: boolean
-  isAdmin: boolean
-  userId: string | null
-  onTeacherChanged: (recordId: string, teacherId: string | null, teacherName: string | null) => void
 }) {
   const groups = GROUPS.filter((g) => !onlyCategory || g.category === onlyCategory)
   const visible = onlyCategory ? records.filter((r) => r.category === onlyCategory) : records
@@ -103,7 +96,7 @@ export function TodayBoard({
                             exit={{ opacity: 0, height: 0 }}
                             transition={{ duration: 0.9, ease: EASE_OUT }}
                           >
-                            <RecordRow rec={rec} onOpen={onOpen} isAdmin={isAdmin} userId={userId} onTeacherChanged={onTeacherChanged} />
+                            <RecordRow rec={rec} onOpen={onOpen} />
                           </motion.li>
                         ))}
                       </AnimatePresence>
@@ -119,15 +112,7 @@ export function TodayBoard({
   )
 }
 
-function RecordRow({
-  rec, onOpen, isAdmin, userId, onTeacherChanged,
-}: {
-  rec: TodayRecord
-  onOpen: (childId: string) => void
-  isAdmin: boolean
-  userId: string | null
-  onTeacherChanged: (recordId: string, teacherId: string | null, teacherName: string | null) => void
-}) {
+function RecordRow({ rec, onOpen }: { rec: TodayRecord; onOpen: (childId: string) => void }) {
   const hasAlert = !!(rec.children.allergies || rec.children.medical_notes)
   return (
     <div className="px-4 py-2.5">
@@ -149,99 +134,10 @@ function RecordRow({
           <span className="shrink-0 inline-flex items-center gap-1 text-[11px] font-semibold text-amber-800 bg-amber-100 rounded-full px-2 py-0.5" title="Guardado en este dispositivo. Se sube solo cuando vuelva el internet">
             <CloudOff size={11} /> Sin subir
           </span>
-        ) : rec.checked_out_at ? (
-          <span className="shrink-0 text-[11px] font-semibold text-gray-500 bg-gray-100 rounded-full px-2 py-0.5">Salió</span>
-        ) : (
-          <span className="shrink-0 text-[11px] font-semibold text-emerald-700 bg-emerald-50 rounded-full px-2 py-0.5">Registrado</span>
-        )}
+        ) : rec.first_time ? (
+          <span className="shrink-0 text-[11px] font-semibold text-violet-700 bg-violet-50 rounded-full px-2 py-0.5">Primera vez</span>
+        ) : null}
       </button>
-      {isCorderitos(rec.category) && !rec.pending && (
-        <div className="mt-1.5 pl-[3.75rem]">
-          <AssignedTeacherControl
-            attendanceId={rec.id}
-            assignedId={rec.assigned_teacher_id}
-            assignedName={rec.assigned_teacher?.full_name ?? null}
-            canChange={!rec.assigned_teacher_id || rec.assigned_teacher_id === userId || isAdmin}
-            onChanged={(id, name) => onTeacherChanged(rec.id, id, name)}
-          />
-        </div>
-      )}
-    </div>
-  )
-}
-
-// Who's personally responsible for a corderito right now (e.g. taking them
-// to the bathroom) — restricted to corderitos categories only, since that's
-// the age group where one adult needs to be directly accountable.
-function AssignedTeacherControl({
-  attendanceId, assignedId, assignedName, canChange, onChanged,
-}: {
-  attendanceId: string
-  assignedId: string | null
-  assignedName: string | null
-  canChange: boolean
-  onChanged: (teacherId: string | null, teacherName: string | null) => void
-}) {
-  const [teachers, setTeachers] = useState<{ id: string; full_name: string }[] | null>(null)
-  const [open, setOpen] = useState(false)
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    if (!open || teachers) return
-    supabase.from('profiles').select('id, full_name').eq('active', true).order('full_name')
-      .then(({ data }) => setTeachers((data as { id: string; full_name: string }[]) ?? []))
-  }, [open, teachers])
-
-  async function assign(teacherId: string) {
-    setSaving(true)
-    setError(null)
-    const { error: err } = await supabase.rpc('assign_attendance_teacher', { p_attendance_id: attendanceId, p_teacher_id: teacherId || null })
-    setSaving(false)
-    if (!err) {
-      onChanged(teacherId || null, teachers?.find((t) => t.id === teacherId)?.full_name ?? null)
-      setOpen(false)
-    } else {
-      setError('Solo el maestro asignado o un coordinador puede cambiarlo.')
-    }
-  }
-
-  if (!open) {
-    return (
-      <button
-        type="button"
-        onClick={() => canChange && setOpen(true)}
-        disabled={!canChange}
-        title={!canChange ? 'Solo el maestro asignado o un coordinador puede cambiarlo' : undefined}
-        className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold transition-colors ${
-          assignedName
-            ? `bg-indigo-50 text-indigo-700 ${canChange ? 'hover:bg-indigo-100' : 'cursor-default'}`
-            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-        }`}
-      >
-        {assignedName ? `Lo cuida: ${assignedName}` : '+ ¿Quién lo cuida? (baño, etc.)'}
-      </button>
-    )
-  }
-
-  return (
-    <div className="flex flex-col gap-1">
-      <div className="flex items-center gap-1.5">
-        <select
-          autoFocus
-          disabled={saving || !teachers}
-          defaultValue={assignedId ?? ''}
-          onChange={(e) => assign(e.target.value)}
-          className="text-xs px-2 py-1.5 border-2 border-indigo-300 rounded-lg focus:outline-none bg-white"
-        >
-          <option value="">{teachers ? 'Sin asignar' : 'Cargando…'}</option>
-          {(teachers ?? []).map((t) => <option key={t.id} value={t.id}>{t.full_name}</option>)}
-        </select>
-        <button type="button" onClick={() => setOpen(false)} className="p-1 text-gray-400 hover:text-gray-600 rounded-lg" aria-label="Cancelar">
-          <X size={13} />
-        </button>
-      </div>
-      {error && <p className="text-[11px] text-red-600">{error}</p>}
     </div>
   )
 }

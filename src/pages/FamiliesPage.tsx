@@ -1,11 +1,9 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { useSearchParams, useLocation } from 'react-router-dom'
+import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ChevronRight, Phone, UserPlus, Users, AlertTriangle } from 'lucide-react'
-import { useAuth } from '../lib/auth'
 import { getAgeLabel, getEffectiveCategory } from '../lib/categoryUtils'
-import { markRequestResolved } from '../lib/coordinatorRequests'
-import { createChildSearcher, searchChildrenSplit, findBySurname, normalizeName } from '../lib/fuzzySearch'
+import { createChildSearcher, searchChildrenSplit, findBySurname } from '../lib/fuzzySearch'
 import { useDebounce } from '../hooks/useDebounce'
 import { NewFamilyStep } from '../components/checkin/NewFamilyStep'
 import { CATEGORY_LABELS, CATEGORY_COLORS, type ParentRow, type ChildPrefill } from '../types/domain'
@@ -24,22 +22,6 @@ type Tab = 'familias' | 'ninos'
 type RosterFilter = 'todos' | 'sin_responsable' | 'sin_categoria' | 'sin_fecha_nacimiento'
 
 export default function FamiliesPage() {
-  const location = useLocation()
-  const { session } = useAuth()
-  // Llegando desde un mensaje de un maestro: esa solicitud se marca como
-  // resuelta solo cuando de verdad se agrega al niño (aquí o con "Nueva
-  // familia"). Ref para que solo dispare una vez por visita.
-  const armedRequestId = useRef((location.state as { requestId?: string } | null)?.requestId ?? null)
-  const [resolveWarning, setResolveWarning] = useState(false)
-  const resolveArmedRequest = useCallback(async () => {
-    const id = armedRequestId.current
-    if (!id) return
-    armedRequestId.current = null
-    const ok = await markRequestResolved(id, session?.user.id ?? null)
-    if (!ok) setResolveWarning(true)
-  }, [session])
-  const mensajesPrefill = (location.state as { prefill?: ChildPrefill } | null)?.prefill
-
   const [searchParams, setSearchParams] = useSearchParams()
   const rosterParam = searchParams.get('roster') as RosterFilter | null
   const [tab, setTab] = useState<Tab>(rosterParam ? 'ninos' : 'familias')
@@ -120,7 +102,6 @@ export default function FamiliesPage() {
     } else {
       loadAll()
     }
-    resolveArmedRequest()
   }
 
   // ── Pantallas completas ──
@@ -144,7 +125,6 @@ export default function FamiliesPage() {
         onBack={() => { setSelected(null); setChildPrefillForSelected(null) }}
         onRefresh={refreshSelected}
         onDeleted={() => { const id = selected.id; setSelected(null); setAllFamilies((prev) => prev.filter((f) => f.id !== id)) }}
-        onChildAdded={resolveArmedRequest}
         initialChildPrefill={childPrefillForSelected}
       />
     )
@@ -164,12 +144,6 @@ export default function FamiliesPage() {
         }
       />
 
-      {resolveWarning && (
-        <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3">
-          La familia se guardó bien, pero no se pudo marcar el mensaje como resuelto (probablemente por la conexión). Avísale al dueño para que lo marque a mano.
-        </p>
-      )}
-
       <div className="flex flex-col sm:flex-row sm:items-center gap-3">
         <Segmented
           value={tab}
@@ -187,12 +161,7 @@ export default function FamiliesPage() {
             {sameSurname.length > 0 && (
               <SameSurnameCard
                 items={sameSurname}
-                onAdd={(familyId) => {
-                  const prefill: ChildPrefill = mensajesPrefill && normalizeName(mensajesPrefill.full_name) === normalizeName(debouncedQuery)
-                    ? mensajesPrefill
-                    : { full_name: query.trim() }
-                  openFamilyWithPrefill(familyId, prefill)
-                }}
+                onAdd={(familyId) => openFamilyWithPrefill(familyId, { full_name: query.trim() })}
               />
             )}
 

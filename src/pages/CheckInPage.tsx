@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo, startTransition } from 'react'
-import { useSearchParams, useLocation } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
 import { motion, AnimatePresence, LayoutGroup } from 'framer-motion'
 import { format } from 'date-fns'
 import { UserPlus, ChevronLeft, Users } from 'lucide-react'
@@ -9,7 +9,7 @@ import { supabase } from '../lib/supabase'
 import { onSynced, readCache, writeCache, pruneDatedCache } from '../lib/offline'
 import { useAuth } from '../lib/auth'
 import { getEffectiveCategory } from '../lib/categoryUtils'
-import { markRequestResolved } from '../lib/coordinatorRequests'
+import { EMPTY_STAFF, fetchStaff, saveStaff, subscribeStaff, type Staff, type StaffRole } from '../lib/dailyStaff'
 import { createChildSearcher, searchChildrenSplit } from '../lib/fuzzySearch'
 import { CATEGORY_LABELS, type Category, type TeamColor, type ParentRow } from '../types/domain'
 import { NewFamilyStep } from '../components/checkin/NewFamilyStep'
@@ -28,6 +28,7 @@ import { CheckInSheet } from './checkin/CheckInSheet'
 import { TodayBoard } from './checkin/TodayBoard'
 import { DayCard } from './checkin/DayCard'
 import { GroupTiles } from './checkin/GroupTiles'
+import { BirthdayCard } from './checkin/BirthdayCard'
 import { TeamPicker } from './checkin/TeamPicker'
 
 export default function CheckInPage() {
@@ -37,28 +38,14 @@ export default function CheckInPage() {
   const [todayCounts, setTodayCounts] = useState<Partial<Record<Category, number>>>({})
   const [totalToday, setTotalToday] = useState(0)
   const [todayRecords, setTodayRecords] = useState<TodayRecord[]>([])
-  // Same as FamiliesPage's version — the family/child is already saved by the
-  // time this could go wrong, so a failure here means Mensajes bookkeeping
-  // didn't close the loop, not that any data was lost.
-  const [resolveWarning, setResolveWarning] = useState(false)
   const [filter, setFilter] = useState('')
   /** Niño cuyo panel (registrar / corregir) está abierto. */
   const [openChildId, setOpenChildId] = useState<string | null>(null)
   const [teamColor, setTeamColor] = useState<TeamColor>(getStoredTeamForToday() ?? 'rojo')
   const [teamConfirmed, setTeamConfirmed] = useState(() => getStoredTeamForToday() !== null)
-  const [coordinatorName, setCoordinatorName] = useState('')
-  const [computerOperatorName, setComputerOperatorName] = useState('')
-  const [corderitosLeadName, setCorderitosLeadName] = useState('')
+  const [staff, setStaff] = useState<Staff>(EMPTY_STAFF)
   const [searchParams, setSearchParams] = useSearchParams()
   const [showNewFamily, setShowNewFamily] = useState(() => searchParams.get('nueva') !== null)
-  // Carried over when a coordinator jumps here from a maestro's request in
-  // the Mensajes page — pre-fills the form with whatever structured fields
-  // that request had, instead of making the coordinator retype what they
-  // just read.
-  const location = useLocation()
-  const newFamilyPrefill = (location.state ?? {}) as {
-    childName?: string; birthDate?: string; parentName?: string; phone?: string; alerts?: string; requestId?: string
-  }
 
   // ── Búsqueda global ──
   const [globalSearch, setGlobalSearch] = useState('')
@@ -90,19 +77,25 @@ export default function CheckInPage() {
       countsShownFromCache.current = true
       await apply(cached)
     }
-    // `assigned_teacher:profiles(...)` must name the exact FK — attendance
-    // has two of them (assigned_teacher_id and deleted_by), so a bare
-    // `profiles(...)` is ambiguous and PostgREST rejects the whole query
-    // (PGRST201), which once silently emptied today's list for weeks.
     const { data, error } = await supabase
       .from('attendance')
-      .select('id, child_id, category, badge_number, pager_number, checked_in_at, checked_out_at, assigned_teacher_id, assigned_teacher:profiles!attendance_assigned_teacher_id_fkey(full_name), children(full_name, allergies, medical_notes, toilet_trained, comments)')
+      .select('id, child_id, category, badge_number, pager_number, checked_in_at, children(full_name, allergies, medical_notes, toilet_trained, comments)')
       .eq('session_date', today)
       .is('deleted_at', null)
       .order('checked_in_at', { ascending: false })
     if (error) console.error('fetchCounts failed:', error)
-    if (data) writeCache(cacheKey, data)
-    await apply((data as unknown as TodayRecord[] | null) ?? cached ?? [])
+    let rows = data as unknown as TodayRecord[] | null
+    if (rows?.length) {
+      // "Primera vez": no tiene registros de domingos anteriores.
+      const { data: before } = await supabase.from('attendance').select('child_id')
+        .in('child_id', rows.map((r) => r.child_id)).lt('session_date', today).is('deleted_at', null)
+      if (before) {
+        const returning = new Set(before.map((b) => b.child_id))
+        rows = rows.map((r) => ({ ...r, first_time: !returning.has(r.child_id) }))
+      }
+    }
+    if (rows) writeCache(cacheKey, rows)
+    await apply(rows ?? cached ?? [])
   }, [])
 
   useEffect(() => { pruneDatedCache(today); fetchCounts() }, [fetchCounts])
@@ -196,38 +189,11 @@ export default function CheckInPage() {
       .channel('children-sync')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'children' }, () => scheduleRefresh())
       .subscribe()
-    const coordinator = supabase
-      .channel('daily-coordinator-sync')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'daily_coordinator', filter: `session_date=eq.${today}` }, (payload) => {
-        const row = payload.new as { name?: string } | undefined
-        if (row?.name) setCoordinatorName(row.name)
-      })
-      .subscribe()
-    const operator = supabase
-      .channel('daily-computer-operator-sync')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'daily_computer_operator', filter: `session_date=eq.${today}` }, (payload) => {
-        const row = payload.new as { name?: string } | undefined
-        if (row?.name) setComputerOperatorName(row.name)
-      })
-      .subscribe()
-    const corderitos = supabase
-      .channel('daily-corderitos-lead-sync')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'daily_corderitos_lead', filter: `session_date=eq.${today}` }, (payload) => {
-        const row = payload.new as { name?: string } | undefined
-        if (row?.name) setCorderitosLeadName(row.name)
-      })
-      .subscribe()
-    return () => { [attendance, children, coordinator, operator, corderitos].forEach((ch) => supabase.removeChannel(ch)) }
+    const unsubscribeStaff = subscribeStaff(today, (role, name) => setStaff((prev) => ({ ...prev, [role]: name })))
+    return () => { [attendance, children].forEach((ch) => supabase.removeChannel(ch)); unsubscribeStaff() }
   }, [fetchCounts, scheduleRefresh])
 
-  useEffect(() => {
-    supabase.from('daily_coordinator').select('name').eq('session_date', today).maybeSingle()
-      .then(({ data }) => { if (data?.name) setCoordinatorName(data.name) })
-    supabase.from('daily_computer_operator').select('name').eq('session_date', today).maybeSingle()
-      .then(({ data }) => { if (data?.name) setComputerOperatorName(data.name) })
-    supabase.from('daily_corderitos_lead').select('name').eq('session_date', today).maybeSingle()
-      .then(({ data }) => { if (data?.name) setCorderitosLeadName(data.name) })
-  }, [])
+  useEffect(() => { fetchStaff(today).then(setStaff) }, [])
 
   // ─── Derivados ─────────────────────────────────────────────────────────────
 
@@ -283,9 +249,8 @@ export default function CheckInPage() {
     return {
       id: rec.child_id, full_name: rec.children.full_name, birth_date: null, category: rec.category,
       allergies: rec.children.allergies, medical_notes: rec.children.medical_notes, toilet_trained: rec.children.toilet_trained,
-      comments: rec.children.comments, guardian_relationship: null, photo_url: null, assigned_maestro_id: null,
-      assigned_maestro_name: null, parent_id: null, parents: null,
-      attendance: [{ session_date: today, badge_number: rec.badge_number }],
+      comments: rec.children.comments, guardian_relationship: null, parent_id: null, parents: null,
+      attendance: [{ session_date: today, badge_number: rec.badge_number }], partial: true,
     }
   }, [openChildId, allChildren, recordByChild])
 
@@ -321,11 +286,6 @@ export default function CheckInPage() {
     }
   }
 
-  function handleCategoryChanged(childId: string, newCategory: Category) {
-    setAllChildren((prev) => prev.map((c) => (c.id === childId ? { ...c, category: newCategory } : c)))
-    scheduleRefresh()
-  }
-
   function handleChildEdited(childId: string, patch: Partial<ChildResult>) {
     setAllChildren((prev) => prev.map((c) => (c.id === childId ? { ...c, ...patch } : c)))
     scheduleRefresh()
@@ -336,22 +296,15 @@ export default function CheckInPage() {
     scheduleRefresh()
   }
 
-  async function handleFamilySaved(parent: ParentRow) {
+  function handleFamilySaved(parent: ParentRow) {
     setShowNewFamily(false)
     if (searchParams.get('nueva') !== null) setSearchParams({})
-    // Resolving happens here — the moment the family is actually saved —
-    // instead of a manual "marcar como resuelta" button.
-    if (newFamilyPrefill.requestId) {
-      const ok = await markRequestResolved(newFamilyPrefill.requestId, session?.user.id ?? null)
-      if (!ok) setResolveWarning(true)
-    }
     // Los niños nuevos entran a la lista de inmediato (sin esperar a la red,
     // que puede tardar o no estar), y el padrón se refresca por detrás.
     const added: ChildResult[] = parent.children.map((c) => ({
       id: c.id, full_name: c.full_name, birth_date: c.birth_date, category: c.category,
       allergies: c.allergies, medical_notes: c.medical_notes, toilet_trained: c.toilet_trained, comments: c.comments,
-      guardian_relationship: c.guardian_relationship, photo_url: c.photo_url, assigned_maestro_id: c.assigned_maestro_id,
-      assigned_maestro_name: c.assigned_maestro_name, parent_id: parent.id,
+      guardian_relationship: c.guardian_relationship, parent_id: parent.id,
       parents: { full_name: parent.full_name, phone: parent.phone ?? '' }, attendance: [],
     }))
     setAllChildren((prev) => [...prev.filter((c) => !added.some((a) => a.id === c.id)), ...added].sort((a, b) => a.full_name.localeCompare(b.full_name)))
@@ -365,35 +318,20 @@ export default function CheckInPage() {
     }
   }
 
-  function confirmTeam(color: TeamColor, coordinator: string, computerOperator: string, corderitosLead: string) {
+  function confirmTeam(color: TeamColor, names: Staff) {
     setTeamColor(color)
     setTeamConfirmed(true)
     persistTeam(color)
     // Solo se escribe si es nuevo/cambió.
-    if (coordinator && coordinator !== coordinatorName) saveCoordinator(coordinator)
-    if (computerOperator && computerOperator !== computerOperatorName) saveComputerOperator(computerOperator)
-    if (corderitosLead && corderitosLead !== corderitosLeadName) saveCorderitosLead(corderitosLead)
+    for (const role of Object.keys(names) as StaffRole[]) {
+      if (names[role] && names[role] !== staff[role]) updateStaff(role, names[role])
+    }
   }
 
-  async function saveCoordinator(name: string): Promise<string | null> {
-    const { error } = await supabase.rpc('set_daily_coordinator', { p_session_date: today, p_name: name })
-    if (error) return 'No se pudo guardar. Revisa la conexión.'
-    setCoordinatorName(name)
-    return null
-  }
-
-  async function saveComputerOperator(name: string): Promise<string | null> {
-    const { error } = await supabase.rpc('set_daily_computer_operator', { p_session_date: today, p_name: name })
-    if (error) return 'No se pudo guardar. Revisa la conexión.'
-    setComputerOperatorName(name)
-    return null
-  }
-
-  async function saveCorderitosLead(name: string): Promise<string | null> {
-    const { error } = await supabase.rpc('set_daily_corderitos_lead', { p_session_date: today, p_name: name })
-    if (error) return 'No se pudo guardar. Revisa la conexión.'
-    setCorderitosLeadName(name)
-    return null
+  async function updateStaff(role: StaffRole, name: string): Promise<string | null> {
+    const err = await saveStaff(role, today, name)
+    if (!err) setStaff((prev) => ({ ...prev, [role]: name }))
+    return err
   }
 
   // Quitar / corregir un registro de hoy. Devuelven el mensaje de error, o
@@ -437,12 +375,6 @@ export default function CheckInPage() {
     return null
   }
 
-  function handleTeacherChanged(recordId: string, teacherId: string | null, teacherName: string | null) {
-    setTodayRecords((prev) => prev.map((r) => r.id === recordId
-      ? { ...r, assigned_teacher_id: teacherId, assigned_teacher: teacherName ? { full_name: teacherName } : null }
-      : r))
-  }
-
   const isSearching = debouncedGlobal.length >= 2
   // Mientras el debounce alcanza lo escrito, unos puntitos (como "escribiendo…").
   const isTyping = globalSearch.trim().length >= 2 && globalSearch.trim() !== debouncedGlobal
@@ -450,18 +382,13 @@ export default function CheckInPage() {
   // ─── Pantallas previas ─────────────────────────────────────────────────────
 
   if (!teamConfirmed) {
-    return <TeamPicker onConfirm={confirmTeam} initialCoordinator={coordinatorName} initialComputerOperator={computerOperatorName} initialCorderitosLead={corderitosLeadName} />
+    return <TeamPicker onConfirm={confirmTeam} initialStaff={staff} />
   }
 
   if (showNewFamily) {
     return (
       <NewFamilyStep
         existingChildren={allChildren}
-        prefillName={newFamilyPrefill.parentName}
-        prefillPhone={newFamilyPrefill.phone}
-        prefillChildName={newFamilyPrefill.childName}
-        prefillChildBirthDate={newFamilyPrefill.birthDate}
-        prefillChildComments={newFamilyPrefill.alerts}
         onSaved={handleFamilySaved}
         onCancel={() => { setShowNewFamily(false); if (searchParams.get('nueva') !== null) setSearchParams({}) }}
       />
@@ -485,16 +412,7 @@ export default function CheckInPage() {
       onOpen={setOpenChildId}
       onlyCategory={activeCategory}
       defaultOpen={desktop}
-      isAdmin={isAdmin}
-      userId={session?.user.id ?? null}
-      onTeacherChanged={handleTeacherChanged}
     />
-  )
-
-  const resolveNote = resolveWarning && (
-    <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
-      La familia se guardó bien, pero no se pudo marcar el mensaje como resuelto en Mensajes (probablemente por la conexión). Avísale al dueño para que lo marque a mano.
-    </p>
   )
 
   function resultList(list: ChildResult[], showGroup: boolean) {
@@ -542,8 +460,6 @@ export default function CheckInPage() {
           </div>
         </div>
 
-        {resolveNote}
-
         <SearchField
           value={filter}
           onChange={setFilter}
@@ -582,15 +498,9 @@ export default function CheckInPage() {
         totalToday={totalToday}
         teamColor={teamColor}
         onChangeTeam={() => setTeamConfirmed(false)}
-        coordinatorName={coordinatorName}
-        operatorName={computerOperatorName}
-        onSaveCoordinator={saveCoordinator}
-        onSaveOperator={saveComputerOperator}
-        corderitosLeadName={corderitosLeadName}
-        onSaveCorderitosLead={saveCorderitosLead}
+        staff={staff}
+        onSaveStaff={updateStaff}
       />
-
-      {resolveNote}
 
       <SearchField
         value={globalSearch}
@@ -625,6 +535,8 @@ export default function CheckInPage() {
           <motion.div key="groups" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }} className="space-y-4">
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider px-1">O entra a un grupo</p>
             <GroupTiles counts={todayCounts} totals={totalsByCategory} onOpen={openCategory} wide={!desktop} />
+
+            <BirthdayCard kids={allChildren} onOpen={setOpenChildId} />
 
             <div className="lg:hidden">{board}</div>
 
@@ -686,7 +598,6 @@ export default function CheckInPage() {
         isAdmin={isAdmin}
         onClose={() => setOpenChildId(null)}
         onRegistered={handleRegistered}
-        onCategoryChanged={handleCategoryChanged}
         onEdited={handleChildEdited}
         onDeleted={handleChildDeleted}
         onEditAttendance={editAttendanceNumbers}

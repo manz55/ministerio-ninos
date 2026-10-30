@@ -6,20 +6,17 @@ import { Baby, Monitor, Pencil, User, Check } from 'lucide-react'
 import type { TeamColor } from '../../types/domain'
 import { AnimatedNumber } from '../../components/motion'
 import { TEAM_META } from './shared'
+import type { Staff, StaffRole } from '../../lib/dailyStaff'
 
 /** Encabezado del día: fecha, cuántos van, equipo y los encargados. */
 export function DayCard({
-  totalToday, teamColor, onChangeTeam, coordinatorName, operatorName, onSaveCoordinator, onSaveOperator, corderitosLeadName, onSaveCorderitosLead,
+  totalToday, teamColor, onChangeTeam, staff, onSaveStaff,
 }: {
   totalToday: number
   teamColor: TeamColor
   onChangeTeam: () => void
-  coordinatorName: string
-  operatorName: string
-  onSaveCoordinator: (name: string) => Promise<string | null>
-  onSaveOperator: (name: string) => Promise<string | null>
-  corderitosLeadName: string
-  onSaveCorderitosLead: (name: string) => Promise<string | null>
+  staff: Staff
+  onSaveStaff: (role: StaffRole, name: string) => Promise<string | null>
 }) {
   const team = TEAM_META[teamColor]
   return (
@@ -50,9 +47,9 @@ export function DayCard({
         </motion.button>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-3 border-t border-gray-100 divide-y sm:divide-y-0 sm:divide-x divide-gray-100">
-        <NameSlot icon={User} label="Encargado" value={coordinatorName} onSave={onSaveCoordinator} />
-        <NameSlot icon={Monitor} label="En la compu" value={operatorName} onSave={onSaveOperator} />
-        <NameSlot icon={Baby} label="Corderitos" value={corderitosLeadName} onSave={onSaveCorderitosLead} />
+        <NameSlot icon={User} label="Encargado" value={staff.coordinator} onSave={(n) => onSaveStaff('coordinator', n)} />
+        <NameSlot icon={Monitor} label="En la compu" value={staff.computer} onSave={(n) => onSaveStaff('computer', n)} />
+        <NameSlot icon={Baby} label="Corderitos" value={staff.corderitos} onSave={(n) => onSaveStaff('corderitos', n)} />
       </div>
     </motion.section>
   )
