@@ -36,6 +36,7 @@ type LiveRecord = {
   child_id: string
   category: string
   badge_number: number | null
+  pager_number: number | null
   checked_in_at: string
   children: { full_name: string; parents: { full_name: string } }
   /** No tiene registros de domingos anteriores. */
@@ -96,7 +97,7 @@ export default function ReportsPage() {
     const day = format(selectedDate, 'yyyy-MM-dd')
     const { data } = await supabase
       .from('attendance')
-      .select('id, child_id, category, badge_number, checked_in_at, children(full_name, parents(full_name))')
+      .select('id, child_id, category, badge_number, pager_number, checked_in_at, children(full_name, parents(full_name))')
       .eq('session_date', day)
       .is('deleted_at', null)
       .order('checked_in_at', { ascending: true })
@@ -448,27 +449,47 @@ function DayTab({ records, loading, byCategory, total, avgWeek, prev, notesCount
         ) : shown.length === 0 ? (
           <EmptyState icon={q ? Search : CalendarX} text={q ? `Nadie se llama "${query.trim()}" en este día.` : 'No hay registros este día.'} />
         ) : (
-          <motion.div key={filter} initial="hidden" animate="show" className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-2">
-            {shown.map((r, i) => {
-              const g = groupOf(r.category as Category)
+          // Un bloque por grupo, en el mismo orden que "Por grupo", y dentro
+          // por número de gafete (o de bíper en Corderitos).
+          <div className="space-y-5">
+            {GROUPS.map((g) => {
+              const list = shown
+                .filter((r) => r.category === g.category)
+                .sort((a, b) => (a.badge_number ?? a.pager_number ?? Infinity) - (b.badge_number ?? b.pager_number ?? Infinity) || a.checked_in_at.localeCompare(b.checked_in_at))
+              if (list.length === 0) return null
+              const Icon = g.icon
               return (
-                <motion.button key={r.id} variants={itemVariants} custom={i} whileTap={{ scale: 0.985 }} onClick={() => setOpenId(r.id)}
-                  className="w-full text-left flex items-center gap-3 rounded-2xl bg-white px-3.5 py-3 shadow-sm shadow-gray-900/5 border border-transparent hover:border-indigo-200 hover:shadow-md transition-[border-color,box-shadow]">
-                  <span className={`w-12 shrink-0 text-center rounded-xl py-1.5 font-display font-bold tabular-nums ${r.badge_number ? 'bg-emerald-600 text-white text-lg' : `${g.avatar} text-sm`}`}>
-                    {r.badge_number ? `#${r.badge_number}` : initials(r.children?.full_name ?? '?')}
-                  </span>
-                  <span className="flex-1 min-w-0">
-                    <span className="block font-display font-bold text-[17px] leading-tight text-gray-900 truncate">{r.children?.full_name}</span>
-                    <span className="block text-sm text-gray-500 truncate"><span className={`font-semibold ${g.iconColor}`}>{CATEGORY_LABELS[r.category as Category]}</span> · {r.children?.parents?.full_name || 'Sin responsable'}</span>
-                  </span>
-                  <span className="shrink-0 text-right">
-                    <span className="block text-xs text-gray-500 tabular-nums">{format(new Date(r.checked_in_at), 'HH:mm')}</span>
-                    {r.first_time && <span className="inline-block mt-0.5 text-[11px] font-semibold rounded-full px-2 py-0.5 bg-violet-50 text-violet-700">Primera vez</span>}
-                  </span>
-                </motion.button>
+                <div key={g.category} className="space-y-2">
+                  <h3 className={`flex items-center gap-2 px-1 font-display text-lg font-semibold ${g.text}`}>
+                    <span className={`w-8 h-8 rounded-xl ${g.iconBg} flex items-center justify-center`}><Icon size={16} className={g.iconColor} /></span>
+                    {CATEGORY_LABELS[g.category]}
+                    <span className="text-sm font-semibold text-gray-400 tabular-nums">{list.length}</span>
+                  </h3>
+                  <motion.div key={`${filter}-${g.category}`} initial="hidden" animate="show" className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-2">
+                    {list.map((r, i) => (
+                      <motion.button key={r.id} variants={itemVariants} custom={i} whileTap={{ scale: 0.985 }} onClick={() => setOpenId(r.id)}
+                        className="w-full text-left flex items-center gap-3 rounded-2xl bg-white px-3.5 py-3 shadow-sm shadow-gray-900/5 border border-transparent hover:border-indigo-200 hover:shadow-md transition-[border-color,box-shadow]">
+                        {/* Gafete; en Corderitos (sin gafete) el bíper. */}
+                        <span className={`w-12 shrink-0 text-center rounded-xl py-1.5 font-display font-bold tabular-nums leading-none ${r.badge_number ? `${g.bar} text-white text-lg` : r.pager_number ? `${g.avatar} text-lg` : `${g.avatar} text-sm`}`}>
+                          {r.badge_number ? `#${r.badge_number}` : r.pager_number ? (
+                            <><span className="block text-[9px] font-semibold uppercase tracking-wide opacity-70">bíper</span>{r.pager_number}</>
+                          ) : initials(r.children?.full_name ?? '?')}
+                        </span>
+                        <span className="flex-1 min-w-0">
+                          <span className="block font-display font-bold text-[17px] leading-tight text-gray-900 truncate">{r.children?.full_name}</span>
+                          <span className="block text-sm text-gray-500 truncate">{r.children?.parents?.full_name || 'Sin responsable'}</span>
+                        </span>
+                        <span className="shrink-0 text-right">
+                          <span className="block text-xs text-gray-500 tabular-nums">{format(new Date(r.checked_in_at), 'HH:mm')}</span>
+                          {r.first_time && <span className="inline-block mt-0.5 text-[11px] font-semibold rounded-full px-2 py-0.5 bg-violet-50 text-violet-700">Primera vez</span>}
+                        </span>
+                      </motion.button>
+                    ))}
+                  </motion.div>
+                </div>
               )
             })}
-          </motion.div>
+          </div>
         )}
       </section>
 
