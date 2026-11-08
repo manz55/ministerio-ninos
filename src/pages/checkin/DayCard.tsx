@@ -7,6 +7,7 @@ import type { TeamColor } from '../../types/domain'
 import { AnimatedNumber } from '../../components/motion'
 import { TEAM_META } from './shared'
 import type { Staff, StaffRole } from '../../lib/dailyStaff'
+import { staffNameError, tidyStaffName } from '../../lib/validation'
 
 /** Encabezado del día: fecha, cuántos van, equipo y los encargados. */
 export function DayCard({
@@ -62,9 +63,14 @@ function NameSlot({ icon: Icon, label, value, onSave }: { icon: typeof User; lab
   const [saved, setSaved] = useState(false)
 
   async function commit() {
+    const raw = draft.trim()
+    if (!raw || raw === value) { setEditing(false); setError(null); return }
+    // Nombre y apellido (de cada persona si son dos); si no, se queda abierto.
+    const invalid = staffNameError(raw)
+    if (invalid) { setError(invalid); return }
     setEditing(false)
-    const name = draft.trim()
-    if (!name || name === value) return
+    const name = tidyStaffName(raw)
+    if (name === value) return
     const err = await onSave(name)
     setError(err)
     if (!err) { setSaved(true); setTimeout(() => setSaved(false), 1400) }
@@ -82,11 +88,11 @@ function NameSlot({ icon: Icon, label, value, onSave }: { icon: typeof User; lab
             autoFocus
             type="text"
             value={draft}
-            onChange={(e) => setDraft(e.target.value)}
+            onChange={(e) => { setDraft(e.target.value); setError(null) }}
             onBlur={commit}
             onKeyDown={(e) => {
               if (e.key === 'Enter') { e.preventDefault(); (e.target as HTMLInputElement).blur() }
-              if (e.key === 'Escape') { setDraft(value); setEditing(false) }
+              if (e.key === 'Escape') { setDraft(value); setEditing(false); setError(null) }
             }}
             placeholder="Nombre…"
             className="w-full text-[15px] border-b-2 border-indigo-400 focus:outline-none font-semibold text-gray-800 bg-transparent"

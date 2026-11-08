@@ -7,7 +7,8 @@ import type { TeamColor } from '../../types/domain'
 import { ChurchLogo } from '../../components/ui/ChurchLogo'
 import { listVariants, itemVariants } from '../../components/motion/presets'
 import { TEAM_META } from './shared'
-import type { Staff } from '../../lib/dailyStaff'
+import type { Staff, StaffRole } from '../../lib/dailyStaff'
+import { staffNameError, tidyStaffName } from '../../lib/validation'
 
 const TEAMS: TeamColor[] = ['rojo', 'amarillo', 'azul']
 
@@ -25,12 +26,23 @@ export function TeamPicker({
   const [corderitos, setCorderitos] = useState(initialStaff.corderitos)
   useEffect(() => setCorderitos(initialStaff.corderitos), [initialStaff.corderitos])
   const [picked, setPicked] = useState<TeamColor | null>(null)
+  const [errors, setErrors] = useState<Partial<Record<StaffRole, string>>>({})
 
   function pick(color: TeamColor) {
     if (picked) return
+    // Se pueden dejar en blanco (y llenarlos después), pero si se escriben
+    // tienen que ir con nombre y apellido, no solo "Stuart".
+    const values: Staff = { coordinator, computer: operator, corderitos }
+    const found: Partial<Record<StaffRole, string>> = {}
+    for (const role of Object.keys(values) as StaffRole[]) {
+      if (values[role].trim()) { const err = staffNameError(values[role]); if (err) found[role] = err }
+    }
+    setErrors(found)
+    if (Object.keys(found).length) return
     setPicked(color)
     // Deja ver la selección un instante antes de pasar a Registro.
-    setTimeout(() => onConfirm(color, { coordinator: coordinator.trim(), computer: operator.trim(), corderitos: corderitos.trim() }), 320)
+    const tidy = (v: string) => (v.trim() ? tidyStaffName(v) : '')
+    setTimeout(() => onConfirm(color, { coordinator: tidy(coordinator), computer: tidy(operator), corderitos: tidy(corderitos) }), 320)
   }
 
   const input = 'w-full pl-11 pr-4 py-3.5 bg-white border-2 border-gray-200 rounded-2xl text-base font-medium text-gray-800 placeholder:text-gray-400 focus:border-indigo-500 focus:outline-none shadow-sm transition-colors'
@@ -49,21 +61,21 @@ export function TeamPicker({
       </motion.div>
 
       <motion.div variants={itemVariants} custom={1} className="w-full max-w-sm space-y-3">
-        <label className="block relative">
-          <span className="sr-only">¿Quién está de encargado hoy?</span>
-          <User size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-indigo-500" />
-          <input type="text" value={coordinator} onChange={(e) => setCoordinator(e.target.value)} placeholder="¿Quién está de encargado hoy?" autoComplete="off" className={input} />
-        </label>
-        <label className="block relative">
-          <span className="sr-only">¿Quién está en la compu hoy?</span>
-          <Monitor size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-indigo-500" />
-          <input type="text" value={operator} onChange={(e) => setOperator(e.target.value)} placeholder="¿Quién está en la compu hoy?" autoComplete="off" className={input} />
-        </label>
-        <label className="block relative">
-          <span className="sr-only">¿Quién está con Corderitos hoy?</span>
-          <Baby size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-indigo-500" />
-          <input type="text" value={corderitos} onChange={(e) => setCorderitos(e.target.value)} placeholder="¿Quién está con Corderitos hoy?" autoComplete="off" className={input} />
-        </label>
+        {([
+          { role: 'coordinator', icon: User, label: '¿Quién está de encargado hoy?', value: coordinator, set: setCoordinator },
+          { role: 'computer', icon: Monitor, label: '¿Quién está en la compu hoy?', value: operator, set: setOperator },
+          { role: 'corderitos', icon: Baby, label: '¿Quién está con Corderitos hoy?', value: corderitos, set: setCorderitos },
+        ] as const).map(({ role, icon: Icon, label, value, set }) => (
+          <div key={role}>
+            <label className="block relative">
+              <span className="sr-only">{label}</span>
+              <Icon size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-indigo-500" />
+              <input type="text" value={value} onChange={(e) => { set(e.target.value); setErrors((p) => ({ ...p, [role]: undefined })) }}
+                placeholder={label} autoComplete="off" className={`${input} ${errors[role] ? '!border-red-300' : ''}`} />
+            </label>
+            {errors[role] && <p className="text-xs text-red-600 mt-1 px-2">{errors[role]}</p>}
+          </div>
+        ))}
       </motion.div>
 
       <motion.div variants={itemVariants} custom={2} className="w-full max-w-md">

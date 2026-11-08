@@ -67,3 +67,23 @@ export function birthDateError(date: string, required: boolean): string | null {
   if (d < limit) return 'Revisa la fecha: es de hace más de 18 años.'
   return null
 }
+
+// Encargados del domingo: a veces son dos personas ("Laura Marroquín -
+// Karen Natareno", "Natalia Parra/Jenny Tay"). Cada una con nombre y apellido.
+const STAFF_SEPARATOR = /\s+-\s+|\s*[/,&]\s*|\s+y\s+/i
+
+export function staffNameError(name: string): string | null {
+  const people = name.trim().split(STAFF_SEPARATOR).filter((p) => p.trim())
+  if (people.length === 0) return 'Escribe el nombre.'
+  for (const person of people) {
+    const err = fullNameError(person)
+    if (err === 'Escribe nombre y apellido.') return people.length > 1 ? 'Escribe nombre y apellido de cada persona.' : 'Escribe nombre y apellido, no solo el nombre.'
+    if (err) return err
+  }
+  return null
+}
+
+/** "laura marroquín-karen" → "Laura Marroquín / Karen Natareno" ya acomodado. */
+export function tidyStaffName(name: string): string {
+  return name.trim().split(STAFF_SEPARATOR).filter((p) => p.trim()).map(tidyName).join(' / ')
+}
