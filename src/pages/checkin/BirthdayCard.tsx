@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { motion } from 'framer-motion'
-import { format, startOfWeek, endOfWeek, isSameDay } from 'date-fns'
+import { format, startOfDay, endOfWeek, isSameDay } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { Cake } from 'lucide-react'
 import { groupOf, initials, type ChildResult } from './shared'
@@ -8,9 +8,10 @@ import { getEffectiveCategory } from '../../lib/categoryUtils'
 
 type Birthday = { child: ChildResult; date: Date; turns: number }
 
-/** Quién cumple años esta semana (domingo a sábado), para felicitarlos. */
+/** Quién cumple años de hoy al sábado, para felicitarlos. Los que ya
+ * cumplieron esta semana no se vuelven a mostrar: su edad ya se actualizó sola. */
 function birthdaysThisWeek(children: ChildResult[], now: Date): Birthday[] {
-  const start = startOfWeek(now, { weekStartsOn: 0 })
+  const start = startOfDay(now)
   const end = endOfWeek(now, { weekStartsOn: 0 })
   const list: Birthday[] = []
   for (const child of children) {
