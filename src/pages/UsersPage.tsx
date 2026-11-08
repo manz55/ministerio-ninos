@@ -15,6 +15,7 @@ import { ConfirmSheet } from '../components/ui/ConfirmSheet'
 import { EmptyState } from '../components/ui/EmptyState'
 import { Field, ChoiceChips, FormError, INPUT } from '../components/ui/form'
 import { initials } from './checkin/shared'
+import { fullNameError, tidyName } from '../lib/validation'
 
 type Tab = 'cuentas' | 'papelera' | 'bitacora'
 
@@ -206,13 +207,13 @@ function NewUserForm({ onCreated, onCancel }: { onCreated: () => void; onCancel:
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
-    if (!fullName.trim() || !email.trim() || password.length < 8) {
-      setError('Nombre, correo y una contraseña de al menos 8 caracteres.')
-      return
-    }
+    const nameErr = fullNameError(fullName)
+    if (nameErr) { setError(nameErr); return }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) { setError('Revisa el correo.'); return }
+    if (password.length < 8) { setError('La contraseña debe tener al menos 8 caracteres.'); return }
     setSaving(true)
     setError(null)
-    const res = await createUser(email.trim(), password, fullName.trim(), role)
+    const res = await createUser(email.trim().toLowerCase(), password, tidyName(fullName), role)
     setSaving(false)
     if (res.error) { setError(res.error); return }
     onCreated()

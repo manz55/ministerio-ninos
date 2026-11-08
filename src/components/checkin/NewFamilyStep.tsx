@@ -7,6 +7,7 @@ import { createChildSearcher, searchChildrenSplit, findBySurname, type Searchabl
 import { CategoryBadge } from '../ui/CategoryBadge'
 import { PageHeader } from '../ui/PageHeader'
 import { GUARDIAN_RELATIONSHIP_LABELS, isCorderitos, type Category, type GuardianRelationship, type ParentRow, type ChildRow, type ChildPrefill } from '../../types/domain'
+import { birthDateError, fullNameError, phoneError, tidyName, tidyPhone } from '../../lib/validation'
 
 interface ChildDraft {
   key: string
@@ -106,11 +107,15 @@ export function NewFamilyStep({
   // ── Validation ──────────────────────────────────────────────────────────────
   function validate(): Record<string, string> {
     const e: Record<string, string> = {}
-    if (!parentName.trim()) e.parentName = 'Nombre requerido'
-    if (!parentPhone.trim()) e.parentPhone = 'Teléfono requerido'
+    const pn = fullNameError(parentName)
+    if (pn) e.parentName = pn
+    const pp = phoneError(parentPhone, true)
+    if (pp) e.parentPhone = pp
     children.forEach((c, i) => {
-      if (!c.full_name.trim()) e[`name_${i}`] = 'Nombre requerido'
-      if (!c.birth_date) e[`date_${i}`] = 'Fecha requerida'
+      const cn = fullNameError(c.full_name)
+      if (cn) e[`name_${i}`] = cn
+      const cd = birthDateError(c.birth_date, true)
+      if (cd) e[`date_${i}`] = cd
     })
     return e
   }
@@ -128,11 +133,11 @@ export function NewFamilyStep({
 
     // Ids generados aquí (no por Postgres) para que la familia se pueda
     // guardar igual sin internet y subirse después sin duplicarse.
-    const parent = { id: newId(), full_name: parentName.trim(), phone: parentPhone.trim() }
+    const parent = { id: newId(), full_name: tidyName(parentName), phone: tidyPhone(parentPhone) }
     const childRows: ChildInsert[] = children.map((c) => ({
       id: newId(),
       parent_id: parent.id,
-      full_name: c.full_name.trim(),
+      full_name: tidyName(c.full_name),
       birth_date: c.birth_date,
       category: getCategoryFromBirthDate(c.birth_date),
       allergies: c.allergies.trim() || null,

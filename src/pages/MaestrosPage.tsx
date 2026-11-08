@@ -15,6 +15,7 @@ import { useMediaQuery, DESKTOP_QUERY } from '../hooks/useMediaQuery'
 import type { Maestro, TeamColor } from '../types/domain'
 import { TEAM_COLOR_LABELS } from '../types/domain'
 import { initials } from './checkin/shared'
+import { namePartError, phoneError, tidyName, tidyPhone } from '../lib/validation'
 
 const TEAM_ORDER: TeamColor[] = ['rojo', 'amarillo', 'azul']
 const TEAM_STYLE: Record<TeamColor, { dot: string; head: string; soft: string; ring: string }> = {
@@ -189,12 +190,13 @@ function MaestroForm({ maestro, onSaved, onCancel }: { maestro: Maestro | null; 
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault()
-    if (!nombre.trim() || !apellido.trim()) { setError('Nombre y apellido son necesarios.'); return }
+    const invalid = namePartError(nombre, 'nombre') ?? namePartError(apellido, 'apellido') ?? phoneError(celular, false)
+    if (invalid) { setError(invalid); return }
     setSaving(true)
     setError(null)
     const payload = {
-      nombre: nombre.trim(), apellido: apellido.trim(), discipulador: discipulador.trim() || null,
-      fecha_nacimiento: fechaNacimiento || null, dpi: dpi.trim() || null, celular: celular.trim() || null,
+      nombre: tidyName(nombre), apellido: tidyName(apellido), discipulador: discipulador.trim() || null,
+      fecha_nacimiento: fechaNacimiento || null, dpi: dpi.trim() || null, celular: celular.trim() ? tidyPhone(celular).replace(' ', '') : null,
       tiempo_asistencia: tiempoAsistencia.trim() || null, bautizado_aguas: bautizadoAguas,
       bautizado_espiritu: bautizadoEspiritu, profesion: profesion.trim() || null, team_color: teamColor,
       email: email.trim().toLowerCase() || null, disponibilidad: disponibilidad.trim() || null,

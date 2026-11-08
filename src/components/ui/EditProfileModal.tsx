@@ -4,6 +4,7 @@ import { supabase } from '../../lib/supabase'
 import type { Profile } from '../../types/domain'
 import { Sheet, DrawnCheck } from '../motion'
 import { Field, FormError, INPUT } from './form'
+import { fullNameError, tidyName } from '../../lib/validation'
 
 /** Para corregir el propio nombre (un error al registrarlo, cambio de
  * apellido…) sin pedirle a otro coordinador que lo haga por Usuarios. */
@@ -15,16 +16,18 @@ export function EditProfileModal({ profile, onClose, onSaved }: { profile: Profi
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
-    if (!fullName.trim()) { setError('Escribe tu nombre.'); return }
+    const nameErr = fullNameError(fullName)
+    if (nameErr) { setError(nameErr); return }
+    const clean = tidyName(fullName)
     setSaving(true)
     setError(null)
     // .select() para saber si de verdad se guardó: si las reglas lo
     // bloquean, Supabase no da error, solo devuelve 0 filas.
-    const { data, error: err } = await supabase.from('profiles').update({ full_name: fullName.trim() }).eq('id', profile.id).select('id')
+    const { data, error: err } = await supabase.from('profiles').update({ full_name: clean }).eq('id', profile.id).select('id')
     setSaving(false)
     if (err || !data?.length) { setError('No se pudo guardar. Intenta de nuevo.'); return }
     setDone(true)
-    onSaved(fullName.trim())
+    onSaved(clean)
     setTimeout(onClose, 1100)
   }
 

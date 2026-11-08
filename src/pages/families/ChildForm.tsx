@@ -5,6 +5,7 @@ import { CATEGORY_LABELS, GUARDIAN_RELATIONSHIP_LABELS, isCorderitos, type Categ
 import { Field, ChoiceChips, FormError, INPUT } from '../../components/ui/form'
 import { groupOf } from '../checkin/shared'
 import type { ChildFormData } from './data'
+import { birthDateError, fullNameError, tidyName } from '../../lib/validation'
 
 /**
  * Formulario de niño, el mismo para agregar uno nuevo y para editar.
@@ -47,12 +48,14 @@ export function ChildForm({ child, prefill, submitLabel, onSubmit, onCancel }: {
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
-    if (!name.trim()) { setError('Escribe el nombre del niño.'); return }
-    if (isNew && !birthDate) { setError('La fecha de nacimiento es necesaria para saber su grupo.'); return }
+    const nameErr = fullNameError(name)
+    if (nameErr) { setError(nameErr === 'Escribe el nombre.' ? 'Escribe el nombre del niño.' : nameErr); return }
+    const dateErr = birthDateError(birthDate, isNew)
+    if (dateErr) { setError(isNew && !birthDate ? 'La fecha de nacimiento es necesaria para saber su grupo.' : dateErr); return }
     setSaving(true)
     setError(null)
     const err = await onSubmit({
-      full_name: name.trim(),
+      full_name: tidyName(name),
       birth_date: birthDate || null,
       category: effective,
       allergies: allergies.trim() || null,

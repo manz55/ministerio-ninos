@@ -12,6 +12,7 @@ import { groupOf, initials } from '../checkin/shared'
 import { ChildForm } from './ChildForm'
 import { ChildSheet } from './ChildSheet'
 import { createChild, deleteFamily, saveParent, visitsOf, type ChildDetail, type FamilyDetail } from './data'
+import { fullNameError, phoneError, tidyName, tidyPhone } from '../../lib/validation'
 
 /** Una familia: quién la trae, sus niños, y todo lo que se puede hacer. */
 export function FamilyView({ family, onBack, onRefresh, onDeleted, initialChildPrefill }: {
@@ -207,9 +208,10 @@ function ParentForm({ family, onClose, onSaved }: { family: FamilyDetail; onClos
   const [error, setError] = useState<string | null>(null)
   async function submit(e: React.FormEvent) {
     e.preventDefault()
-    if (!name.trim()) { setError('Escribe el nombre.'); return }
+    const invalid = fullNameError(name) ?? phoneError(phone, false)
+    if (invalid) { setError(invalid); return }
     setSaving(true)
-    const err = await saveParent(family.id, { full_name: name.trim(), phone: phone.trim() })
+    const err = await saveParent(family.id, { full_name: tidyName(name), phone: phone.trim() ? tidyPhone(phone) : '' })
     setSaving(false)
     if (err) { setError(err); return }
     onSaved()
