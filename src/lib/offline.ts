@@ -103,6 +103,9 @@ export interface OfflineState {
   online: boolean
   syncing: boolean
   pending: number
+  /** Cuándo se guardó lo más viejo que sigue sin subir (para no mostrar la
+   * franja por un registro que se está subiendo en ese segundo). */
+  oldestPendingAt: number | null
   /** Avisos de la última sincronización que alguien debe revisar a mano. */
   notices: string[]
 }
@@ -111,10 +114,11 @@ let state: OfflineState = {
   online: typeof navigator === 'undefined' ? true : navigator.onLine,
   syncing: false,
   pending: 0,
+  oldestPendingAt: null,
   notices: [],
 }
 const listeners = new Set<() => void>()
-const syncedListeners = new Set<() => void>()
+const syncedListeners = new Set<(info: { families: number }) => void>()
 
 function setState(patch: Partial<OfflineState>) {
   state = { ...state, ...patch }
@@ -128,7 +132,9 @@ export function subscribeOffline(fn: () => void) {
 }
 /** Fires after a sync uploaded at least one item — pages refetch so the
  * temporary local copies get replaced by the real server rows. */
-export function onSynced(fn: () => void) {
+/** Avisa cuando algo de la cola ya se subió (`families`: cuántas familias
+ * nuevas, para saber si hay que recargar la lista de niños). */
+export function onSynced(fn: (info: { families: number }) => void) {
   syncedListeners.add(fn)
   return () => { syncedListeners.delete(fn) }
 }
@@ -233,17 +239,19 @@ export async function saveFamily(p: FamilyPayload): Promise<{ queued: boolean }>
   return { queued: true }
 }
 
-/** Igual que saveFamily pero para un check-in. Devuelve el error del
- * servidor tal cual (gafete repetido, etc.) para que la pantalla lo explique. */
+/**
+ * Guarda un check-in AL INSTANTE: primero en este dispositivo y luego se
+ * sube por detrás. Con internet lento el maestro ya no se queda esperando
+ * a la base de datos (antes podían ser hasta 20 segundos por niño). Si al
+ * subirlo hay un choque (gafete repetido, ya registrado en otro
+ * dispositivo), la sincronización lo resuelve y deja un aviso.
+ * `queued: true` = no hay internet ahora mismo.
+ */
 export async function saveAttendance(row: AttendanceInsert, childName?: string): Promise<{ queued: boolean; error: PgError }> {
-  if (navigator.onLine) {
-    const res = await uploadAttendance(row, { resolveConflicts: false })
-    if (res.ok) return { queued: false, error: null }
-    if (!isNetworkError(res.error)) return { queued: false, error: res.error }
-  }
   await put({ id: row.id, kind: 'attendance', createdAt: Date.now(), payload: row, childName })
   await refreshPending()
-  return { queued: true, error: null }
+  if (navigator.onLine) void flushOutbox()
+  return { queued: !navigator.onLine, error: null }
 }
 
 /** Lo que todavía no sube, para mezclarlo en las listas de la pantalla. */
@@ -257,28 +265,37 @@ export async function getPendingItems() {
 
 async function refreshPending() {
   const items = await readAll()
-  setState({ pending: items.length })
+  setState({ pending: items.length, oldestPendingAt: oldestOf(items) })
+}
+
+function oldestOf(items: OutboxItem[]): number | null {
+  return items.length ? Math.min(...items.map((i) => i.createdAt)) : null
 }
 
 let flushing: Promise<void> | null = null
+let flushAgain = false
 
 /** Sube todo lo pendiente, en orden (una familia antes que el check-in de sus niños). */
 export function flushOutbox(): Promise<void> {
-  if (flushing) return flushing
+  // Si ya está subiendo, se vuelve a pasar al terminar: así no se queda
+  // esperando lo que se registró mientras tanto.
+  if (flushing) { flushAgain = true; return flushing }
   flushing = (async () => {
     const items = await readAll()
-    if (items.length === 0 || !navigator.onLine) { setState({ pending: items.length }); return }
+    if (items.length === 0 || !navigator.onLine) { setState({ pending: items.length, oldestPendingAt: oldestOf(items) }); return }
     // Sin sesión (alguien cerró sesión con cosas pendientes) RLS lo
     // rechazaría todo; se espera a que alguien vuelva a entrar.
     const { data: { session } } = await supabase.auth.getSession()
-    if (!session) { setState({ pending: items.length }); return }
+    if (!session) { setState({ pending: items.length, oldestPendingAt: oldestOf(items) }); return }
     setState({ syncing: true })
     const notices: string[] = []
     let uploaded = 0
+    let families = 0
     for (const item of items) {
       try {
         if (item.kind === 'family') {
           await uploadFamily(item.payload)
+          families++
         } else {
           const res = await uploadAttendance(item.payload, { resolveConflicts: true, childName: item.childName })
           if (!res.ok) throw res.error
@@ -301,9 +318,12 @@ export function flushOutbox(): Promise<void> {
       }
     }
     const remaining = await readAll()
-    setState({ syncing: false, pending: remaining.length, notices: [...state.notices, ...notices] })
-    if (uploaded > 0) syncedListeners.forEach((l) => l())
-  })().finally(() => { flushing = null })
+    setState({ syncing: false, pending: remaining.length, oldestPendingAt: oldestOf(remaining), notices: [...state.notices, ...notices] })
+    if (uploaded > 0) syncedListeners.forEach((l) => l({ families }))
+  })().finally(() => {
+    flushing = null
+    if (flushAgain) { flushAgain = false; void flushOutbox() }
+  })
   return flushing
 }
 

@@ -132,7 +132,7 @@ function RecordRow({ rec, onOpen }: { rec: TodayRecord; onOpen: (childId: string
         </span>
         {rec.pending ? (
           <span className="shrink-0 inline-flex items-center gap-1 text-[11px] font-semibold text-amber-800 bg-amber-100 rounded-full px-2 py-0.5" title="Guardado en este dispositivo. Se sube solo cuando vuelva el internet">
-            <CloudOff size={11} /> Sin subir
+            <CloudOff size={11} /> {navigator.onLine ? 'Subiendo…' : 'Sin subir'}
           </span>
         ) : rec.first_time ? (
           <span className="shrink-0 text-[11px] font-semibold text-violet-700 bg-violet-50 rounded-full px-2 py-0.5">Primera vez</span>

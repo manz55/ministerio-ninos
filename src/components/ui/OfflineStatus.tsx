@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from 'react'
+import { useEffect, useState, useSyncExternalStore } from 'react'
 import { WifiOff, CloudUpload, RefreshCw, AlertTriangle, X } from 'lucide-react'
 import { getOfflineState, subscribeOffline, flushOutbox, dismissNotices } from '../../lib/offline'
 
@@ -9,12 +9,21 @@ function useOfflineState() {
 /** Franja bajo el encabezado: sin internet, cuántos registros esperan subir,
  * y avisos de la última sincronización (gafete repetido, etc.). */
 export function OfflineStatus() {
-  const { online, syncing, pending, notices } = useOfflineState()
+  const { online, syncing, pending, oldestPendingAt, notices } = useOfflineState()
   const plural = pending === 1 ? 'registro guardado' : 'registros guardados'
+  // Con internet, cada registro se guarda aquí y se sube en un segundo: la
+  // franja solo sale si algo lleva rato sin subir (internet lento o caído).
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    if (!pending) return
+    const t = setInterval(() => setNow(Date.now()), 2000)
+    return () => clearInterval(t)
+  }, [pending])
+  const stuck = pending > 0 && oldestPendingAt !== null && now - oldestPendingAt > 8000
 
   return (
     <>
-      {(!online || pending > 0) && (
+      {(!online || stuck) && (
         <div
           className={`px-4 py-2 text-xs font-medium flex items-center justify-center gap-2 text-center ${
             online ? 'bg-sky-50 text-sky-800 border-b border-sky-200' : 'bg-amber-50 text-amber-800 border-b border-amber-200'

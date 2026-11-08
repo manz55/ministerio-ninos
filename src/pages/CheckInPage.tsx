@@ -151,7 +151,9 @@ export default function CheckInPage() {
 
   // Cuando la cola sin conexión termina de subir, se recargan las listas
   // para cambiar las copias locales por los registros reales.
-  useEffect(() => onSynced(() => { fetchRoster(); fetchCounts() }), [fetchRoster, fetchCounts])
+  // La lista completa de niños solo se recarga si subió una familia nueva;
+  // para un registro basta con la lista de hoy (mucho menos datos).
+  useEffect(() => onSynced(({ families }) => { if (families) fetchRoster(); fetchCounts() }), [fetchRoster, fetchCounts])
 
   // Auto-refresco: después de cualquier acción se vuelve a pedir todo por
   // detrás, agrupando varias acciones seguidas en una sola consulta.
@@ -239,6 +241,13 @@ export default function CheckInPage() {
 
   const recordByChild = useMemo(() => new Map(todayRecords.map((r) => [r.child_id, r])), [todayRecords])
 
+  // Revisión local de gafete/bíper repetido (registrados hoy en este grupo,
+  // incluidos los que todavía se están subiendo).
+  const numberTakenBy = useCallback((category: Category, kind: 'badge' | 'pager', n: number) => {
+    const hit = todayRecords.find((r) => r.category === category && (kind === 'badge' ? r.badge_number : r.pager_number) === n)
+    return hit ? hit.children.full_name.split(' ')[0] : null
+  }, [todayRecords])
+
   const openChild = useMemo<ChildResult | null>(() => {
     if (!openChildId) return null
     const found = allChildren.find((c) => c.id === openChildId)
@@ -271,7 +280,9 @@ export default function CheckInPage() {
   }
 
   function handleRegistered(childId: string, badgeNumber: number | null) {
-    scheduleRefresh()
+    // Ya quedó guardado en este dispositivo: se pinta en "Registrados hoy"
+    // de una vez, sin volver a pedir toda la lista al servidor.
+    fetchCounts()
     setAllChildren((prev) => prev.map((c) =>
       c.id === childId ? { ...c, attendance: [...c.attendance, { session_date: today, badge_number: badgeNumber }] } : c))
     setOpenChildId(null)
@@ -352,7 +363,7 @@ export default function CheckInPage() {
       setTodayCounts((prev) => ({ ...prev, [rec.category]: Math.max(0, (prev[rec.category] ?? 0) - 1) }))
       setTotalToday((n) => Math.max(0, n - 1))
     }
-    scheduleRefresh()
+    fetchCounts()
     return null
   }
 
@@ -371,7 +382,7 @@ export default function CheckInPage() {
         ? { ...c, attendance: c.attendance.map((a) => (a.session_date === today ? { ...a, badge_number: badge } : a)) }
         : c))
     }
-    scheduleRefresh()
+    fetchCounts()
     return null
   }
 
@@ -602,6 +613,7 @@ export default function CheckInPage() {
         onDeleted={handleChildDeleted}
         onEditAttendance={editAttendanceNumbers}
         onRemoveAttendance={removeAttendance}
+        numberTakenBy={numberTakenBy}
       />
     </LayoutGroup>
   )

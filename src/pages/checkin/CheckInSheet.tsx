@@ -5,7 +5,7 @@ import { AlertTriangle, Pencil, Trash2, Baby, CloudOff, PartyPopper, MessageSqua
 import { supabase } from '../../lib/supabase'
 import { saveAttendance, newId } from '../../lib/offline'
 import { getAgeLabel, getEffectiveCategory, hasCategoryChanged, requiresBadge, requiresPager } from '../../lib/categoryUtils'
-import { CATEGORY_LABELS, NEXT_CATEGORY, isCorderitos, type TeamColor } from '../../types/domain'
+import { CATEGORY_LABELS, NEXT_CATEGORY, isCorderitos, type Category, type TeamColor } from '../../types/domain'
 import { Confetti, DrawnCheck, Sheet } from '../../components/motion'
 import { SPRING } from '../../components/motion/presets'
 import { ConfirmSheet } from '../../components/ui/ConfirmSheet'
@@ -27,6 +27,9 @@ interface Props {
   onDeleted: (childId: string) => void
   onEditAttendance: (id: string, badge: number | null, pager: number | null) => Promise<string | null>
   onRemoveAttendance: (id: string) => Promise<string | null>
+  /** Quién ya tiene ese gafete/bíper hoy en ese grupo (con lo que hay en este
+   * dispositivo), para avisar al momento sin esperar al servidor. */
+  numberTakenBy: (category: Category, kind: 'badge' | 'pager', n: number) => string | null
 }
 
 /** Panel de un niño: registrarlo, o corregir/quitar su registro de hoy. */
@@ -43,7 +46,7 @@ export function CheckInSheet(props: Props) {
 }
 
 function SheetBody({
-  child, todayRecord, teamColor, isAdmin, onClose, onRegistered, onEdited, onDeleted, onEditAttendance, onRemoveAttendance,
+  child, todayRecord, teamColor, isAdmin, onClose, onRegistered, onEdited, onDeleted, onEditAttendance, onRemoveAttendance, numberTakenBy,
 }: Props & { child: ChildResult }) {
   const category = getEffectiveCategory(child)
   const g = groupOf(category)
@@ -126,9 +129,15 @@ function SheetBody({
     const pagerNum = pager.trim() ? parseInt(pager, 10) : null
     if (pagerNum !== null && (isNaN(pagerNum) || pagerNum <= 0)) { setError('Número de bíper inválido.'); return }
     if (pagerRequired && pagerNum === null) { setError('Escribe el número de bíper.'); pagerRef.current?.focus(); return }
+    if (category && pagerNum !== null) {
+      const who = numberTakenBy(category, 'pager', pagerNum)
+      if (who) { setError(`El bíper #${pagerNum} ya lo tiene ${who} en ${CATEGORY_LABELS[category]} hoy.`); pagerRef.current?.select(); return }
+    }
     if (needsBadge) {
       const num = parseInt(badge, 10)
       if (!badge || isNaN(num) || num <= 0) { setError('Escribe el número de gafete.'); badgeRef.current?.focus(); return }
+      const who = category ? numberTakenBy(category, 'badge', num) : null
+      if (who) { setError(`El gafete #${num} ya lo tiene ${who} en ${CATEGORY_LABELS[category!]} hoy.`); badgeRef.current?.select(); return }
       doCheckIn(num, pagerNum)
     } else {
       doCheckIn(null, pagerNum)
@@ -311,7 +320,9 @@ function SheetBody({
       ) : todayRecord.pending ? (
         <p className="rounded-2xl bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-800 flex gap-2.5">
           <CloudOff size={17} className="shrink-0 mt-0.5" />
-          Este registro se hizo sin internet y todavía no se sube. Podrás corregirlo en cuanto se suba.
+          {navigator.onLine
+            ? 'Este registro se está subiendo. Podrás corregirlo en cuanto termine (unos segundos).'
+            : 'Este registro se hizo sin internet y todavía no se sube. Podrás corregirlo en cuanto se suba.'}
         </p>
       ) : (
         <form onSubmit={submitCorrection} className="space-y-3">
