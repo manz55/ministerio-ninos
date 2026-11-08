@@ -1,5 +1,6 @@
 import { supabase, isNetworkError } from './supabase'
 import { CATEGORY_LABELS, type Category, type TeamColor } from '../types/domain'
+import { requiresBadge } from './categoryUtils'
 
 // ─── Modo sin conexión ────────────────────────────────────────────────────────
 //
@@ -152,7 +153,7 @@ export async function uploadFamily(p: FamilyPayload): Promise<void> {
 type AttendanceResult = { ok: true; notice?: string } | { ok: false; error: PgError }
 
 /** Inserta un check-in. Seguro de repetir. */
-export async function uploadAttendance(row: AttendanceInsert, opts: { resolveConflicts: boolean; childName?: string }): Promise<AttendanceResult> {
+export async function uploadAttendance(row: AttendanceInsert, opts: { resolveConflicts: boolean; childName?: string; tries?: number }): Promise<AttendanceResult> {
   const { error } = await supabase.from('attendance').insert(row)
   if (!error || isPkeyConflict(error)) return { ok: true }
   if (!opts.resolveConflicts || error.code !== '23505') return { ok: false, error }
@@ -166,14 +167,37 @@ export async function uploadAttendance(row: AttendanceInsert, opts: { resolveCon
   }
   const badgeTaken = error.message?.includes('attendance_badge_category_unique')
   const pagerTaken = error.message?.includes('attendance_pager_category_unique')
-  if (badgeTaken || pagerTaken) {
-    const retry = { ...row, badge_number: badgeTaken ? null : row.badge_number, pager_number: pagerTaken ? null : row.pager_number }
-    const second = await uploadAttendance(retry, { ...opts, resolveConflicts: true })
+  const tries = opts.tries ?? 0
+  if ((badgeTaken || pagerTaken) && tries < 3) {
+    const retry = { ...row }
+    if (pagerTaken) retry.pager_number = null
+    if (badgeTaken) {
+      // Fuera de Corderitos el gafete es obligatorio (la base de datos no
+      // acepta registrarlo sin gafete): se le da el siguiente libre de su
+      // grupo ese día. Antes se intentaba sin gafete, la base lo rechazaba
+      // y el registro se quedaba atorado como "sin subir" para siempre.
+      if (requiresBadge(row.category)) {
+        const { data, error: e2 } = await supabase.from('attendance').select('badge_number')
+          .eq('session_date', row.session_date).eq('category', row.category).is('deleted_at', null)
+          .not('badge_number', 'is', null).order('badge_number', { ascending: false }).limit(1)
+        if (e2) return { ok: false, error: e2 }
+        retry.badge_number = (data?.[0]?.badge_number ?? 0) + 1
+      } else {
+        retry.badge_number = null
+      }
+    }
+    const second = await uploadAttendance(retry, { ...opts, tries: tries + 1 })
     if (!second.ok) return second
-    const what = badgeTaken ? `el gafete #${row.badge_number}` : `el bíper #${row.pager_number}`
+    const group = CATEGORY_LABELS[row.category]
+    const parts = [
+      badgeTaken && (retry.badge_number !== null
+        ? `quedó con el gafete #${retry.badge_number} porque el #${row.badge_number} ya lo tenía otro niño`
+        : `el gafete #${row.badge_number} ya lo tenía otro niño`),
+      pagerTaken && `el bíper #${row.pager_number} ya lo tenía otro niño (quedó sin bíper)`,
+    ].filter(Boolean)
     return {
       ok: true,
-      notice: `${who} quedó registrado en ${CATEGORY_LABELS[row.category]} pero ${what} ya lo tenía otro niño — asígnale uno nuevo en "Registrados hoy".`,
+      notice: `${who} quedó registrado en ${group}, pero ${parts.join(' y ')}. Revísalo en "Registrados hoy".`,
     }
   }
   return { ok: false, error }
