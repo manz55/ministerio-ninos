@@ -39,7 +39,7 @@ export async function fetchStaffRange(from: string, to: string): Promise<Record<
   return byDate
 }
 
-/** Guarda un encargado. Devuelve el mensaje de error, o null si salió bien. */
+/** Guarda un encargado (vacío = quitarlo). Devuelve el mensaje de error, o null si salió bien. */
 export async function saveStaff(role: StaffRole, date: string, name: string): Promise<string | null> {
   const { error } = await supabase.rpc(SOURCE[role].rpc, { p_session_date: date, p_name: name })
   return error ? 'No se pudo guardar. Revisa la conexión.' : null
@@ -49,9 +49,16 @@ export async function saveStaff(role: StaffRole, date: string, name: string): Pr
 export function subscribeStaff(date: string, onChange: (role: StaffRole, name: string) => void): () => void {
   const channels = STAFF_ROLES.map((role) => supabase
     .channel(`staff-${role}-${date}`)
-    .on('postgres_changes', { event: '*', schema: 'public', table: SOURCE[role].table, filter: `session_date=eq.${date}` }, (payload) => {
-      const row = payload.new as { name?: string } | undefined
-      if (row?.name) onChange(role, row.name)
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: SOURCE[role].table, filter: `session_date=eq.${date}` }, (payload) => {
+      onChange(role, (payload.new as { name: string }).name)
+    })
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: SOURCE[role].table, filter: `session_date=eq.${date}` }, (payload) => {
+      onChange(role, (payload.new as { name: string }).name)
+    })
+    // Los DELETE no se pueden filtrar en tiempo real; session_date es la
+    // llave, así que sí viene en `old` para revisar el día.
+    .on('postgres_changes', { event: 'DELETE', schema: 'public', table: SOURCE[role].table }, (payload) => {
+      if ((payload.old as { session_date?: string }).session_date === date) onChange(role, '')
     })
     .subscribe())
   return () => channels.forEach((ch) => supabase.removeChannel(ch))

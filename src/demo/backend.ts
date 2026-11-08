@@ -246,7 +246,7 @@ async function handleRest(url: URL, method: string, headers: Headers, body: stri
     if (fn in staffTables) {
       const table = staffTables[fn]
       db[table] = (db[table] ?? []).filter((r) => r.session_date !== args.p_session_date)
-      db[table].push({ session_date: args.p_session_date, name: args.p_name, set_by: DEMO_USER_ID })
+      if (String(args.p_name ?? '').trim()) db[table].push({ session_date: args.p_session_date, name: args.p_name, set_by: DEMO_USER_ID })
     } else if (fn === 'assign_attendance_teacher') {
       const a = (db.attendance ?? []).find((r) => r.id === args.p_attendance_id)
       if (a) a.assigned_teacher_id = args.p_teacher_id

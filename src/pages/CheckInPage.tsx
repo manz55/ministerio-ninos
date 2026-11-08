@@ -322,9 +322,9 @@ export default function CheckInPage() {
     setTeamColor(color)
     setTeamConfirmed(true)
     persistTeam(color)
-    // Solo se escribe si es nuevo/cambió.
+    // Solo se escribe si cambió (vacío = se quitó).
     for (const role of Object.keys(names) as StaffRole[]) {
-      if (names[role] && names[role] !== staff[role]) updateStaff(role, names[role])
+      if (names[role] !== staff[role]) updateStaff(role, names[role])
     }
   }
 

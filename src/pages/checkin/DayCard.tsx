@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
-import { Baby, Monitor, Pencil, User, Check } from 'lucide-react'
+import { Baby, Monitor, Pencil, User, Check, X } from 'lucide-react'
 import type { TeamColor } from '../../types/domain'
 import { AnimatedNumber } from '../../components/motion'
 import { TEAM_META } from './shared'
@@ -64,7 +64,15 @@ function NameSlot({ icon: Icon, label, value, onSave }: { icon: typeof User; lab
 
   async function commit() {
     const raw = draft.trim()
-    if (!raw || raw === value) { setEditing(false); setError(null); return }
+    if (raw === value) { setEditing(false); setError(null); return }
+    // Dejarlo vacío quita al encargado.
+    if (!raw) {
+      setEditing(false)
+      setError(null)
+      const err = await onSave('')
+      setError(err)
+      return
+    }
     // Nombre y apellido (de cada persona si son dos); si no, se queda abierto.
     const invalid = staffNameError(raw)
     if (invalid) { setError(invalid); return }
@@ -105,6 +113,13 @@ function NameSlot({ icon: Icon, label, value, onSave }: { icon: typeof User; lab
         )}
         {error && <p className="text-[11px] text-red-600 mt-0.5">{error}</p>}
       </div>
+      {value && !editing && (
+        <button type="button" onClick={async () => { setError(null); setError(await onSave('')) }}
+          aria-label={`Quitar ${label.toLowerCase()}`} title="Quitar"
+          className="shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors">
+          <X size={15} />
+        </button>
+      )}
     </div>
   )
 }
